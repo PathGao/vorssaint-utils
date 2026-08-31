@@ -21506,35 +21506,92 @@ struct MetricsTests {
                                                  exceptions: ["com.example.editor"]),
                "all-except scope protects an unselected bundle")
 
-        expect(QuitProtectionSupport.matchesKey(keyCharacter: "q", keyCode: 0,
-                                                shortcut: .quit),
-               "quit protection prefers the layout-resolved q character")
+        expect(QuitProtectionSupport.matchesKey(keyCharacter: "\u{439}", keyCode: 12,
+                                                commandKeyCode: 12, shortcut: .quit),
+               "a Cyrillic layout is protected on the key Command-Q quits from, "
+               + "which types \u{439} rather than q")
+        expect(!QuitProtectionSupport.matchesKey(keyCharacter: "'", keyCode: 12,
+                                                 commandKeyCode: 7, shortcut: .quit),
+               "a Dvorak layout leaves the key Command-Q does not quit from alone")
         expect(QuitProtectionSupport.matchesKey(keyCharacter: nil, keyCode: 13,
-                                                shortcut: .close),
-               "quit protection falls back to the W key code without a character")
+                                                commandKeyCode: nil, shortcut: .close),
+               "quit protection falls back to the W key code with neither a character nor a layout")
+        expect(QuitProtectionSupport.matchesKey(keyCharacter: "q", keyCode: 0,
+                                                commandKeyCode: nil, shortcut: .quit),
+               "quit protection falls back to the typed character without a layout")
         expect(QuitProtectionSupport.isBaseShortcut(keyCharacter: "q", keyCode: 12,
+                                                    commandKeyCode: 12,
                                                     command: true, control: false,
                                                     option: false, shift: false, shortcut: .quit),
                "plain Command-Q is recognized")
         expect(!QuitProtectionSupport.isBaseShortcut(keyCharacter: "q", keyCode: 12,
+                                                     commandKeyCode: 12,
                                                      command: true, control: false,
                                                      option: false, shift: true, shortcut: .quit),
                "Shift-Command-Q is not mistaken for plain Command-Q")
         expect(QuitProtectionSupport.isExtraShortcut(keyCharacter: "q", keyCode: 12,
+                                                     commandKeyCode: 12,
                                                      command: true, control: false,
                                                      option: false, shift: true,
                                                      shortcut: .quit, extraModifier: .shift),
                "Shift-Command-Q is recognized as an extra-modifier confirmation")
         expect(QuitProtectionSupport.isExtraShortcut(keyCharacter: "w", keyCode: 13,
+                                                     commandKeyCode: 13,
                                                      command: true, control: true,
                                                      option: false, shift: false,
                                                      shortcut: .close, extraModifier: .control),
                "Control-Command-W is recognized as an extra-modifier confirmation")
         expect(!QuitProtectionSupport.isExtraShortcut(keyCharacter: "q", keyCode: 12,
+                                                      commandKeyCode: 12,
                                                       command: true, control: false,
                                                       option: true, shift: false,
                                                       shortcut: .quit, extraModifier: .shift),
                "an unrelated modifier combination is not protected")
+
+        // Where each layout puts Command-Q and Command-W, read from the layouts
+        // the machine has installed. Non-Latin layouts point their Command table
+        // back at the Latin letters, which is why the key that types \u{439} still quits.
+        func quitProtectionKeyCodes(_ layoutID: String) -> [QuitProtectionShortcut: Int64]? {
+            guard let data = testLayoutData(for: layoutID) else { return nil }
+            return QuitProtectionKeyLayout.keyCodes(in: data)
+        }
+        if let us = quitProtectionKeyCodes("com.apple.keylayout.US") {
+            expect(us[.quit] == 12 && us[.close] == 13,
+                   "US layout keeps Command-Q and Command-W on their own keys")
+        }
+        if let russian = quitProtectionKeyCodes("com.apple.keylayout.Russian") {
+            expect(russian[.quit] == 12 && russian[.close] == 13,
+                   "a Cyrillic layout still quits and closes from the Latin Q and W keys")
+        }
+        if let greek = quitProtectionKeyCodes("com.apple.keylayout.Greek") {
+            expect(greek[.quit] == 12 && greek[.close] == 13,
+                   "a Greek layout still quits and closes from the Latin Q and W keys")
+        }
+        if let dvorak = quitProtectionKeyCodes("com.apple.keylayout.Dvorak") {
+            expect(dvorak[.quit] == 7 && dvorak[.close] == 43,
+                   "Dvorak moves Command-Q and Command-W to the keys it types q and w on")
+        }
+        if let dvorakCommand = quitProtectionKeyCodes("com.apple.keylayout.DVORAK-QWERTYCMD") {
+            expect(dvorakCommand[.quit] == 12 && dvorakCommand[.close] == 13,
+                   "the Dvorak layout that reverts to QWERTY under Command is followed there")
+        }
+        if let french = quitProtectionKeyCodes("com.apple.keylayout.French") {
+            expect(french[.quit] == 0 && french[.close] == 6,
+                   "French AZERTY moves Command-Q and Command-W to its own q and w keys")
+        }
+
+        expect(QuitProtectionSupport.swallowRemainsActive(
+            startTimestamp: 1_000_000_000,
+            currentTimestamp: 2_999_000_000
+        ), "the confirmation swallow covers the keys still held down")
+        expect(!QuitProtectionSupport.swallowRemainsActive(
+            startTimestamp: 1_000_000_000,
+            currentTimestamp: 3_000_000_001
+        ), "the confirmation swallow expires, so a lost key up cannot silence Command-Q for good")
+        expect(!QuitProtectionSupport.swallowRemainsActive(
+            startTimestamp: 1_000_000_000,
+            currentTimestamp: 999_999_999
+        ), "a clock that moved backwards releases the confirmation swallow")
 
         let quitProtectionKeys = [
             DefaultsKey.quitProtectionQuitEnabled,

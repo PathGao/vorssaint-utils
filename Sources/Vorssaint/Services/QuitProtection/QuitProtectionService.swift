@@ -28,6 +28,7 @@ final class QuitProtectionService: ObservableObject {
     private var pendingExpiry: DispatchWorkItem?
     private var pending: Pending?
     private var swallowShortcut: QuitProtectionShortcut?
+    private var swallowTimestamp: UInt64 = 0
     private var frontmostBundleIdentifier: String?
     private var frontmostProcessIdentifier: pid_t?
     private let hud = QuitProtectionHUD()
@@ -82,6 +83,7 @@ final class QuitProtectionService: ObservableObject {
 
     private func start() {
         guard !isRunning else { return }
+        QuitProtectionKeyLayout.startObserving()
         guard installTap() else { return }
         isRunning = true
         let frontmost = NSWorkspace.shared.frontmostApplication
@@ -156,6 +158,9 @@ final class QuitProtectionService: ObservableObject {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            // The events missed while the tap was off can include the key up
+            // that ends the swallow, so it cannot be trusted past this point.
+            swallowShortcut = nil
             cancelPending()
             let enabled = AppFeature.quitWindowProtection.isAvailable
                 && isEnabledForAnyShortcut
@@ -200,8 +205,11 @@ final class QuitProtectionService: ObservableObject {
 
         let shortcut = matchingShortcut(for: event)
 
-        if let swallowShortcut {
-            if shortcut == swallowShortcut || isRepeat {
+        if let swallow = swallowShortcut {
+            if !QuitProtectionSupport.swallowRemainsActive(startTimestamp: swallowTimestamp,
+                                                           currentTimestamp: now()) {
+                swallowShortcut = nil
+            } else if shortcut == swallow || isRepeat {
                 return nil
             }
         }
@@ -235,12 +243,14 @@ final class QuitProtectionService: ObservableObject {
         let option = flags.contains(.maskAlternate)
         let shift = flags.contains(.maskShift)
         let character = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased()
+        let commandKeyCode = QuitProtectionKeyLayout.commandKeyCode(for: shortcut)
 
         switch configuration.mode {
         case .hold:
             guard QuitProtectionSupport.isBaseShortcut(
                 keyCharacter: character,
                 keyCode: keyCode,
+                commandKeyCode: commandKeyCode,
                 command: command,
                 control: control,
                 option: option,
@@ -257,6 +267,7 @@ final class QuitProtectionService: ObservableObject {
             guard QuitProtectionSupport.isBaseShortcut(
                 keyCharacter: character,
                 keyCode: keyCode,
+                commandKeyCode: commandKeyCode,
                 command: command,
                 control: control,
                 option: option,
@@ -273,7 +284,7 @@ final class QuitProtectionService: ObservableObject {
                 ) {
                     let targetPid = pending.targetProcessIdentifier
                     cancelPending()
-                    swallowShortcut = shortcut
+                    beginSwallow(shortcut)
                     confirm(shortcut: shortcut, event: event, targetProcessIdentifier: targetPid)
                     return nil
                 }
@@ -286,6 +297,7 @@ final class QuitProtectionService: ObservableObject {
             if QuitProtectionSupport.isExtraShortcut(
                 keyCharacter: character,
                 keyCode: keyCode,
+                commandKeyCode: commandKeyCode,
                 command: command,
                 control: control,
                 option: option,
@@ -294,7 +306,7 @@ final class QuitProtectionService: ObservableObject {
                 extraModifier: configuration.extraModifier
             ) {
                 cancelPending()
-                swallowShortcut = shortcut
+                beginSwallow(shortcut)
                 confirm(shortcut: shortcut,
                         event: event,
                         targetProcessIdentifier: frontmostProcessIdentifier,
@@ -304,6 +316,7 @@ final class QuitProtectionService: ObservableObject {
             guard QuitProtectionSupport.isBaseShortcut(
                 keyCharacter: character,
                 keyCode: keyCode,
+                commandKeyCode: commandKeyCode,
                 command: command,
                 control: control,
                 option: option,
@@ -349,12 +362,12 @@ final class QuitProtectionService: ObservableObject {
     }
 
     private func handleFlagsChanged(_ event: CGEvent) {
+        guard !event.flags.contains(.maskCommand) else { return }
+        // Command coming up ends both waits: a confirmation cannot complete
+        // without it, and the keys the swallow covers cannot still be down.
+        swallowShortcut = nil
         guard pending != nil else { return }
-        let flags = event.flags
-        let commandHeld = flags.contains(.maskCommand)
-        if !commandHeld {
-            cancelPending()
-        }
+        cancelPending()
     }
 
     // MARK: Confirmation state
@@ -405,10 +418,19 @@ final class QuitProtectionService: ObservableObject {
         let event = pending.event
         let targetPid = pending.targetProcessIdentifier
 
-        swallowShortcut = shortcut
+        beginSwallow(shortcut)
         cancelPending()
 
         confirm(shortcut: shortcut, event: event, targetProcessIdentifier: targetPid)
+    }
+
+    /// Uptime nanoseconds rather than the event's own clock: a hold confirms
+    /// long after the event that started it, and the swallow begins here.
+    private func now() -> UInt64 { DispatchTime.now().uptimeNanoseconds }
+
+    private func beginSwallow(_ shortcut: QuitProtectionShortcut) {
+        swallowShortcut = shortcut
+        swallowTimestamp = now()
     }
 
     private func cancelPending() {
@@ -482,6 +504,7 @@ final class QuitProtectionService: ObservableObject {
         return QuitProtectionShortcut.allCases.first {
             QuitProtectionSupport.matchesKey(keyCharacter: character,
                                              keyCode: keyCode,
+                                             commandKeyCode: QuitProtectionKeyLayout.commandKeyCode(for: $0),
                                              shortcut: $0)
         }
     }
