@@ -17,7 +17,15 @@ private func requestDockPreviewApplicationQuit(_ item: SwitcherItem) -> Bool {
 final class DockPreviewService: ObservableObject {
     static let shared = DockPreviewService()
 
-    @Published private(set) var isRunning = false
+    @Published private(set) var isRunning = false {
+        didSet { tapIsRunning = isRunning }
+    }
+    /// The running state as a plain stored value, for the event tap to read.
+    /// The tap sees every mouse move on the system, and a `@Published` read is
+    /// a Combine subscript that runs a protocol conformance lookup each time,
+    /// which is the largest single slice of that callback's own work. The
+    /// observer above is the only writer, so the two cannot fall out of step.
+    private var tapIsRunning = false
     @Published private(set) var blockedReason: DockPreviewBlockedReason?
     /// Whether the Dock currently uses auto-hide. Surfaced so the UI can warn
     /// that this still-beta feature is rougher in that mode (the native Dock
@@ -383,7 +391,7 @@ final class DockPreviewService: ObservableObject {
     /// switch re-confirmations read these) — everything else falls through to
     /// the full handler.
     private func discardFarMouseMove(axPoint: CGPoint) -> Bool {
-        guard isRunning, !isVisible, pendingHover == nil else { return false }
+        guard tapIsRunning, !isVisible, pendingHover == nil else { return false }
         let point = appKitPoint(fromAX: axPoint)
         guard !isNearDock(point) else { return false }
         lastAXMousePoint = axPoint

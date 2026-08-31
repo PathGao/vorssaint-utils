@@ -9169,6 +9169,16 @@ struct MetricsTests {
         expect(!dockPreviewServiceCode.contains("setFrame(edgeFrame, display: true, animate: true)")
                && dockPreviewServiceCode.contains("clampedPanelFrame(DockPreviewSupport.panelFrameWhenDockHidden("),
                "a reattached Dock Preview lands clamped, without animating the main run loop")
+        // The tap reads a plain mirror of isRunning rather than the published
+        // property, because a Combine read runs a conformance lookup on every
+        // mouse move the system produces. The mirror is only true while the
+        // observer on the published property is its sole writer; a second
+        // assignment anywhere else is how it drifts, and a drifted mirror
+        // leaves the tap working while the feature is off, or idle while it is
+        // on, with nothing to see either way. So count the writes.
+        expect(dockPreviewServiceCode.contains("didSet { tapIsRunning = isRunning }")
+               && dockPreviewServiceCode.components(separatedBy: "tapIsRunning =").count - 1 == 2,
+               "the Dock Preview tap's running mirror is written only by the property it mirrors")
         let corridor = DockPreviewSupport.hoverCorridor(iconFrame: iconBottom,
                                                         panelFrame: bottomFrame,
                                                         orientation: .bottom)
