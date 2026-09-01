@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Vorssaint adds quit and close protections, expands screen text recognition, capture magnifier, clipboard, Super key, Dock Preview, App Switcher, Window Layout, mouse controls, snippet controls and the disk image installer, broadens app update and safe cleanup discovery, and hardens shortcut capture and key caps, permission guide recovery, input session switching, Accessibility timeouts, Volume Mixer audio rendering, helper process attribution and teardown, Super key shutdown, process termination, update and uninstallation teardown, window handling and shared on-screen parsing, pasteboard restoration, sensor selection, Cleaning Mode unlock, favicon downloads, the What's New showcase video download and stopping a recording. It also improves mouse scrolling feel, disk space and system monitor metrics, Command Bar responsiveness, Settings, Scratchpad, Screenshot Editor, floating panels and several menu bar behaviors.
+Vorssaint adds quit and close protections, expands screen text recognition, capture magnifier, clipboard, Super key, Dock Preview, App Switcher, Window Layout, mouse controls, snippet controls and the disk image installer, broadens app update and safe cleanup discovery, and hardens shortcut capture and key caps, permission guide recovery, input session switching, Accessibility timeouts, Volume Mixer audio rendering, helper process attribution and teardown, Super key shutdown, process termination, update and uninstallation teardown, window handling and shared on-screen parsing, pasteboard restoration, the docked shelf's saved items, sensor selection, Cleaning Mode unlock, favicon downloads, the What's New showcase video download and stopping a recording. It also improves mouse scrolling feel, disk space and system monitor metrics, Command Bar responsiveness, Settings, Scratchpad, Screenshot Editor, floating panels and several menu bar behaviors.
 
 ### Added
 - Settings now includes optional protections for Command-Q and Command-W with customizable hold duration, double press, extra modifier requirements and per-app scopes. Thanks to @RuanMD.
@@ -86,6 +86,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - Text snippets now keep their trigger buffer when typed on the macOS Accessibility Keyboard. Thanks to @fermincasagrande.
 - Dock click actions and previews now stay behind fullscreen content and sample high-rate pointer movement without overloading the hover tap. Thanks to @iltonandrew.
 - Clipboard history now trims against the encoded file size before saving, preventing its store from becoming unreadable.
+- The docked shelf now keeps its saved items and the text and images it stored for them when its saved list cannot be read completely, instead of clearing the shelf and deleting those files. Thanks to @PathGao.
 - Kill Process now sorts consistently and revalidates the exact process before terminating it, preventing a recycled process identifier from targeting a different process.
 - Music launch blocking now fails open when its media-key listener is unavailable.
 - Radial Menu favicon downloads now stay on the link origin and reject cross-origin redirects, oversized payloads and unsafe image dimensions.
