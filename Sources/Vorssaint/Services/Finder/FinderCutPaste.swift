@@ -136,8 +136,13 @@ final class FinderCutPaste: ObservableObject {
             installAppObserver()
         } else {
             removeAppObserver()
-            clearMarks()
         }
+        // The marks belong to cut and paste, so they go on that switch alone.
+        // Sharing the observer's condition would leave a staged cut live when
+        // cut and paste is turned off while image paste keeps the observer up:
+        // the HUD stays on screen, the change count still matches, and the next
+        // ⌘V moves the files the user thought they had un-staged.
+        if !cutPasteEnabled { clearMarks() }
         let wanted = SessionActivitySupport.tapShouldRun(
             featureWanted: cutPasteEnabled || pasteImageAsFileEnabled,
             accessibilityGranted: Permissions.shared.accessibility,

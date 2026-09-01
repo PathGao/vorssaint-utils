@@ -21910,6 +21910,19 @@ struct MetricsTests {
                 && cachedReject.contains("Key.c")
                 && !cachedReject.contains("Key.x") && !cachedReject.contains("Key.v"),
                "only ⌘C is turned down from the cached front app; ⌘X and ⌘V ask the main thread")
+        // Which features need the activation observer and which feature owns
+        // the marks are two different questions. Cut and paste owns the marks,
+        // so turning it off drops a staged cut whatever image paste is set to —
+        // otherwise the HUD survives a feature that is off and the change count
+        // still matches, so a later ⌘V moves files the user un-staged.
+        let clearGuard = cutPasteCode
+            .components(separatedBy: "func syncWithPreferences").dropFirst().first?
+            .components(separatedBy: "clearMarks()").first?
+            .components(separatedBy: "if ").last ?? ""
+        expect(!clearGuard.isEmpty
+                && clearGuard.contains("cutPasteEnabled")
+                && !clearGuard.contains("pasteImageAsFileEnabled"),
+               "turning Finder cut & paste off clears the staged cut on its own switch alone")
 
         // MARK: Uninstallation paths stay aligned across SelfUninstall and Tools/uninstall.sh
         let selfUninstallSource = (try? String(contentsOfFile: "Sources/Vorssaint/Services/SelfUninstall.swift",
