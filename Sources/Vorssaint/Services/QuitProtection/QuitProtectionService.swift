@@ -233,12 +233,13 @@ final class QuitProtectionService: ObservableObject {
             return Unmanaged.passUnretained(event)
         }
 
-        if isRepeat {
+        let flags = event.flags
+        let command = flags.contains(.maskCommand)
+
+        if QuitProtectionSupport.dropsAutorepeat(isRepeat: isRepeat, command: command) {
             return nil
         }
 
-        let flags = event.flags
-        let command = flags.contains(.maskCommand)
         let control = flags.contains(.maskControl)
         let option = flags.contains(.maskAlternate)
         let shift = flags.contains(.maskShift)

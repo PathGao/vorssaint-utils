@@ -153,6 +153,18 @@ enum QuitProtectionSupport {
         return keyCode == shortcut.fallbackKeyCode
     }
 
+    /// A held Command-Q must not repeat into the protected app: each repeat
+    /// would restart a hold or count as the second of a double press. Nothing
+    /// past that point acts without Command, so the drop asks for it. Matching
+    /// resolves the shortcut from the layout's Command table, which answers for
+    /// the bare key too — the Q and W keys on a Latin layout, the keys that type
+    /// "й" and "ц" on Russian, ";" and "ς" on Greek — and dropping their
+    /// autorepeat unconditionally left holding those keys with protection on
+    /// producing one character and no repeat.
+    static func dropsAutorepeat(isRepeat: Bool, command: Bool) -> Bool {
+        isRepeat && command
+    }
+
     /// The post-confirmation swallow holds until the keys that confirmed the
     /// shortcut come back up. A key up can be lost — the tap is re-enabled
     /// after being disabled on timeout, a tap ahead of ours takes the event,

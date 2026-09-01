@@ -21580,6 +21580,14 @@ struct MetricsTests {
                    "French AZERTY moves Command-Q and Command-W to its own q and w keys")
         }
 
+        expect(QuitProtectionSupport.dropsAutorepeat(isRepeat: true, command: true),
+               "a held Command-Q does not repeat into the app it is protecting")
+        expect(!QuitProtectionSupport.dropsAutorepeat(isRepeat: true, command: false),
+               "holding the Q or W key without Command still repeats with protection on, "
+               + "including the keys that type \u{439} and ; on layouts protection follows")
+        expect(!QuitProtectionSupport.dropsAutorepeat(isRepeat: false, command: true),
+               "the first Command-Q press is not dropped as a repeat")
+
         expect(QuitProtectionSupport.swallowRemainsActive(
             startTimestamp: 1_000_000_000,
             currentTimestamp: 2_999_000_000
