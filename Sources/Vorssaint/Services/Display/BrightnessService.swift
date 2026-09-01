@@ -119,11 +119,6 @@ final class BrightnessService: ObservableObject {
     /// Whether the app's own overlay stands in for the system's, sampled with
     /// the tap so the tap thread never reads published state.
     private var overlayReplacesNativeOSD = false
-    /// `SessionActivitySupport.tapShouldRun`'s answer for the keystroke tap,
-    /// sampled for the same reason: the timeout re-arm runs on the tap thread,
-    /// and a tap put back into a session that is no longer on screen stalls
-    /// the account that is (issue #1075).
-    private var functionKeyTapShouldRun = false
     /// Codes whose press this app consumed, so the matching release is
     /// consumed as well and the system never sees half a key.
     private var swallowedKeyCodes = Set<Int>()
@@ -661,7 +656,6 @@ final class BrightnessService: ObservableObject {
             featureWanted: running && (wantsKeyRouting || wantsBrightnessOSD),
             accessibilityGranted: AXIsProcessTrusted(),
             sessionIsActive: SessionActivity.shared.isActive)
-        keyThreadLock.withLock { functionKeyTapShouldRun = wanted && wantsKeyRouting }
         if wanted { installKeyTap() } else { removeKeyTap() }
         // The plain key press path only earns its keystroke tap when the
         // pointer actually decides the target.
@@ -817,14 +811,14 @@ final class BrightnessService: ObservableObject {
     /// server and the route from behind the state lock.
     private func routeFunctionKey(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            // The gate the preference sync applied, asked again: a tap
-            // re-armed into a session that is no longer on screen stalls the
-            // one that is (issue #1075). Its answer was sampled with the tap,
-            // so nothing here reaches for main-thread state.
-            let tap = keyThreadLock.withLock {
-                functionKeyTapShouldRun && !shouldStopFunctionKeyThread ? functionKeyTap : nil
+            // Re-arming into a session that is no longer on screen puts the
+            // stall the tap was handed back to avoid straight back on the
+            // account that is (issue #1075), so the re-arm asks the same
+            // question the preference sync asks.
+            let tap = keyThreadLock.withLock { shouldStopFunctionKeyThread ? nil : functionKeyTap }
+            if SessionActivity.shared.isActive, AXIsProcessTrusted(), let tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
             }
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
         guard type == .keyDown || type == .keyUp else {
