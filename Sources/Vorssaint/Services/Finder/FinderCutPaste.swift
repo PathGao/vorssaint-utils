@@ -68,11 +68,6 @@ final class FinderCutPaste: ObservableObject {
     private var tapThread: Thread?
     private var shouldStopTapThread = false
     private var pendingTapRestart = false
-    /// `SessionActivitySupport.tapShouldRun`'s answer, sampled by the
-    /// preference sync. The timeout re-arm runs on the tap thread and the
-    /// session flag is written on the main one, so the re-arm reads the sample
-    /// instead of reaching across for the flag itself.
-    private var tapShouldRun = false
     private var panel: NSPanel?
     private var resultDismiss: DispatchWorkItem?
     private var operationGeneration = 0
@@ -118,12 +113,16 @@ final class FinderCutPaste: ObservableObject {
         showHUD = UserDefaults.standard.object(forKey: DefaultsKey.finderCutPasteShowHUD) as? Bool ?? true
         pasteImageAsFileEnabled = available
             && UserDefaults.standard.bool(forKey: DefaultsKey.finderPasteImageAsFile)
-        let wanted = SessionActivitySupport.tapShouldRun(
+        // Accessibility is asked of the system and not of `Permissions.shared`,
+        // whose answer is a poll up to `PermissionPollingSupport.interval` old.
+        // The re-arm hands a revoked tap to this sync to be stopped, and a
+        // stale grant here would install it straight back. The cached mirror
+        // still stands on the per-keystroke path below, where a live round-trip
+        // per key is what it exists to avoid.
+        if SessionActivitySupport.tapShouldRun(
             featureWanted: cutPasteEnabled || pasteImageAsFileEnabled,
-            accessibilityGranted: Permissions.shared.accessibility,
-            sessionIsActive: SessionActivity.shared.isActive)
-        tapLifecycleLock.withLock { tapShouldRun = wanted }
-        if wanted {
+            accessibilityGranted: AXIsProcessTrusted(),
+            sessionIsActive: SessionActivity.shared.isActive) {
             installTap()
         } else {
             removeTap()
@@ -265,20 +264,34 @@ final class FinderCutPaste: ObservableObject {
         }
     }
 
+    /// Puts the tap back after the window server disabled it, unless a stop is
+    /// already on its way and the port is about to go. Main thread.
+    private func rearmDisabledTap() {
+        let currentTap = tapLifecycleLock.withLock { shouldStopTapThread ? nil : tap }
+        if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
+    }
+
     /// Runs on the tap thread. Every key except plain Command-X/C/V returns
     /// after reading only the event itself; the rare candidate is handed to
     /// the main thread where the service's UI and pasteboard state live.
     private func route(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            // The gate the preference sync applied, asked again: a tap re-armed
-            // into a session that is no longer on screen puts the stall it was
-            // handed back to avoid straight back on the account that is
-            // (issue #1075). Its answer was sampled with the tap, so nothing
-            // here reaches for main-thread state.
-            let currentTap = tapLifecycleLock.withLock {
-                tapShouldRun && !shouldStopTapThread ? tap : nil
+            // A tap put straight back is a tap put back into whatever session
+            // is on screen now (issue #1075). The flag that answers that is
+            // written on the main thread and this callback runs on the tap's
+            // own thread, so the question is asked where the answer lives
+            // rather than read across the two. Accessibility is asked in the
+            // same place and for the same reason as the sync: this tap modifies
+            // events, so a revoked grant has to end it rather than put it back.
+            // Leaving the tap disabled until then is the safe direction — keys
+            // reach Finder untapped, which is how the feature is off.
+            DispatchQueue.main.async { [weak self] in
+                if SessionActivity.shared.isActive, AXIsProcessTrusted() {
+                    self?.rearmDisabledTap()
+                } else {
+                    self?.syncWithPreferences()
+                }
             }
-            if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
         guard type == .keyDown,

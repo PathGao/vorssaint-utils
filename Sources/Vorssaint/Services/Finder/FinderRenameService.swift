@@ -25,11 +25,6 @@ final class FinderRenameService {
     private var tapThread: Thread?
     private var shouldStopTapThread = false
     private var pendingStartAfterStop = false
-    /// `SessionActivitySupport.tapShouldRun`'s answer, sampled by the
-    /// preference sync. The timeout re-arm runs on the tap thread and the
-    /// session flag is written on the main one, so the re-arm reads the sample
-    /// instead of reaching across for the flag itself.
-    private var tapShouldRun = false
 
     private init() {
         // A filter tap owned by a switched-away login session keeps its place
@@ -47,12 +42,14 @@ final class FinderRenameService {
         routeLock.withLock { routeShortcut = shortcut }
         let enabled = AppFeature.finderRename.isAvailable
             && UserDefaults.standard.bool(forKey: DefaultsKey.finderRenameEnabled)
-        let wanted = SessionActivitySupport.tapShouldRun(
+        // Accessibility is asked of the system and not of `Permissions.shared`,
+        // whose answer is a poll up to `PermissionPollingSupport.interval` old.
+        // The re-arm hands a revoked tap to this sync to be stopped, and a
+        // stale grant here would install it straight back.
+        if SessionActivitySupport.tapShouldRun(
             featureWanted: enabled,
-            accessibilityGranted: Permissions.shared.accessibility,
-            sessionIsActive: SessionActivity.shared.isActive)
-        lifecycleLock.withLock { tapShouldRun = wanted }
-        if wanted {
+            accessibilityGranted: AXIsProcessTrusted(),
+            sessionIsActive: SessionActivity.shared.isActive) {
             installTap()
         } else {
             removeTap()
@@ -163,20 +160,35 @@ final class FinderRenameService {
         }
     }
 
+    /// Puts the tap back after the window server disabled it, unless a stop is
+    /// already on its way and the port is about to go. Main thread.
+    private func rearmDisabledTap() {
+        let currentTap = lifecycleLock.withLock { shouldStopTapThread ? nil : tap }
+        if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
+    }
+
     /// Runs on the tap thread. Every unrelated key returns after an in-memory
     /// comparison; Finder and Accessibility are consulted only for the chosen
     /// combination.
     private func route(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            // The gate the preference sync applied, asked again: a tap re-armed
-            // into a session that is no longer on screen puts the stall it was
-            // handed back to avoid straight back on the account that is
-            // (issue #1075). Its answer was sampled with the tap, so nothing
-            // here reaches for main-thread state.
-            let currentTap = lifecycleLock.withLock {
-                tapShouldRun && !shouldStopTapThread ? tap : nil
+            // A tap put straight back is a tap put back into whatever session
+            // is on screen now (issue #1075). The flag that answers that is
+            // written on the main thread and this callback runs on the tap's
+            // own thread, so the question is asked where the answer lives
+            // rather than read across the two. Accessibility is asked in the
+            // same place and for the same reason as the sync: this tap modifies
+            // events, so a revoked grant has to end it rather than put it back.
+            // Leaving the tap disabled until then is the safe direction — the
+            // combination reaches Finder untapped, which is how the feature is
+            // off.
+            DispatchQueue.main.async { [weak self] in
+                if SessionActivity.shared.isActive, AXIsProcessTrusted() {
+                    self?.rearmDisabledTap()
+                } else {
+                    self?.syncWithPreferences()
+                }
             }
-            if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }

@@ -21737,7 +21737,9 @@ struct MetricsTests {
                          "Sources/Vorssaint/Services/MouseNavigation/MouseNavigationService.swift",
                          "Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutService.swift",
                          "Sources/Vorssaint/Services/MiddleClick/MiddleClickService.swift",
-                         "Sources/Vorssaint/Services/QuitProtection/QuitProtectionService.swift"] {
+                         "Sources/Vorssaint/Services/QuitProtection/QuitProtectionService.swift",
+                         "Sources/Vorssaint/Services/Finder/FinderCutPaste.swift",
+                         "Sources/Vorssaint/Services/Finder/FinderRenameService.swift"] {
             let source = (try? String(contentsOfFile: tapOwner, encoding: .utf8)) ?? ""
             expect(!source.isEmpty, "\(tapOwner) reads back for its session-switch check")
             let code = source.components(separatedBy: "\n")
@@ -21752,9 +21754,22 @@ struct MetricsTests {
             if tapOwner.contains("MouseNavigation")
                 || tapOwner.contains("MouseButtonShortcut")
                 || tapOwner.contains("MiddleClick")
-                || tapOwner.contains("QuitProtection") {
+                || tapOwner.contains("QuitProtection")
+                || tapOwner.contains("Finder") {
                 expect(code.contains("AXIsProcessTrusted()"),
                        "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
+                // `Permissions.shared.accessibility` is polled on a timer, so a
+                // re-arm that refused on the live answer must not be undone by
+                // a sync that trusts the stale one. Read off the gate's own
+                // argument rather than the whole file: FinderCutPaste caches
+                // the mirror on purpose on its per-keystroke path, where a live
+                // TCC round-trip per key is what the cache exists to avoid.
+                let gateArguments = code
+                    .components(separatedBy: "SessionActivitySupport.tapShouldRun(")
+                    .dropFirst()
+                    .map { $0.components(separatedBy: "sessionIsActive:").first ?? "" }
+                expect(gateArguments.allSatisfy { !$0.contains("Permissions.shared.accessibility") },
+                       "\(tapOwner) asks Accessibility directly wherever it decides to run a tap")
             }
             // Switching a tap off leaves the process owning it, which is what
             // the window server waits on; teardown must invalidate the port.
@@ -21859,28 +21874,6 @@ struct MetricsTests {
                 && cleaningModeSource.contains("AXIsProcessTrusted()")
                 && cleaningModeSource.contains("CFMachPortInvalidate"),
                "Cleaning Mode ends and releases its filter tap when the login session leaves the screen")
-        // The two Finder taps run their callback on a thread of their own, so
-        // their timeout re-arm cannot read the session flag the main thread
-        // writes. They take the gate's answer from the preference sync and keep
-        // it under the lock that holds the tap, which is why the re-arm here is
-        // spelled as a sampled field rather than as SessionActivity.shared.
-        // Comments are stripped so prose naming the API cannot answer for it.
-        for finderTapOwner in ["Sources/Vorssaint/Services/Finder/FinderCutPaste.swift",
-                               "Sources/Vorssaint/Services/Finder/FinderRenameService.swift"] {
-            let code = ((try? String(contentsOfFile: finderTapOwner, encoding: .utf8)) ?? "")
-                .components(separatedBy: "\n")
-                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
-                .joined(separator: "\n")
-            expect(code.contains("SessionActivity.shared.onChange")
-                    && code.contains("SessionActivitySupport.tapShouldRun(")
-                    && code.contains("CFMachPortInvalidate"),
-                   "\(finderTapOwner) joins the session gate and releases its port on teardown")
-            let rearm = code.components(separatedBy: "tapDisabledByTimeout")
-                .dropFirst().first?.components(separatedBy: "return").first ?? ""
-            expect(!rearm.isEmpty && !rearm.contains("SessionActivity.shared."),
-                   "\(finderTapOwner) re-arms off the sampled answer, never off main-thread state")
-        }
-
         // MARK: Uninstallation paths stay aligned across SelfUninstall and Tools/uninstall.sh
         let selfUninstallSource = (try? String(contentsOfFile: "Sources/Vorssaint/Services/SelfUninstall.swift",
                                               encoding: .utf8)) ?? ""
