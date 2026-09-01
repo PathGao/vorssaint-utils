@@ -778,11 +778,13 @@ final class HomebrewManager: ObservableObject {
                     DispatchQueue.main.async { onOutput(chunk) }
                 }
             }
-            // Watched through the termination handler, never `waitUntilExit()`:
-            // that parks a worker of the shared 64-thread pool for the whole
-            // command, and one hung `brew install` used to hold this serial
-            // queue for good, with every later refresh, search and ownership
-            // lookup stuck behind it (see BoundedProcessRunner, issue #971).
+            // The bound is the fix. This wait blocks the serial queue's thread
+            // exactly as `waitUntilExit()` did — one at a time, never
+            // abandoned, so it cannot fill the shared pool the way #971's
+            // waits do. Unbounded it starved this one queue instead: a `brew
+            // install` that never returned left every later refresh, search
+            // and ownership lookup behind it for good. The semaphore is only
+            // how a timeout is put on a wait `waitUntilExit()` will not take.
             let finished = DispatchSemaphore(value: 0)
             process.terminationHandler = { _ in finished.signal() }
             do {
