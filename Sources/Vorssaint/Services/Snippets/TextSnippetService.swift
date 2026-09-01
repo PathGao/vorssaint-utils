@@ -8,7 +8,8 @@ import CoreGraphics
 /// Text snippets: typing a trigger replaces it with its expansion, with
 /// {{date}}, {{time}}, {{datetime}} and {{clipboard}} filled in. The key tap,
 /// the observers and the snippet cache only exist while the feature is on;
-/// off means nothing lives. Requires Accessibility (the tap).
+/// off means nothing lives. Requires Accessibility (the tap), and the tap is
+/// handed back while this login session is not the one on screen.
 final class TextSnippetService {
     static let shared = TextSnippetService()
 
@@ -33,7 +34,15 @@ final class TextSnippetService {
     private var immediateSnippets: [TextSnippet] = []
     private var delimiterSnippets: [TextSnippet] = []
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain, so every keystroke the account on screen types waits
+        // out this tap's timeout (issue #1075). Hand the tap back on resign
+        // and build it again from preferences on the way in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     var isRunning: Bool { tapLifecycleLock.withLock { tap != nil } }
 
@@ -44,7 +53,11 @@ final class TextSnippetService {
         let hasWork = inputLock.withLock {
             !(immediateSnippets.isEmpty && delimiterSnippets.isEmpty)
         }
-        if enabled, hasWork, Permissions.shared.accessibility {
+        if SessionActivitySupport.tapShouldRun(
+            featureWanted: enabled && hasWork,
+            accessibilityGranted: Permissions.shared.accessibility,
+            sessionIsActive: SessionActivity.shared.isActive
+        ) {
             let libraryIsVisible = SnippetLibraryService.shared.isVisible
             let commandBarIsVisible = AppFeature.commandBar.isAvailable
                 && CommandBarService.shared.isVisible
@@ -224,6 +237,13 @@ final class TextSnippetService {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             let currentTap = tapLifecycleLock.withLock { shouldStopTapThread ? nil : tap }
             if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
+            // The session flag is written on the main thread, so this callback
+            // must not read it: the re-arm above is provisional and the answer
+            // is asked where it is written. A tap put back into a session that
+            // is no longer on screen stalls the account that is (issue #1075).
+            DispatchQueue.main.async { [weak self] in
+                if !SessionActivity.shared.isActive { self?.syncWithPreferences() }
+            }
             return Unmanaged.passUnretained(event)
         }
         // Clicks move the caret somewhere unknown; the half-typed trigger is

@@ -157,13 +157,41 @@ final class AppSwitcher: ObservableObject {
         static let upArrow: Int64 = 126
     }
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain, so every keystroke the account on screen types waits
+        // out this tap's timeout (issue #1075). Hand the tap back on resign
+        // and build it again from preferences on the way in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     private var isTapLive: Bool {
         lifecycleLock.withLock {
             guard let tap else { return false }
             return CFMachPortIsValid(tap) && CGEvent.tapIsEnabled(tap: tap)
         }
+    }
+
+    /// The single answer to "should the tap be in the event chain": the
+    /// feature is on, Accessibility is granted, and this login session is the
+    /// one on screen. Both the preference sync and the post-wake recheck ask
+    /// it, so neither can put the tap back on its own terms. Named apart from
+    /// `SessionActivitySupport.tapShouldRun`, which it calls.
+    ///
+    /// Accessibility is asked of the system and not of `Permissions.shared`,
+    /// whose answer is a poll up to `PermissionPollingSupport.interval` old.
+    /// The re-arm hands a tap it declines to put back to the sync to be
+    /// stopped, and a stale grant here would install it straight back. The
+    /// mirror stays on the per-key path in `handle`, where the comment explains
+    /// it is cached to keep a live TCC round-trip off every keystroke.
+    private var tapIsWanted: Bool {
+        SessionActivitySupport.tapShouldRun(
+            featureWanted: AppFeature.switcher.isAvailable
+                && UserDefaults.standard.bool(forKey: DefaultsKey.switcherEnabled),
+            accessibilityGranted: AXIsProcessTrusted(),
+            sessionIsActive: SessionActivity.shared.isActive)
     }
 
     /// Applies the persisted preference; safe to call repeatedly.
@@ -176,9 +204,7 @@ final class AppSwitcher: ObservableObject {
             routeShortcut = shortcut
             routeWindowShortcut = windowShortcut
         }
-        let enabled = AppFeature.switcher.isAvailable
-            && UserDefaults.standard.bool(forKey: DefaultsKey.switcherEnabled)
-        let canStartSession = enabled && Permissions.shared.accessibility
+        let canStartSession = tapIsWanted
         routeLock.withLock { routeCanStartSession = canStartSession }
         if canStartSession {
             startObservingKeyboardLayout()
@@ -283,9 +309,9 @@ final class AppSwitcher: ObservableObject {
     }
 
     private func reconcileTakeover() {
-        guard AppFeature.switcher.isAvailable,
-              UserDefaults.standard.bool(forKey: DefaultsKey.switcherEnabled),
-              Permissions.shared.accessibility else {
+        // The post-wake recheck asks the same gate as the sync, so a wake in a
+        // switched-away session cannot put the tap back on its own terms.
+        guard tapIsWanted else {
             restoreNativeHotkeys()
             return
         }
@@ -458,6 +484,12 @@ final class AppSwitcher: ObservableObject {
             if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
             routeLock.withLock { routePendingSessionStart = nil }
             DispatchQueue.main.async { [weak self] in
+                // The session flag is written on the main thread, so this tap
+                // thread must not read it: the re-arm above is provisional and
+                // the answer is asked where it is written. A tap put back into
+                // a session that is no longer on screen stalls the account
+                // that is (issue #1075).
+                if !SessionActivity.shared.isActive { self?.syncWithPreferences() }
                 guard let self, self.sessionActive else { return }
                 self.cancelSession()
             }

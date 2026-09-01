@@ -2,10 +2,12 @@
 // Copyright (C) 2026 Vorssaint
 
 import AppKit
+import ApplicationServices
 import Combine
 
 /// Turns coarse hardware volume wheel bursts into macOS' fine volume step.
-/// Active only while enabled and Accessibility is granted.
+/// Active only while enabled, Accessibility is granted and this login session
+/// is the one on screen.
 final class PreciseVolumeRollerService: ObservableObject {
     static let shared = PreciseVolumeRollerService()
 
@@ -15,12 +17,28 @@ final class PreciseVolumeRollerService: ObservableObject {
     private var source: CFRunLoopSource?
     private var gate = PreciseVolumeRollerGate()
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain, so the account on screen waits out the tap timeout on
+        // every volume key it presses (issue #1075). Hand the tap back on
+        // resign and build it again from preferences on the way in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     func syncWithPreferences() {
         let wanted = AppFeature.mixer.isAvailable
             && UserDefaults.standard.bool(forKey: DefaultsKey.preciseVolumeRollerEnabled)
-        wanted ? start() : stop()
+        if SessionActivitySupport.tapShouldRun(
+            featureWanted: wanted,
+            accessibilityGranted: AXIsProcessTrusted(),
+            sessionIsActive: SessionActivity.shared.isActive
+        ) {
+            start()
+        } else {
+            stop()
+        }
     }
 
     func suspend() {
@@ -44,11 +62,6 @@ final class PreciseVolumeRollerService: ObservableObject {
     }
 
     private func start() {
-        guard AXIsProcessTrusted() else {
-            removeTap()
-            tapFailed = false
-            return
-        }
         if let tap, !CGEvent.tapIsEnabled(tap: tap) {
             CGEvent.tapEnable(tap: tap, enable: true)
         }
@@ -85,8 +98,12 @@ final class PreciseVolumeRollerService: ObservableObject {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if AXIsProcessTrusted(), let tap {
+            if AXIsProcessTrusted(), SessionActivity.shared.isActive, let tap {
                 CGEvent.tapEnable(tap: tap, enable: true)
+            } else {
+                // Invalidating the port from its own callback stack is unsafe;
+                // finish this callback fail-open, then release the tap.
+                DispatchQueue.main.async { [weak self] in self?.syncWithPreferences() }
             }
             return Unmanaged.passUnretained(event)
         }

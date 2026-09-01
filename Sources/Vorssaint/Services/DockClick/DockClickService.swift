@@ -8,7 +8,8 @@ import CoreGraphics
 
 /// Adds optional actions when the active app's Dock icon is clicked: minimize
 /// its windows, hide the app, or cycle its windows. The Dock's native behavior
-/// remains untouched for every other click. Requires Accessibility.
+/// remains untouched for every other click. Requires Accessibility, and the
+/// tap only exists while this login session is the one on screen.
 final class DockClickService {
     static let shared = DockClickService()
 
@@ -60,15 +61,26 @@ final class DockClickService {
     private static let syntheticEventMarker: Int64 = 0x564F5253
     private var pendingSweeps: [pid_t: DispatchWorkItem] = [:]
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain, so every click the account on screen makes waits out
+        // this tap's timeout (issue #1075). Hand the tap back on resign and
+        // build it again from preferences on the way in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     func syncWithPreferences() {
         let minimizeEnabled = UserDefaults.standard.bool(forKey: DefaultsKey.dockClickMinimize)
         let hideEnabled = UserDefaults.standard.bool(forKey: DefaultsKey.dockClickHide)
         let cycleEnabled = UserDefaults.standard.bool(forKey: DefaultsKey.dockClickCycleWindows)
-        if AppFeature.dockClick.isAvailable,
-           (minimizeEnabled || hideEnabled || cycleEnabled),
-           Permissions.shared.accessibility {
+        if SessionActivitySupport.tapShouldRun(
+            featureWanted: AppFeature.dockClick.isAvailable
+                && (minimizeEnabled || hideEnabled || cycleEnabled),
+            accessibilityGranted: Permissions.shared.accessibility,
+            sessionIsActive: SessionActivity.shared.isActive
+        ) {
             start()
         } else {
             stop()
@@ -123,7 +135,13 @@ final class DockClickService {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            if SessionActivity.shared.isActive, let tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            } else {
+                // Invalidating the port from its own callback stack is unsafe;
+                // finish this callback fail-open, then release the tap.
+                DispatchQueue.main.async { [weak self] in self?.syncWithPreferences() }
+            }
             return Unmanaged.passUnretained(event)
         }
         // The replayed down of a press that became a drag: the Dock must
