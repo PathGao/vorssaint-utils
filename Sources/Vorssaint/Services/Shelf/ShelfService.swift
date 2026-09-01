@@ -201,15 +201,6 @@ final class ShelfService: ObservableObject {
     /// as a content drag (issue #240).
     private var sawGestureStart = false
     private var dragBeganInDock = false
-    /// Dragged events spent re-asking whether this gesture started in the
-    /// Dock, capped so a long drag does not pay for the answer at event rate.
-    private var dockOriginProbes = 0
-    private static let dockOriginProbeLimit = 5
-    /// One gesture's answer to "does the drag pasteboard hold something the
-    /// Shelf can keep", remembered against the change count that produced it.
-    /// The contents cannot change while the count stands still, so enumerating
-    /// them once per gesture is enough.
-    private var droppableContentAnswer: (changeCount: Int, hasContent: Bool)?
     private var dragSourceBundleIdentifier: String?
     private var activeInternalDragIDs: [UUID] = []
     private var internalDragWasMerged = false
@@ -432,15 +423,7 @@ final class ShelfService: ObservableObject {
                 if !self.sawGestureStart {
                     self.beginDragGesture(with: event)
                 }
-                // Where the gesture started is settled at `beginDragGesture`;
-                // re-asking costs a window-list copy plus a running-app lookup
-                // on every dragged event. A Dock stack whose mouse-down never
-                // reached the monitor can still surface its window number a
-                // few events late, so keep asking for a short while.
-                if !self.dragBeganInDock, self.dockOriginProbes < Self.dockOriginProbeLimit {
-                    self.dockOriginProbes += 1
-                    self.dragBeganInDock = self.eventBelongsToDock(event)
-                }
+                self.dragBeganInDock = self.dragBeganInDock || self.eventBelongsToDock(event)
                 let defaults = UserDefaults.standard
                 if defaults.bool(forKey: DefaultsKey.shelfShakeToOpen) {
                     self.handleDrag(event)
@@ -511,19 +494,11 @@ final class ShelfService: ObservableObject {
 
     private func isContentDragActive() -> Bool {
         let pasteboard = NSPasteboard(name: .drag)
-        let changeCount = pasteboard.changeCount
         return ShelfInteractionSupport.isContentDrag(
             baselineChangeCount: dragBaselineChangeCount,
-            changeCount: changeCount,
+            changeCount: pasteboard.changeCount,
             beganInDock: dragBeganInDock,
-            hasDroppableContent: {
-                if let answer = droppableContentAnswer, answer.changeCount == changeCount {
-                    return answer.hasContent
-                }
-                let hasContent = pasteboardHasDroppableContent(pasteboard)
-                droppableContentAnswer = (changeCount, hasContent)
-                return hasContent
-            })
+            hasDroppableContent: { pasteboardHasDroppableContent(pasteboard) })
     }
 
     /// Opens a gesture at its first observed event: the mouse-down when it
@@ -532,7 +507,6 @@ final class ShelfService: ObservableObject {
     private func beginDragGesture(with event: NSEvent) {
         sawGestureStart = true
         dragBaselineChangeCount = NSPasteboard(name: .drag).changeCount
-        dockOriginProbes = 0
         dragBeganInDock = eventBelongsToDock(event)
         dragSourceBundleIdentifier = sourceBundleIdentifier(for: event)
     }
