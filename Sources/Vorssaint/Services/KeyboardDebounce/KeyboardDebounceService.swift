@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
 
+import ApplicationServices
 import Combine
 import CoreGraphics
 import Foundation
@@ -270,8 +271,11 @@ final class KeyboardDebounceService: ObservableObject {
             // written on the main thread, and this callback runs on the tap's
             // own thread, so the question is asked where the answer lives
             // rather than read across the two.
+            // Accessibility is asked here for the same reason the mouse twin
+            // asks it: this tap modifies events, so a revoked permission has to
+            // end it rather than put it back. The sync then stops it for good.
             DispatchQueue.main.async { [weak self] in
-                if SessionActivity.shared.isActive {
+                if SessionActivity.shared.isActive, AXIsProcessTrusted() {
                     self?.rearmDisabledTap()
                 } else {
                     self?.syncWithPreferences()

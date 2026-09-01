@@ -64,7 +64,7 @@ enum ShortcutRecordingTap {
                 observingSession = true
                 SessionActivity.shared.onChange { isActive in
                     guard !isActive else { return }
-                    tearDown()
+                    endForSessionSwitch()
                 }
             }
             let mask = (CGEventMask(1) << CGEventType.keyDown.rawValue)
@@ -113,6 +113,20 @@ enum ShortcutRecordingTap {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: watchdog)
     }
 
+    /// The session leaving ends the recording, not only the tap, and the two
+    /// are not the same teardown: whoever called `begin` also called
+    /// `ShortcutCapture.begin()`, which left `HotkeyManager`, Shelf, clipboard,
+    /// sound-output and window-layout shortcuts switched off. Dropping the tap
+    /// alone comes back with the capture card still up and every global
+    /// shortcut in the app dead. Nothing here reopens the card; giving the keys
+    /// back early is the safe direction, and `ShortcutCapture.end()` is
+    /// idempotent, so the caller's own exit still runs unchanged.
+    /// Main thread, like `ShortcutCapture`.
+    private static func endForSessionSwitch() {
+        tearDown()
+        ShortcutCapture.end()
+    }
+
     private static func tearDown() {
         drainWatchdog?.cancel()
         drainWatchdog = nil
@@ -138,7 +152,7 @@ enum ShortcutRecordingTap {
             } else {
                 // Invalidating the port from its own callback stack is unsafe;
                 // finish this callback fail-open, then release the tap.
-                DispatchQueue.main.async { tearDown() }
+                DispatchQueue.main.async { endForSessionSwitch() }
             }
             return Unmanaged.passUnretained(event)
         }

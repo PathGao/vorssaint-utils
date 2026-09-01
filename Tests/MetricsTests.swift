@@ -21765,6 +21765,13 @@ struct MetricsTests {
                 expect(code.contains("AXIsProcessTrusted()"),
                        "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
             }
+            if tapOwner.contains("KeyboardDebounce") {
+                // Its twin MouseClickDebounceService asks the same question in
+                // the same place: a modifying tap the window server disabled
+                // after Accessibility went away must end, not go back in.
+                expect(rearm.contains("AXIsProcessTrusted()"),
+                       "\(tapOwner) does not put a modifying tap back after Accessibility is lost")
+            }
             // Switching a tap off leaves the process owning it, which is what
             // the window server waits on; teardown must invalidate the port.
             expect(code.contains("CFMachPortInvalidate"),
@@ -21807,6 +21814,33 @@ struct MetricsTests {
                "every event tap owner invalidates its port on teardown, across "
                + "\(tapOwners) scanned owners: \(tapOwnersWithoutInvalidate)")
 
+        // The recording tap is the one whose teardown is not the whole exit.
+        // Whoever calls begin also calls ShortcutCapture.begin(), which switches
+        // off HotkeyManager, Shelf, clipboard, sound output and the window
+        // layout shortcuts. A session-driven teardown that drops the tap alone
+        // comes back with the capture card still up and every global shortcut
+        // in the app dead, so both session paths go through one exit that ends
+        // the capture as well. Lines are trimmed so the pairing is pinned
+        // without pinning indentation.
+        let recordingTapCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/ShortcutRecordingTap.swift",
+            encoding: .utf8)) ?? "")
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") }
+            .joined(separator: "\n")
+        let sessionExitParts = recordingTapCode
+            .components(separatedBy: "private static func endForSessionSwitch() {")
+        expect(sessionExitParts.count > 1,
+               "the recording tap has one exit for the session going away")
+        let sessionExit = (sessionExitParts.last ?? "").components(separatedBy: "\n}").first ?? ""
+        expect(sessionExit.contains("tearDown()")
+                && sessionExit.contains("ShortcutCapture.end()"),
+               "a session switch gives the app's own shortcuts back, not only the tap")
+        expect(recordingTapCode.contains("guard !isActive else { return }\nendForSessionSwitch()"),
+               "resigning the session ends the recording rather than only the tap")
+        expect(recordingTapCode.contains("DispatchQueue.main.async { endForSessionSwitch() }"),
+               "a tap timeout in a switched-away session ends the recording too")
         let mouseTapAppDelegateSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/App/AppDelegate.swift",
             encoding: .utf8)) ?? ""
