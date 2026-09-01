@@ -517,7 +517,11 @@ enum HomebrewProgressParser {
                                limit: Int = logLimit) -> String {
         var log = existing
         log.append(text)
-        guard log.utf8.count > limit * 2 else { return log }
+        // Counted in Characters, the same unit `suffix(limit)` trims in. A
+        // byte count here would fire on multi-byte text while `suffix` was
+        // already the whole string, dropping a leading line per call instead
+        // of capping anything.
+        guard log.count > limit * 2 else { return log }
         let tail = log.suffix(limit)
         let wholeLines = tail.drop { !$0.isNewline }.dropFirst()
         return "…\n" + (wholeLines.isEmpty ? tail : wholeLines)

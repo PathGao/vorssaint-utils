@@ -11508,6 +11508,12 @@ struct MetricsTests {
         expect(cappedLog.hasSuffix("last line\n") && cappedLog.utf8.count <= 96
                 && !cappedLog.hasPrefix("old"),
                "Homebrew operation log keeps its tail instead of growing without bound")
+        // 24 Characters, 66 UTF-8 bytes: under a limit counted in Characters,
+        // over one counted in bytes.
+        let multibyteLog = String(repeating: "日本語テキスト\n", count: 3)
+        expect(HomebrewProgressParser.appendingToLog(String(repeating: "日本語テキスト\n", count: 2),
+                                                     "日本語テキスト\n", limit: 32) == multibyteLog,
+               "Homebrew operation log measures its limit in the unit it trims in")
 
         let homebrewJSON = """
         {
