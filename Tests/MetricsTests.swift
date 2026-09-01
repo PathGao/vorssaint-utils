@@ -21837,6 +21837,31 @@ struct MetricsTests {
             .components(separatedBy: "let nextConfig").first ?? ""
         expect(keyboardDebounceGate.contains("accessibilityGranted: AXIsProcessTrusted()"),
                "the keyboard debounce gate asks the system for Accessibility, not the poll cache")
+        // The session half of the same gate. The re-arm declining is only half a
+        // fix: what actually takes the tap out of the chain on a resign is this
+        // sync answering the onChange, and it only reaches stop() while the gate
+        // still asks the session.
+        expect(keyboardDebounceGate.contains("sessionIsActive: SessionActivity.shared.isActive"),
+               "the keyboard debounce gate stops the tap when the session leaves")
+        // Super Key answers the resign in its own sync gate rather than through
+        // tapShouldRun, and the session conjunct there is the whole of that
+        // answer: without it `enabled` stays true on a resign, no tap reads
+        // dead, start() returns on tapExists, and both taps keep their place in
+        // the chain while the hidutil mapping stays written for the whole Mac.
+        // Sliced to the gate so the same call anywhere else in the file — the
+        // re-arm included — cannot answer for it.
+        let superKeyCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/SuperKey/SuperKeyService.swift",
+            encoding: .utf8)) ?? "")
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") }
+            .joined(separator: "\n")
+        let superKeyGate = superKeyCode
+            .components(separatedBy: "let enabled = AppFeature.superKey.isAvailable").last?
+            .components(separatedBy: "guard enabled else").first ?? ""
+        expect(superKeyGate.contains("&& SessionActivity.shared.isActive"),
+               "the Super Key sync gate stops both taps when the session leaves")
         // The recording tap is the one whose teardown is not the whole exit.
         // Whoever calls begin also calls ShortcutCapture.begin(), which switches
         // off HotkeyManager, Shelf, clipboard, sound output and the window
