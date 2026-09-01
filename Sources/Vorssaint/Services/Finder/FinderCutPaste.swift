@@ -12,12 +12,12 @@ import SwiftUI
 /// shortcuts only while Finder is frontmost and no text field is being edited,
 /// so renaming and text editing keep working untouched.
 ///
-/// A keystroke is answered on the tap thread wherever it can be: which app is
-/// in front is kept there, so ⌘C and ⌘V outside Finder are handed straight
-/// back. Only those combinations inside Finder cross to the main thread, where
-/// the marks, the pasteboard change count and a fast Accessibility role check
-/// decide; the slow parts (reading the Finder selection, moving files) run off
-/// both threads.
+/// A keystroke is answered on the tap thread where a wrong answer would cost
+/// nothing: which app is in front is kept there, and ⌘C outside Finder — which
+/// this service never swallows anyway — is handed straight back. ⌘X and ⌘V
+/// cross to the main thread, where the marks, the pasteboard change count and a
+/// fast Accessibility role check decide; the slow parts (reading the Finder
+/// selection, moving files) run off both threads.
 /// Requires Accessibility, and Automation consent for Finder on first use.
 final class FinderCutPaste: ObservableObject {
     static let shared = FinderCutPaste()
@@ -131,7 +131,7 @@ final class FinderCutPaste: ObservableObject {
         // The observer is what keeps the front app the tap thread reads
         // current, so it follows either shortcut path rather than cut and paste
         // alone, and it goes up before the tap: a live tap with nothing
-        // maintaining that answer behind it hands every shortcut back.
+        // maintaining that answer behind it hands ⌘C back everywhere.
         if cutPasteEnabled || pasteImageAsFileEnabled {
             installAppObserver()
         } else {
@@ -288,10 +288,10 @@ final class FinderCutPaste: ObservableObject {
         }
     }
 
-    /// Runs on the tap thread. Every key except a plain Command-X/C/V pressed
-    /// in Finder returns after reading only the event and one cached string;
-    /// the rare candidate is handed to the main thread where the service's UI
-    /// and pasteboard state live.
+    /// Runs on the tap thread. Every key except a plain Command-X/C/V returns
+    /// after reading only the event, and Command-C outside Finder after one
+    /// cached string as well; the rare candidate is handed to the main thread
+    /// where the service's UI and pasteboard state live.
     private func route(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             // The gate the preference sync applied, asked again: a tap re-armed
@@ -316,13 +316,24 @@ final class FinderCutPaste: ObservableObject {
               keyCode == Key.x || keyCode == Key.c || keyCode == Key.v
         else { return Unmanaged.passUnretained(event) }
 
-        // ⌘C and ⌘V are the two most-pressed combinations on the machine, and
+        // ⌘C is one of the two most-pressed combinations on the machine, and
         // outside Finder the answer is always no. Learning that on the main
         // thread would make every copy anywhere wait for whatever this app is
-        // drawing, so the activation observer keeps the answer over here. The
-        // main thread reads the live value again before acting on it.
-        guard routeLock.withLock({ frontmostBundleID }) == Self.finderBundleID
-        else { return Unmanaged.passUnretained(event) }
+        // drawing, so the activation observer keeps the answer over here.
+        //
+        // Only ⌘C. The observer refreshes this on the main queue, which is the
+        // thread this reject exists because it is busy, so through that stall
+        // the cache still names the app the user just left. A stale reject is
+        // free here — the main thread passes ⌘C through in every branch, and
+        // the pending-cut marks it would have dropped are dropped again by the
+        // change-count check on the next ⌘V. It is not free for the other two:
+        // ⌘X swallows the key and cuts, ⌘V moves the marked files or writes the
+        // pasteboard image out as a file, and Finder has no native answer for
+        // either, so a stale reject makes them silently do nothing.
+        if keyCode == Key.c,
+           routeLock.withLock({ frontmostBundleID }) != Self.finderBundleID {
+            return Unmanaged.passUnretained(event)
+        }
 
         var verdict: Unmanaged<CGEvent>?
         DispatchQueue.main.sync {

@@ -21880,10 +21880,10 @@ struct MetricsTests {
             expect(!rearm.isEmpty && !rearm.contains("SessionActivity.shared."),
                    "\(finderTapOwner) re-arms off the sampled answer, never off main-thread state")
         }
-        // ⌘C and ⌘V are pressed everywhere, and outside Finder the answer is
-        // always no. Asking the main thread for it would put the app's drawing
-        // in front of every copy on the machine, so the tap thread decides from
-        // an answer the activation observer leaves for it.
+        // ⌘C is pressed everywhere, and outside Finder the answer is always no.
+        // Asking the main thread for it would put the app's drawing in front of
+        // every copy on the machine, so the tap thread decides from an answer
+        // the activation observer leaves for it.
         let cutPasteCode = ((try? String(
             contentsOfFile: "Sources/Vorssaint/Services/Finder/FinderCutPaste.swift",
             encoding: .utf8)) ?? "")
@@ -21897,6 +21897,19 @@ struct MetricsTests {
             .components(separatedBy: "DispatchQueue.main.sync").first ?? ""
         expect(!beforeMainThread.isEmpty && !beforeMainThread.contains("NSWorkspace"),
                "the cut-paste tap thread turns a shortcut down without waiting for the main thread")
+        // That cached answer is refreshed on the main queue, so through the very
+        // stall it exists to skip it still names the app the user just left.
+        // Only ⌘C may be turned down on it: the main thread passes ⌘C through in
+        // every branch. ⌘X swallows the key and cuts, ⌘V moves the marked files
+        // or writes the pasteboard image out as a file, and Finder answers for
+        // neither, so a stale reject would make those two silently no-op.
+        let cachedReject = beforeMainThread
+            .components(separatedBy: "frontmostBundleID").first?
+            .components(separatedBy: "if ").last ?? ""
+        expect(beforeMainThread.contains("frontmostBundleID")
+                && cachedReject.contains("Key.c")
+                && !cachedReject.contains("Key.x") && !cachedReject.contains("Key.v"),
+               "only ⌘C is turned down from the cached front app; ⌘X and ⌘V ask the main thread")
 
         // MARK: Uninstallation paths stay aligned across SelfUninstall and Tools/uninstall.sh
         let selfUninstallSource = (try? String(contentsOfFile: "Sources/Vorssaint/Services/SelfUninstall.swift",
