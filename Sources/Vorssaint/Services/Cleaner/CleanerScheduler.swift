@@ -171,6 +171,10 @@ final class CleanerScheduler: ObservableObject {
         let defaults = UserDefaults.standard
         defaults.set(Date().timeIntervalSince1970, forKey: DefaultsKey.cleanerLastAutoRun)
         defaults.set(freed, forKey: DefaultsKey.cleanerLastAutoFreed)
+        // Recorded, not only announced: the notification is optional and macOS
+        // drops it outright when notifications are denied, so the count also
+        // has to survive in the last-run line the cleaner shows on screen.
+        defaults.set(failed, forKey: DefaultsKey.cleanerLastAutoLeft)
         notifyIfWanted(freed: freed, failed: failed)
         scheduleNext()
     }
@@ -191,7 +195,7 @@ final class CleanerScheduler: ObservableObject {
         // indistinguishable from one that was never there: an unattended run
         // never escalates, so a root owned item stays and counts as failed.
         if failed > 0 {
-            sentences.append(String(format: strings.cleanerAutoLeftFormat, failed))
+            sentences.append(CleanerSupport.leftInPlaceSentence(count: failed, strings))
         }
         // "Nothing to clean" only when nothing was moved AND nothing was left.
         if sentences.isEmpty { sentences.append(strings.cleanerNothingFound) }

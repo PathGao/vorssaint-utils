@@ -911,6 +911,7 @@ extension Strings {
         cleanerScheduleCaption: "Limpia sola solo la parte segura a la hora elegida y envía todo a la Papelera.",
         cleanerScheduleLastFormat: "La última limpieza automática liberó %@.",
         cleanerAutoNotificationFormat: "%@ liberados y enviados a la Papelera.",
+        cleanerAutoLeftSingular: "%d elemento se quedó donde estaba; haz una limpieza manual para eliminarlo.",
         cleanerAutoLeftFormat: "%d elementos se quedaron donde estaban; haz una limpieza manual para eliminarlos.",
         cleanerScheduleNextFormat: "Próxima limpieza %@.",
         cleanerScheduleRanFormat: "Última limpieza automática %@.",

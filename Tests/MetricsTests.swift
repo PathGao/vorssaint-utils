@@ -4876,8 +4876,21 @@ struct MetricsTests {
         // notification, not stop at the phase.
         expect(cleanerSchedulerCode.contains("caselet.done(freed,failed):self.finishRun(freed:freed,failed:failed)")
                && cleanerSchedulerCode.contains("notifyIfWanted(freed:freed,failed:failed)")
-               && cleanerSchedulerCode.contains("strings.cleanerAutoLeftFormat,failed"),
+               && cleanerSchedulerCode.contains("CleanerSupport.leftInPlaceSentence(count:failed,strings)"),
                "an automatic pass reports how many items it left in place")
+        // One deferred launch daemon is the likely count, so the sentence has
+        // to read at 1 and not only in the plural.
+        expect(CleanerSupport.leftInPlaceSentence(count: 1, .enUS)
+                   == "1 item stayed in place; clean by hand to remove it.",
+               "one deferred item reads in the singular")
+        expect(CleanerSupport.leftInPlaceSentence(count: 2, .enUS)
+                   == "2 items stayed in place; clean by hand to remove them.",
+               "more than one deferred item keeps the plural")
+        // The notification is optional and macOS drops it when notifications
+        // are denied, so the count is persisted and the cleaner's own last-run
+        // line says it too: otherwise a deferred pass reads as a clean one.
+        expect(cleanerSchedulerCode.contains("defaults.set(failed,forKey:DefaultsKey.cleanerLastAutoLeft)"),
+               "an automatic pass records what it left in place, not only announces it")
         // The manual path keeps escalating, and there is no default to inherit:
         // a future automatic caller has to name its own policy.
         let junkCleanerCode = ((try? String(
@@ -4890,6 +4903,11 @@ struct MetricsTests {
                && cleanerViewCode.components(separatedBy: "cleanSelected(").count == 2
                && cleanerViewCode.contains("cleanSelected(escalate:true)"),
                "cleanSelected has no default escalation and the manual path still asks")
+        expect(cleanerViewCode.contains("@AppStorage(DefaultsKey.cleanerLastAutoLeft)")
+               && cleanerViewCode.contains("CleanerSupport.leftInPlaceSentence(count:lastAutoLeft,l10n.s)"),
+               "the cleaner's last-run line shows the deferred count with notifications off")
+        expect(SettingsBackupSupport.machineStateKeys.contains(DefaultsKey.cleanerLastAutoLeft),
+               "what one Mac deferred is never exported to another")
         expect(CleanerPolicy.developerJunkPaths.contains("/Library/Developer/Xcode/iOS DeviceSupport")
                && CleanerPolicy.developerJunkPaths.contains("/Library/Developer/Xcode/watchOS DeviceSupport"),
                "stale DeviceSupport symbol caches count as developer junk")
@@ -11957,6 +11975,7 @@ struct MetricsTests {
                    "\(prefix) Quick panel keeps the same name in Settings")
             expectFormat(strings.cutMovedPluralFormat, ["d"], "\(prefix) cut plural format")
             expectFormat(strings.cleanerAutoLeftFormat, ["d"], "\(prefix) cleaner left-in-place format")
+            expectFormat(strings.cleanerAutoLeftSingular, ["d"], "\(prefix) cleaner left-in-place singular")
             expectFormat(strings.uninstallerSelectedFormat, ["d", "d"], "\(prefix) uninstaller selected format")
             expectFormat(strings.uninstallerFreedFormat, ["@"], "\(prefix) uninstaller freed format")
             expectFormat(strings.shelfSelectedFormat, ["d"], "\(prefix) shelf selection format")

@@ -238,4 +238,13 @@ enum CleanerSupport {
         return !executables.contains(where: executableExists)
     }
 
+    /// The one sentence that names what an automatic pass left behind, shared
+    /// by the notification and the cleaner's own last-run line so the two can
+    /// never disagree. One deferred launch daemon is the likely count, so it
+    /// comes as a singular/plural pair like every other counted string.
+    static func leftInPlaceSentence(count: Int, _ strings: Strings) -> String {
+        String(format: count == 1 ? strings.cleanerAutoLeftSingular
+                                  : strings.cleanerAutoLeftFormat, count)
+    }
+
 }

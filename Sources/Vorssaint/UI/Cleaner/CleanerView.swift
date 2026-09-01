@@ -84,6 +84,7 @@ struct CleanerView: View {
     @AppStorage(DefaultsKey.cleanerScheduleWeekday) private var scheduleWeekday = 2
     @AppStorage(DefaultsKey.cleanerLastAutoRun) private var lastAutoRun = 0.0
     @AppStorage(DefaultsKey.cleanerLastAutoFreed) private var lastAutoFreed = 0
+    @AppStorage(DefaultsKey.cleanerLastAutoLeft) private var lastAutoLeft = 0
     @AppStorage(DefaultsKey.cleanerScheduleNotify) private var scheduleNotify = true
     @ObservedObject private var scheduler = CleanerScheduler.shared
     @ObservedObject private var whatsAppScheduler = WhatsAppDownloadScheduler.shared
@@ -640,11 +641,17 @@ struct CleanerView: View {
 
     private var lastRunLine: String {
         let ranAt = Self.nextRunFormatter.string(from: Date(timeIntervalSince1970: lastAutoRun))
-        if lastAutoFreed > 0 {
-            return String(format: l10n.s.cleanerScheduleLastFormat,
-                          Self.byteString(Int64(lastAutoFreed)))
+        var line = lastAutoFreed > 0
+            ? String(format: l10n.s.cleanerScheduleLastFormat,
+                     Self.byteString(Int64(lastAutoFreed)))
+            : String(format: l10n.s.cleanerScheduleRanFormat, ranAt)
+        // The notification is optional and macOS drops it when notifications
+        // are denied, so what the pass deferred is said here too: without it a
+        // run that left everything behind reads exactly like a clean one.
+        if lastAutoLeft > 0 {
+            line += " " + CleanerSupport.leftInPlaceSentence(count: lastAutoLeft, l10n.s)
         }
-        return String(format: l10n.s.cleanerScheduleRanFormat, ranAt)
+        return line
     }
 
     /// Checked slightly delayed so a just fired authorization prompt has a
