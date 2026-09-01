@@ -20500,7 +20500,8 @@ struct MetricsTests {
         expect(punchMatches, "carrying the cursor gives the press punch the full scan gave")
         expect(ringMatches, "carrying the cursor gives the click ring the full scan gave")
         expect(anchorMatches, "carrying the cursor gives the click anchor the full scan gave")
-        expect(freshMatches, "a fresh cursor still answers exactly what the full scan answered")
+        expect(freshMatches,
+               "on a click list in time order a fresh cursor answers what the full scan answered")
 
         // The anchor's only carried caller is `anchored` itself, so the blend
         // it produces is compared against the same blend driven by the scan.
@@ -20542,6 +20543,31 @@ struct MetricsTests {
             }
         }
         expect(focusMatches, "carrying the cursor gives the focus the full scan gave")
+
+        // "A fresh cursor is a full scan" is a claim about a list in time
+        // order and only that. All four queries stop at the first entry too
+        // late to matter, so on a list that is not ascending they answer from
+        // the part before the break — a fresh cursor is no protection, it is
+        // where the break happens earliest. Nothing produces such a list: the
+        // sampler appends in order, `decode` round-trips the encoder's order
+        // and `focusClusters` emits ascending. This pins the qualifier so the
+        // doc comments cannot drift back to promising the unqualified form.
+        let outOfOrder = [RecorderMotion.Click(time: 10, isDown: true),
+                          RecorderMotion.Click(time: 10.05, isDown: false),
+                          RecorderMotion.Click(time: 0.5, isDown: true),
+                          RecorderMotion.Click(time: 0.6, isDown: false)]
+        expect(RecorderMotion.anchorWeight(at: 0.55, clicks: outOfOrder) == 0,
+               "out of time order the anchor answers from before its break, not from the whole list")
+        expect(RecorderMotion.pressScale(at: 0.55, clicks: outOfOrder) == 1,
+               "out of time order the punch answers from before its break, not from the whole list")
+        expect(RecorderMotion.ringProgress(at: 0.55, clicks: outOfOrder) == nil,
+               "out of time order the ring answers from before its break, not from the whole list")
+        let jumbledClusters = [
+            RecorderMotion.FocusCluster(time: 10, center: CGPoint(x: 0.1, y: 0.1)),
+            RecorderMotion.FocusCluster(time: 0.5, center: CGPoint(x: 0.9, y: 0.9))
+        ]
+        expect(RecorderMotion.focus(at: 5, clusters: jumbledClusters) == CGPoint(x: 0.1, y: 0.1),
+               "out of time order the focus stops at the first cluster past the moment")
 
         // MARK: Screen recorder timeline
 

@@ -207,12 +207,17 @@ enum RecorderMotion {
     }
 
     /// Where a caller asking in time order got to in the click list, on the
-    /// same terms as the press punch below: a fresh cursor gives exactly what
-    /// a full scan gives, and carrying one is only valid when the times asked
-    /// for never go backwards. It may only step past a RELEASE, because a
-    /// press still weighs on every moment until its own release arrives.
-    /// `anchored` is the only caller that carries one, over its own frame
-    /// index, so the ordering is true by construction rather than by promise.
+    /// same terms as the press punch below: for a click list in ascending time
+    /// order a fresh cursor gives exactly what a full scan gives, and carrying
+    /// one is only valid when the times asked for never go backwards. The
+    /// qualifier is the early break — out of order the scan stops short of
+    /// clicks that would have counted, and a fresh cursor is no protection
+    /// against that. The sampler appends in order and `decode` round-trips the
+    /// encoder's order, so nothing builds such a list today.
+    /// It may only step past a RELEASE, because a press still weighs on every
+    /// moment until its own release arrives. `anchored` is the only caller
+    /// that carries one, over its own frame index, so the order the moments
+    /// are asked in is true by construction rather than by promise.
     static func anchorWeight(at time: Double, clicks: [Click], cursor: inout Int) -> Double {
         var weight: Double = 0
         var pressedAt: Double?
@@ -467,8 +472,11 @@ enum RecorderMotion {
     }
 
     /// The same answer, for a caller that asks in time order. `cursor` starts
-    /// at zero and is carried across the calls; a fresh one gives exactly what
-    /// a full scan gives.
+    /// at zero and is carried across the calls; for clusters in ascending time
+    /// order a fresh one gives exactly what a full scan gives. Out of order it
+    /// stops at the first cluster past the moment, where the scan went on to
+    /// take the last one; `focusClusters` emits ascending, so nothing here
+    /// builds that list.
     static func focus(at time: Double, clusters: [FocusCluster], cursor: inout Int) -> CGPoint {
         guard let first = clusters.first else { return CGPoint(x: 0.5, y: 0.5) }
         var current = cursor == 0 ? first.center : clusters[cursor - 1].center
@@ -577,9 +585,14 @@ enum RecorderMotion {
     /// Where a caller asking in time order got to in the click list, so an
     /// export does not rescan every click for every frame: an hour of busy
     /// recording is thirty six thousand frames against a four figure click
-    /// list. A fresh cursor gives exactly what a full scan gives; carrying one
-    /// is only valid when the times asked for never go backwards, which the
-    /// composer's frame loop guarantees.
+    /// list. For a click list in ascending time order a fresh cursor gives
+    /// exactly what a full scan gives; carrying one is only valid when the
+    /// times asked for never go backwards, which the composer's frame loop
+    /// guarantees. Both halves want `clicks` ascending: these scans stop at
+    /// the first click too late to matter, so out of order they answer from
+    /// the part before the break, fresh cursor or not. The sampler appends in
+    /// order and `decode` round-trips the encoder's order, so nothing builds
+    /// such a list today.
     struct ClickCursor {
         fileprivate var punch = 0
         fileprivate var ring = 0
