@@ -21280,10 +21280,12 @@ struct MetricsTests {
         // before signing. The needle is the invocation at the start of a
         // command line: the ad-hoc fallback's advice string also names the
         // script, and must not satisfy this check.
-        let runsSigningSetup = buildScript.components(separatedBy: "\n").contains {
+        let invokesSigningSetup: (String) -> Bool = {
             $0.range(of: #"^\s*(if\s+!?\s*)?\./Tools/setup-signing\.sh"#,
                      options: .regularExpression) != nil
         }
+        let runsSigningSetup = buildScript.components(separatedBy: "\n")
+            .contains(where: invokesSigningSetup)
         expect(runsSigningSetup,
                "an identity-less Developer build invokes Tools/setup-signing.sh itself")
 
@@ -21329,32 +21331,59 @@ struct MetricsTests {
         // time where it creates it, so a file-wide search answers yes with the
         // probe's own unlock deleted — and then the first signing build after
         // a reboot is back on the SecurityAgent dialog this branch removes.
-        for (script, lines, probeName) in
-            [("build.sh", buildScriptLines, "legacy_identity_installed"),
-             ("Tools/setup-signing.sh", signingSetupLines, "identity_can_sign")] {
+        for (script, lines, probeName, verdict) in
+            [("build.sh", buildScriptLines, "legacy_identity_installed",
+              "LEGACY_IDENTITY_USABLE=yes"),
+             ("Tools/setup-signing.sh", signingSetupLines, "identity_can_sign", "signed=0")] {
+            // Once, not at least once: a second definition later in the file is
+            // the one the shell runs, and everything below here reads the first.
+            let definitions = lines.filter {
+                $0.trimmingCharacters(in: .whitespaces).hasPrefix("\(probeName)() {")
+            }
+            expect(definitions.count == 1,
+                   "\(script) defines \(probeName)() exactly once, found \(definitions.count)")
             let probe = probeBody(lines, probeName)
             expect(!probe.isEmpty, "\(script) still defines \(probeName)()")
             let probeCode = probe.joined(separator: "\n")
+            let namedQueries = lines
+                .filter { $0.contains("find-identity") }
+                .filter { $0.contains("$LEGACY_IDENTITY") || $0.contains("$IDENTITY") }
             let identityQueries = probe
                 .filter { $0.contains("find-identity") }
                 .filter { $0.contains("$LEGACY_IDENTITY") || $0.contains("$IDENTITY") }
             expect(!identityQueries.isEmpty,
                    "\(script)'s \(probeName) still looks the stable identity up by name")
+            // Presence is not the whole guarantee. The defect this branch fixes
+            // was call sites deciding off the raw listing, copy-pasted five
+            // times; a sixth added beside the probe leaves the probe intact and
+            // brings the bug straight back. The listing may be asked for this
+            // identity only where the answer is then handed to codesign.
+            expect(namedQueries.count == identityQueries.count,
+                   "\(script) asks find-identity for the stable identity only inside "
+                    + "\(probeName), found \(namedQueries.count - identityQueries.count) "
+                    + "such lookup(s) outside it")
             // This one stays file-wide on purpose: it forbids a spelling
             // rather than requiring a line, and -v against this identity is
             // wrong wherever it is written.
-            let trustQueries = lines
-                .filter { $0.contains("find-identity") }
-                .filter { $0.contains("$LEGACY_IDENTITY") || $0.contains("$IDENTITY") }
-                .filter { $0.contains("-v") }
+            let trustQueries = namedQueries.filter { $0.contains("-v") }
             expect(trustQueries.isEmpty,
                    "\(script) looks the self-signed identity up without asking find-identity "
                     + "for valid identities only, found \(trustQueries.count) that do")
             expect(probeCode.contains("unlock-keychain -p"),
                    "\(script)'s \(probeName) unlocks the dedicated signing keychain itself")
-            expect(probeCode.contains("codesign --force --sign"),
-                   "\(script)'s \(probeName) asks codesign whether the identity can sign "
-                    + "before relying on it")
+            // Requiring the codesign call is not enough by itself: a line
+            // setting the verdict unconditionally leaves the call in place and
+            // answers yes without it. Exactly one call, exactly one verdict,
+            // and the verdict no earlier than the call it is meant to read.
+            let signingProbes = probe.indices.filter {
+                probe[$0].contains("codesign --force --sign")
+            }
+            let verdicts = probe.indices.filter { probe[$0].contains(verdict) }
+            expect(signingProbes.count == 1 && verdicts.count == 1
+                    && verdicts[0] >= signingProbes[0],
+                   "\(script)'s \(probeName) reaches `\(verdict)` only through asking codesign "
+                    + "whether the identity can sign, found \(signingProbes.count) call(s) and "
+                    + "\(verdicts.count) verdict line(s)")
             // zsh keeps `status` as a second name for $?, and it is read-only:
             // `local status=1` aborts the script on the first call to the
             // function that declares it, so the probe never runs at all.
@@ -21375,37 +21404,47 @@ struct MetricsTests {
         // then goes true and the unlock is skipped without a word, leaving
         // codesign to meet a locked keychain and raise the SecurityAgent
         // dialog. Pin both values against each other, not just the call.
-        let shellLiteral: (String, [String]) -> String? = { name, lines in
+        // Every assignment, not the first: reading one and comparing it would
+        // pass a second assignment added below it, and the shell obeys the last
+        // one to run. So the value has to be written exactly once per script.
+        let shellLiterals: (String, [String]) -> [String] = { name, lines in
             lines.compactMap { line -> String? in
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 guard trimmed.hasPrefix("\(name)=\"") else { return nil }
                 return String(trimmed.dropFirst(name.count + 2).prefix { $0 != "\"" })
-            }.first
+            }
         }
         for (what, inBuildScript, inSetupScript) in
             [("password", "LEGACY_KEYCHAIN_PASSWORD", "KCPASS"),
              ("path", "LEGACY_KEYCHAIN", "KC")] {
-            let fromBuild = shellLiteral(inBuildScript, buildScriptLines)
-            let fromSetup = shellLiteral(inSetupScript, signingSetupLines)
-            expect(fromBuild?.isEmpty == false && fromBuild == fromSetup,
+            let fromBuild = shellLiterals(inBuildScript, buildScriptLines)
+            let fromSetup = shellLiterals(inSetupScript, signingSetupLines)
+            expect(fromBuild.count == 1 && fromBuild.first?.isEmpty == false
+                    && fromBuild == fromSetup,
                    "build.sh's \(inBuildScript) and Tools/setup-signing.sh's \(inSetupScript) "
-                    + "are the same signing keychain \(what), found \(fromBuild ?? "none") "
-                    + "and \(fromSetup ?? "none")")
+                    + "are each assigned once and name the same signing keychain \(what), "
+                    + "found \(fromBuild) and \(fromSetup)")
         }
 
         // The signing probe is asked once and cached. Running the repair is the
         // only thing that changes its answer, so the cache has to be dropped
         // there: otherwise --dev creates a working identity and then signs the
         // build ad-hoc off the "no" recorded a moment earlier.
-        if let repair = buildScriptLines.firstIndex(where: { $0.contains("Tools/setup-signing.sh") }) {
+        // Every invocation, located the same way runsSigningSetup locates one:
+        // a bare substring also matches the ad-hoc fallback's advice string,
+        // which names the script and repairs nothing. And a second repair site
+        // added later is the same bug again, so each one carries its own reset.
+        let repairs = buildScriptLines.indices.filter { invokesSigningSetup(buildScriptLines[$0]) }
+        expect(!repairs.isEmpty,
+               "build.sh still runs Tools/setup-signing.sh when no identity is usable")
+        for repair in repairs {
             let afterRepair = Array(buildScriptLines[(repair + 1)...])
             let nextRead = afterRepair.firstIndex { $0.contains("legacy_identity_installed") }
                 ?? afterRepair.count
             expect(afterRepair[..<nextRead].contains { $0.contains("LEGACY_IDENTITY_USABLE=\"\"") },
-                   "build.sh clears the cached identity verdict after running the repair, "
+                   "build.sh clears the cached identity verdict after running the repair at "
+                    + "`\(buildScriptLines[repair].trimmingCharacters(in: .whitespaces))`, "
                     + "before anything reads it again")
-        } else {
-            expect(false, "build.sh still runs Tools/setup-signing.sh when no identity is usable")
         }
 
         // The setup script must run against the stock /usr/bin/openssl, which
