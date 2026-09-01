@@ -10717,6 +10717,20 @@ struct MetricsTests {
                "App Switcher restores the source once the target window reports itself minimized")
         expect(minimizeIntentMinimizedReads == 1 && minimizeIntentFocusedReads == 0,
                "App Switcher skips the focused-window read when the target is already minimized")
+        // An activation resolves the target window once and hands the element
+        // to every Accessibility step that follows. Deminiaturizing makes some
+        // apps rebuild their windows, which kills that handle: every write to
+        // it answers `.invalidUIElement` into a discarded result, so the step
+        // reports success while focus never moved. A step given an element must
+        // therefore check it still answers and resolve again when it does not,
+        // which is what `liveWindow` does and what a bare `??` would not.
+        let windowActivatorSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Switcher/WindowActivator.swift",
+            encoding: .utf8)) ?? ""
+        expect(!windowActivatorSource.isEmpty
+                && !windowActivatorSource.contains("?? axElement(")
+                && !windowActivatorSource.contains("?? WindowActivator.axElement"),
+               "the App Switcher never acts on a handed-down window element without checking it is still alive")
         expect(SwitcherSupport.shouldStageSourceBehindTarget(targetPID: 10,
                                                              sourcePID: 20,
                                                              sourceWindowID: 44,

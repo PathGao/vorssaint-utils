@@ -65,9 +65,10 @@ enum WindowActivator {
         }
         // Every Accessibility step of this pass asks the same app for the same
         // window, and each ask copies `kAXWindows` and walks it. Resolve the
-        // element once here and hand it down. Work scheduled with `asyncAfter`
-        // deliberately resolves again: an app that rebuilt its windows in the
-        // meantime leaves a reused element answering `.invalidUIElement`.
+        // element once here and hand it down; `liveWindow` gives each step back
+        // a working element if the app rebuilt its windows in between, which
+        // `prepareWindowForActivation` can provoke by deminiaturizing. Work
+        // scheduled with `asyncAfter` is handed nothing and resolves for itself.
         let axTargetWindow: AXUIElement? = {
             guard Permissions.shared.accessibility else { return nil }
             let axApp = AXUIElementCreateApplication(windowOwnerPID)
@@ -222,7 +223,7 @@ enum WindowActivator {
         guard Permissions.shared.accessibility else { return nil }
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        guard let axWindow = axWindow ?? axElement(windowID: windowID, in: axApp) else { return nil }
+        guard let axWindow = liveWindow(axWindow, windowID: windowID, in: axApp) else { return nil }
         return minimizedState(of: axWindow)
     }
 
@@ -638,7 +639,7 @@ enum WindowActivator {
         guard Permissions.shared.accessibility else { return false }
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        guard let axWindow = axWindow ?? axElement(windowID: windowID, in: axApp) else { return false }
+        guard let axWindow = liveWindow(axWindow, windowID: windowID, in: axApp) else { return false }
 
         var minimized: CFTypeRef?
         if AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minimized) == .success,
@@ -676,7 +677,7 @@ enum WindowActivator {
         AXUIElementSetMessagingTimeout(sourceApp, 0.35)
         AXUIElementSetMessagingTimeout(targetApp, 0.35)
         guard let sourceWindow = axElement(windowID: sourceWindowID, in: sourceApp),
-              let targetWindow = targetAXWindow ?? axElement(windowID: targetWindowID, in: targetApp)
+              let targetWindow = liveWindow(targetAXWindow, windowID: targetWindowID, in: targetApp)
         else { return false }
 
         var sourceMinimized: CFTypeRef?
@@ -702,7 +703,7 @@ enum WindowActivator {
         guard Permissions.shared.accessibility else { return false }
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        guard let axWindow = axWindow ?? axElement(windowID: windowID, in: axApp) else { return false }
+        guard let axWindow = liveWindow(axWindow, windowID: windowID, in: axApp) else { return false }
 
         var minimized: CFTypeRef?
         if AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minimized) == .success,
@@ -744,8 +745,24 @@ enum WindowActivator {
         return nil
     }
 
-    fileprivate static func axElementForMinimizeRestore(windowID: CGWindowID, in axApp: AXUIElement) -> AXUIElement? {
-        axElement(windowID: windowID, in: axApp)
+    /// Resolves the window, reusing `axWindow` when that handle is still alive.
+    ///
+    /// An element handed down from an earlier step dies the moment the app
+    /// rebuilds its windows, and deminiaturizing is enough to make some apps do
+    /// that. Every write to a dead element then answers `.invalidUIElement`
+    /// into a discarded result, so a pass reports success while nothing moved.
+    /// Resolving from `kAXWindows` at every step is what used to heal that; one
+    /// attribute read keeps the healing without paying for the enumeration.
+    /// `axWindow == nil` is the ordinary case and costs nothing extra.
+    fileprivate static func liveWindow(_ axWindow: AXUIElement?,
+                                       windowID: CGWindowID,
+                                       in axApp: AXUIElement) -> AXUIElement? {
+        var role: CFTypeRef?
+        if let axWindow,
+           AXUIElementCopyAttributeValue(axWindow, kAXRoleAttribute as CFString, &role) == .success {
+            return axWindow
+        }
+        return axElement(windowID: windowID, in: axApp)
     }
 
     fileprivate static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
@@ -963,8 +980,7 @@ fileprivate final class SwitcherWindowMinimizeRestore {
 
         let axApp = AXUIElementCreateApplication(targetWindowOwnerPID)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        guard let axWindow = axWindow
-                ?? WindowActivator.axElementForMinimizeRestore(windowID: windowID, in: axApp) else {
+        guard let axWindow = WindowActivator.liveWindow(axWindow, windowID: windowID, in: axApp) else {
             return nil
         }
 
