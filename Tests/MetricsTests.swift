@@ -21734,7 +21734,7 @@ struct MetricsTests {
             "Sources/Vorssaint/Services/Finder/FinderCutPaste.swift":
                 "Command-X in the other account's Finder reaches a dead tap first",
             "Sources/Vorssaint/Services/Finder/FinderRenameService.swift":
-                "as FinderCutPaste, and its teardown also skips CFMachPortInvalidate",
+                "as FinderCutPaste, in the other account's Finder",
             "Sources/Vorssaint/Services/KeyboardDebounce/KeyboardDebounceService.swift":
                 "every keystroke of the account switched in pays the tap timeout",
             "Sources/Vorssaint/Services/RadialMenu/RadialMenuService.swift":
@@ -21746,11 +21746,11 @@ struct MetricsTests {
             "Sources/Vorssaint/Services/SuperKey/SuperKeyService.swift":
                 "the Super Key holds both a key and a mouse tap across the switch",
             "Sources/Vorssaint/Services/Switcher/AppSwitcher.swift":
-                "the switcher keeps its Tab tap and never invalidates the port",
+                "the switcher keeps its Tab tap across the switch",
             "Sources/Vorssaint/Services/WindowLayout/WindowLayoutService.swift":
-                "two window-layout taps stay in the other account's key chain",
+                "three window-layout taps stay in the other account's key chain",
             "Sources/Vorssaint/Services/WindowMaximizer.swift":
-                "the maximizer keeps its tap and never invalidates the port",
+                "the maximizer keeps its tap across the switch",
         ]
         for tapOwner in tapOwnerFiles {
             let source = (try? String(contentsOfFile: tapOwner, encoding: .utf8)) ?? ""
