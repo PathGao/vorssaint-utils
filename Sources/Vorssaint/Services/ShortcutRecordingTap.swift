@@ -58,15 +58,21 @@ enum ShortcutRecordingTap {
         if let tap, !CGEvent.tapIsEnabled(tap: tap) {
             tearDown()
         }
+        // Registered on the way in, before the tap is asked for: the exit this
+        // installs is the recording's, not the tap's. Without Accessibility
+        // the lines below give up and the caller records through its own
+        // monitor, but `ShortcutCapture.begin()` has already switched the app's
+        // global shortcuts off, so a resign with no handler registered leaves
+        // them off with nothing left to turn them back on.
+        if !observingSession {
+            observingSession = true
+            SessionActivity.shared.onChange { isActive in
+                guard !isActive else { return }
+                endForSessionSwitch()
+            }
+        }
         if tap == nil {
             guard AXIsProcessTrusted() else { return false }
-            if !observingSession {
-                observingSession = true
-                SessionActivity.shared.onChange { isActive in
-                    guard !isActive else { return }
-                    endForSessionSwitch()
-                }
-            }
             let mask = (CGEventMask(1) << CGEventType.keyDown.rawValue)
                 | (CGEventMask(1) << CGEventType.keyUp.rawValue)
             guard let created = CGEvent.tapCreate(

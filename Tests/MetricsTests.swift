@@ -21889,6 +21889,18 @@ struct MetricsTests {
                "resigning the session ends the recording rather than only the tap")
         expect(recordingTapCode.contains("DispatchQueue.main.async { endForSessionSwitch() }"),
                "a tap timeout in a switched-away session ends the recording too")
+        // That exit has to be registered before the tap is asked for. On a Mac
+        // without Accessibility begin() returns at the guard, the caller records
+        // through its own monitor, and ShortcutCapture.begin() has already
+        // switched the app's shortcuts off — so a registration behind the guard
+        // never happens and a resign leaves them off for good. Sliced to the
+        // part of begin above the guard, so the tap-creation path cannot answer
+        // for it.
+        let recordingTapBeginPreamble = recordingTapCode
+            .components(separatedBy: "static func begin(").last?
+            .components(separatedBy: "guard AXIsProcessTrusted()").first ?? ""
+        expect(recordingTapBeginPreamble.contains("SessionActivity.shared.onChange"),
+               "the recording tap watches the session even when Accessibility denies it a tap")
         let mouseTapAppDelegateSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/App/AppDelegate.swift",
             encoding: .utf8)) ?? ""
