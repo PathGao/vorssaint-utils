@@ -66,6 +66,14 @@ developer_id_identity() {
         | sed -E 's/.*"(.*)".*/\1/' || true
 }
 
+# `find-identity` without -v lists identities that cannot sign: a self-signed
+# certificate that has expired still appears. Matching one of those picked an
+# unusable identity over the ad-hoc fallback, and codesign then failed the
+# build outright with errSecInternalComponent. Only a valid identity counts.
+legacy_identity_installed() {
+    security find-identity -v -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"
+}
+
 # The Developer build exists for iterative local work, where an ad-hoc
 # signature is a trap: macOS ties Accessibility and Screen Recording grants to
 # the exact binary hash, so every rebuild orphans them while System Settings
@@ -73,7 +81,7 @@ developer_id_identity() {
 # identity is installed, create the stable local one up front instead of
 # falling through to ad-hoc — setup-signing.sh is free, offline and idempotent.
 if (( DEV )) && [[ -z "$(developer_id_identity)" ]] \
-    && ! security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    && ! legacy_identity_installed; then
     echo "▸ No signing identity installed; creating the stable local one…"
     if ! ./Tools/setup-signing.sh; then
         echo "  ⚠ Tools/setup-signing.sh failed; signing ad-hoc instead." >&2
@@ -135,7 +143,7 @@ finalize_installed_bundle_after_child() {
             --options runtime --timestamp --identifier "$FAN_HELPER_ID" --sign "$devid" "$helper"
         codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
             --entitlements "$ENTITLEMENTS" --sign "$devid" "$bundle"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         [[ -f "$helper" ]] && /usr/bin/codesign --force --strip-disallowed-xattrs \
             --identifier "$FAN_HELPER_ID" --sign "$LEGACY_IDENTITY" "$helper"
         /usr/bin/codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$bundle"
@@ -520,7 +528,7 @@ codesign_app() {
     if [[ -n "$DEVID" ]]; then
         codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
             --entitlements "$ENTITLEMENTS" --sign "$DEVID" "$target"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$target"
     else
         codesign --force --strip-disallowed-xattrs --sign - "$target"
@@ -532,7 +540,7 @@ codesign_fan_helper() {
     if [[ -n "$DEVID" ]]; then
         codesign_with_timestamp_retry --force --strip-disallowed-xattrs --options runtime --timestamp \
             --identifier "$FAN_HELPER_ID" --sign "$DEVID" "$target"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         codesign --force --strip-disallowed-xattrs --identifier "$FAN_HELPER_ID" \
             --sign "$LEGACY_IDENTITY" "$target"
     else
@@ -547,7 +555,7 @@ sign_bundle() {
 
     if [[ -n "$DEVID" ]]; then
         echo "  signing with Developer ID (hardened runtime): $DEVID"
-    elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+    elif legacy_identity_installed; then
         echo "  signing with legacy self-signed identity: $LEGACY_IDENTITY"
     else
         echo "  signing ad-hoc (no identity installed — run Tools/setup-signing.sh)"

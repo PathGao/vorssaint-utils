@@ -21286,6 +21286,22 @@ struct MetricsTests {
         }
         expect(runsSigningSetup,
                "an identity-less Developer build invokes Tools/setup-signing.sh itself")
+
+        // MARK: Signing identity checks only ever count identities that can sign
+        // `security find-identity` without -v lists certificates that cannot
+        // sign, an expired self-signed one included. Matching one of those made
+        // the script prefer an unusable identity over the ad-hoc fallback, and
+        // codesign then failed the whole build with errSecInternalComponent --
+        // on a machine whose only fault was a stale certificate left in the
+        // keychain. The flag is the contract here, so it is what is pinned.
+        let identityQueries = buildScript.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
+            .filter { $0.contains("find-identity") }
+        expect(!identityQueries.isEmpty, "build.sh still asks for a signing identity")
+        let unvalidatedQueries = identityQueries.filter { !$0.contains("-v") }
+        expect(unvalidatedQueries.isEmpty,
+               "every find-identity in build.sh asks for valid identities only, "
+                + "found \(unvalidatedQueries.count) without -v")
         // The setup script must run against the stock /usr/bin/openssl, which
         // is LibreSSL: it rejects OpenSSL 3's -legacy flag outright, and the
         // script once died on exactly that with its stderr discarded. The
