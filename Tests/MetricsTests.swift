@@ -21313,25 +21313,48 @@ struct MetricsTests {
         // setup-signing.sh knows.
         let buildScriptLines = buildScript.components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
+        // The lines of a top-level shell function, closing brace at column 0.
+        let probeBody: ([String], String) -> [String] = { lines, name in
+            guard let start = lines.firstIndex(where: {
+                $0.trimmingCharacters(in: .whitespaces).hasPrefix("\(name)() {")
+            }) else { return [] }
+            let rest = lines[(start + 1)...]
+            guard let end = rest.firstIndex(of: "}") else { return [] }
+            return Array(rest[..<end])
+        }
         // Asserted per script, not over the pair: a union is satisfied by one
         // surviving line in either file, so deleting the lookup out of
-        // setup-signing.sh would pass on build.sh's.
-        for (script, lines) in [("build.sh", buildScriptLines),
-                                ("Tools/setup-signing.sh", signingSetupLines)] {
-            let code = lines.joined(separator: "\n")
-            let identityQueries = lines
+        // setup-signing.sh would pass on build.sh's. And per probe, not over
+        // the whole script: setup-signing.sh unlocks the keychain a second
+        // time where it creates it, so a file-wide search answers yes with the
+        // probe's own unlock deleted — and then the first signing build after
+        // a reboot is back on the SecurityAgent dialog this branch removes.
+        for (script, lines, probeName) in
+            [("build.sh", buildScriptLines, "legacy_identity_installed"),
+             ("Tools/setup-signing.sh", signingSetupLines, "identity_can_sign")] {
+            let probe = probeBody(lines, probeName)
+            expect(!probe.isEmpty, "\(script) still defines \(probeName)()")
+            let probeCode = probe.joined(separator: "\n")
+            let identityQueries = probe
                 .filter { $0.contains("find-identity") }
                 .filter { $0.contains("$LEGACY_IDENTITY") || $0.contains("$IDENTITY") }
             expect(!identityQueries.isEmpty,
-                   "\(script) still looks the stable identity up by name")
-            let trustQueries = identityQueries.filter { $0.contains("-v") }
+                   "\(script)'s \(probeName) still looks the stable identity up by name")
+            // This one stays file-wide on purpose: it forbids a spelling
+            // rather than requiring a line, and -v against this identity is
+            // wrong wherever it is written.
+            let trustQueries = lines
+                .filter { $0.contains("find-identity") }
+                .filter { $0.contains("$LEGACY_IDENTITY") || $0.contains("$IDENTITY") }
+                .filter { $0.contains("-v") }
             expect(trustQueries.isEmpty,
                    "\(script) looks the self-signed identity up without asking find-identity "
                     + "for valid identities only, found \(trustQueries.count) that do")
-            expect(code.contains("unlock-keychain -p"),
-                   "\(script) unlocks the dedicated signing keychain itself")
-            expect(code.contains("codesign --force --sign"),
-                   "\(script) asks codesign whether the identity can sign before relying on it")
+            expect(probeCode.contains("unlock-keychain -p"),
+                   "\(script)'s \(probeName) unlocks the dedicated signing keychain itself")
+            expect(probeCode.contains("codesign --force --sign"),
+                   "\(script)'s \(probeName) asks codesign whether the identity can sign "
+                    + "before relying on it")
             // zsh keeps `status` as a second name for $?, and it is read-only:
             // `local status=1` aborts the script on the first call to the
             // function that declares it, so the probe never runs at all.
@@ -21346,25 +21369,29 @@ struct MetricsTests {
                     + "the script, found \(readOnlyLocals.count)")
         }
 
-        // Both unlocks pass a password literal of their own. If they drift the
-        // probe either fails its unlock and the build signs ad-hoc in silence,
-        // or reaches codesign against a locked keychain and raises the
-        // SecurityAgent dialog these unlocks exist to avoid. Pin the values
-        // against each other, not just the presence of the call.
-        let keychainPassword: (String, [String]) -> String? = { name, lines in
+        // Each unlock names the keychain and its password with a literal of
+        // its own. Password drift fails the unlock and the build signs ad-hoc
+        // in silence; path drift is worse, because `[[ ! -f "$LEGACY_KEYCHAIN" ]]`
+        // then goes true and the unlock is skipped without a word, leaving
+        // codesign to meet a locked keychain and raise the SecurityAgent
+        // dialog. Pin both values against each other, not just the call.
+        let shellLiteral: (String, [String]) -> String? = { name, lines in
             lines.compactMap { line -> String? in
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 guard trimmed.hasPrefix("\(name)=\"") else { return nil }
                 return String(trimmed.dropFirst(name.count + 2).prefix { $0 != "\"" })
             }.first
         }
-        let buildKeychainPassword = keychainPassword("LEGACY_KEYCHAIN_PASSWORD", buildScriptLines)
-        let setupKeychainPassword = keychainPassword("KCPASS", signingSetupLines)
-        expect(buildKeychainPassword?.isEmpty == false
-                && buildKeychainPassword == setupKeychainPassword,
-               "build.sh and Tools/setup-signing.sh unlock the signing keychain with the same "
-                + "password, found \(buildKeychainPassword ?? "none") "
-                + "and \(setupKeychainPassword ?? "none")")
+        for (what, inBuildScript, inSetupScript) in
+            [("password", "LEGACY_KEYCHAIN_PASSWORD", "KCPASS"),
+             ("path", "LEGACY_KEYCHAIN", "KC")] {
+            let fromBuild = shellLiteral(inBuildScript, buildScriptLines)
+            let fromSetup = shellLiteral(inSetupScript, signingSetupLines)
+            expect(fromBuild?.isEmpty == false && fromBuild == fromSetup,
+                   "build.sh's \(inBuildScript) and Tools/setup-signing.sh's \(inSetupScript) "
+                    + "are the same signing keychain \(what), found \(fromBuild ?? "none") "
+                    + "and \(fromSetup ?? "none")")
+        }
 
         // The signing probe is asked once and cached. Running the repair is the
         // only thing that changes its answer, so the cache has to be dropped
