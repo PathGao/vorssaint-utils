@@ -39,12 +39,14 @@ identity_can_sign() {
     if [[ -f "$KC" ]] && ! security unlock-keychain -p "$KCPASS" "$KC" 2>/dev/null; then
         return 1
     fi
-    local probe status=1
+    # Not `status`: zsh keeps that as a second name for $?, and it is read-only,
+    # so declaring it local aborts the script on the first call.
+    local probe signed=1
     probe="$(mktemp -d)"
     cp /bin/echo "$probe/probe"
-    codesign --force --sign "$IDENTITY" "$probe/probe" >/dev/null 2>&1 && status=0
+    codesign --force --sign "$IDENTITY" "$probe/probe" >/dev/null 2>&1 && signed=0
     rm -rf "$probe"
-    return $status
+    return $signed
 }
 
 if identity_can_sign; then

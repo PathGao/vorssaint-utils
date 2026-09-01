@@ -125,6 +125,10 @@ if (( DEV )) && [[ -z "$(developer_id_identity)" ]] \
         echo "    After fixing the identity, clear the stale grant once with:" >&2
         echo "      tccutil reset Accessibility $APP_BUNDLE_ID" >&2
     fi
+    # The guard above cached "no". The repair is the one thing in this script
+    # that changes that answer, so forget it here or every later call site reads
+    # the stale verdict and signs the build ad-hoc anyway.
+    LEGACY_IDENTITY_USABLE=""
 fi
 
 codesign_with_timestamp_retry() {

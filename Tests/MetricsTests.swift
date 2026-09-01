@@ -21326,6 +21326,33 @@ struct MetricsTests {
                    "\(script) unlocks the dedicated signing keychain itself")
             expect(code.contains("codesign --force --sign"),
                    "\(script) asks codesign whether the identity can sign before relying on it")
+            // zsh keeps `status` as a second name for $?, and it is read-only:
+            // `local status=1` aborts the script on the first call to the
+            // function that declares it, so the probe never runs at all.
+            let readOnlyLocals = (script == "build.sh" ? buildScriptLines : signingSetupLines)
+                .filter { line in
+                    line.contains("local ")
+                        && line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+                            .contains { $0 == "status" || $0.hasPrefix("status=") }
+                }
+            expect(readOnlyLocals.isEmpty,
+                   "\(script) declares zsh's read-only `status` as a local, which aborts "
+                    + "the script, found \(readOnlyLocals.count)")
+        }
+
+        // The signing probe is asked once and cached. Running the repair is the
+        // only thing that changes its answer, so the cache has to be dropped
+        // there: otherwise --dev creates a working identity and then signs the
+        // build ad-hoc off the "no" recorded a moment earlier.
+        if let repair = buildScriptLines.firstIndex(where: { $0.contains("Tools/setup-signing.sh") }) {
+            let afterRepair = Array(buildScriptLines[(repair + 1)...])
+            let nextRead = afterRepair.firstIndex { $0.contains("legacy_identity_installed") }
+                ?? afterRepair.count
+            expect(afterRepair[..<nextRead].contains { $0.contains("LEGACY_IDENTITY_USABLE=\"\"") },
+                   "build.sh clears the cached identity verdict after running the repair, "
+                    + "before anything reads it again")
+        } else {
+            expect(false, "build.sh still runs Tools/setup-signing.sh when no identity is usable")
         }
 
         // The setup script must run against the stock /usr/bin/openssl, which
