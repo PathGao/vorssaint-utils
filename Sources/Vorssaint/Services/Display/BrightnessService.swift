@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Vorssaint
 
 import AppKit
+import ApplicationServices
 import IOKit.graphics
 import ObjectiveC.runtime
 import os
@@ -41,12 +42,13 @@ struct BrightnessDisplay: Identifiable, Equatable {
 /// buttons use, addressed per display through its I2C service.
 ///
 /// While display control is off there are no display observers, services or
-/// I2C traffic. Keyboard light state is read only when Quick toggles opens.
-/// While display control is on, the standing resources are one screen change
-/// observer and a pair of wake observers, and no timers; everything else
-/// happens when a slider moves, a panel opens or the Mac wakes. All I2C work
-/// runs on a serial queue with the pacing displays need, and slider drags
-/// coalesce to the newest value per display.
+/// I2C traffic; the one standing subscription is the session-activity handler
+/// that hands the key taps back on a user switch. Keyboard light state is read
+/// only when Quick toggles opens. While display control is on, the standing
+/// resources add one screen change observer and a pair of wake observers, and
+/// no timers; everything else happens when a slider moves, a panel opens or
+/// the Mac wakes. All I2C work runs on a serial queue with the pacing displays
+/// need, and slider drags coalesce to the newest value per display.
 final class BrightnessService: ObservableObject {
     static let shared = BrightnessService()
 
@@ -95,8 +97,9 @@ final class BrightnessService: ObservableObject {
     /// protocol its own buttons use.
     private static let wakeSettleDelay: TimeInterval = 3
     /// Media-key tap, alive while pointer routing or the optional overlay is
-    /// on and Accessibility is granted. Its mask covers system-defined events
-    /// only, so ordinary typing never touches it.
+    /// on, Accessibility is granted and this login session is the one on
+    /// screen. Its mask covers system-defined events only, so ordinary typing
+    /// never touches it.
     private var keyTap: CFMachPort?
     private var keyTapSource: CFRunLoopSource?
     /// Second tap for keyboards that send brightness as an ordinary key
@@ -116,6 +119,11 @@ final class BrightnessService: ObservableObject {
     /// Whether the app's own overlay stands in for the system's, sampled with
     /// the tap so the tap thread never reads published state.
     private var overlayReplacesNativeOSD = false
+    /// `SessionActivitySupport.tapShouldRun`'s answer for the keystroke tap,
+    /// sampled for the same reason: the timeout re-arm runs on the tap thread,
+    /// and a tap put back into a session that is no longer on screen stalls
+    /// the account that is (issue #1075).
+    private var functionKeyTapShouldRun = false
     /// Codes whose press this app consumed, so the matching release is
     /// consumed as well and the system never sees half a key.
     private var swallowedKeyCodes = Set<Int>()
@@ -217,7 +225,16 @@ final class BrightnessService: ObservableObject {
     /// panel must not put the same slow monitor probe behind itself again.
     private var rebuildingTopology: BrightnessSupport.DisplayTopology?
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain, so the window server waits out the tap timeout on
+        // every event the account on screen sends (issue #1075). Hand both key
+        // taps back on resign and build them from preferences again on the
+        // way in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncKeyTap()
+        }
+    }
 
     func setKeyboardLightEnabled(_ enabled: Bool) {
         guard keyboardLightEnabled != nil, let keyboardLightBridge else { return }
@@ -434,10 +451,7 @@ final class BrightnessService: ObservableObject {
                 }
                 // A software-dimmed screen should return with its clean gamma
                 // before the saved dim level is reapplied by the rebuild.
-                if let baseline = self.gammaBaselines[display.id] {
-                    CGSetDisplayTransferByTable(display.id, baseline.count, baseline.red,
-                                                baseline.green, baseline.blue)
-                }
+                self.writeGammaBaseline(display.id, dimmedBy: nil)
             }
 
             // The gamma curve above is work-queue state; the reconfiguration
@@ -582,13 +596,11 @@ final class BrightnessService: ObservableObject {
         }
     }
 
-    /// Writes every remembered curve back, skipping any display number that
-    /// now belongs to a different monitor. Runs on the work queue.
+    /// Writes every remembered curve back, each one only to the monitor it was
+    /// read from (see `writeGammaBaseline`). Runs on the work queue.
     private func restoreAllGamma() {
-        for (id, baseline) in gammaBaselines
-        where Self.displayFingerprint(id) == baseline.fingerprint {
-            CGSetDisplayTransferByTable(id, baseline.count, baseline.red,
-                                        baseline.green, baseline.blue)
+        for id in gammaBaselines.keys {
+            guard writeGammaBaseline(id, dimmedBy: nil) else { continue }
             Self.log.log("restored gamma baseline for display \(id)")
         }
         gammaBaselines = [:]
@@ -645,9 +657,11 @@ final class BrightnessService: ObservableObject {
         let wantsBrightnessOSD = defaults.bool(
             forKey: DefaultsKey.brightnessOSDEnabled
         ) && brightnessOSDSupported
-        let wanted = running
-            && (wantsKeyRouting || wantsBrightnessOSD)
-            && Permissions.shared.accessibility
+        let wanted = SessionActivitySupport.tapShouldRun(
+            featureWanted: running && (wantsKeyRouting || wantsBrightnessOSD),
+            accessibilityGranted: AXIsProcessTrusted(),
+            sessionIsActive: SessionActivity.shared.isActive)
+        keyThreadLock.withLock { functionKeyTapShouldRun = wanted && wantsKeyRouting }
         if wanted { installKeyTap() } else { removeKeyTap() }
         // The plain key press path only earns its keystroke tap when the
         // pointer actually decides the target.
@@ -803,7 +817,13 @@ final class BrightnessService: ObservableObject {
     /// server and the route from behind the state lock.
     private func routeFunctionKey(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            let tap = keyThreadLock.withLock { shouldStopFunctionKeyThread ? nil : functionKeyTap }
+            // The gate the preference sync applied, asked again: a tap
+            // re-armed into a session that is no longer on screen stalls the
+            // one that is (issue #1075). Its answer was sampled with the tap,
+            // so nothing here reaches for main-thread state.
+            let tap = keyThreadLock.withLock {
+                functionKeyTapShouldRun && !shouldStopFunctionKeyThread ? functionKeyTap : nil
+            }
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
@@ -968,7 +988,12 @@ final class BrightnessService: ObservableObject {
     /// Both halves are swallowed so the system never performs the same step.
     private func handleKeyEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let keyTap { CGEvent.tapEnable(tap: keyTap, enable: true) }
+            // Re-arming a tap handed back for a user switch puts the stall
+            // straight back on the account on screen, so the re-arm asks the
+            // same question the preference sync asks (issue #1075).
+            if SessionActivity.shared.isActive, let keyTap {
+                CGEvent.tapEnable(tap: keyTap, enable: true)
+            }
             return Unmanaged.passUnretained(event)
         }
         guard type.rawValue == CleaningSystemKeyEvent.systemDefinedEventTypeRawValue,
@@ -1590,21 +1615,35 @@ final class BrightnessService: ObservableObject {
         Self.log.log("captured gamma baseline for display \(id) [\(fingerprint, privacy: .public)], peak \(red[count - 1])")
     }
 
+    /// The one place a gamma curve is written. The remembered baseline reaches
+    /// the display only while the monitor behind that number is still the one
+    /// it was read from: numbers are handed out again after a reconnection and
+    /// the curves are deliberately kept across the gap, so a write that made
+    /// its own decision about the check would be free to put one monitor's
+    /// curve on another. A nil `factor` puts the untouched curve back. Work
+    /// queue only.
     @discardableResult
-    private func applySoftwareDim(_ id: CGDirectDisplayID, value: Double) -> Bool {
+    private func writeGammaBaseline(_ id: CGDirectDisplayID, dimmedBy factor: CGGammaValue?) -> Bool {
         guard let baseline = gammaBaselines[id],
               baseline.fingerprint == Self.displayFingerprint(id) else { return false }
+        let channel = { (values: [CGGammaValue]) -> [CGGammaValue] in
+            guard let factor else { return values }
+            return BrightnessSupport.scaledGammaTable(values, factor: factor)
+        }
+        return CGSetDisplayTransferByTable(id, baseline.count,
+                                           channel(baseline.red), channel(baseline.green),
+                                           channel(baseline.blue)) == .success
+    }
+
+    @discardableResult
+    private func applySoftwareDim(_ id: CGDirectDisplayID, value: Double) -> Bool {
         if value >= 0.999 {
-            let restored = CGSetDisplayTransferByTable(id, baseline.count, baseline.red,
-                                                       baseline.green, baseline.blue) == .success
+            let restored = writeGammaBaseline(id, dimmedBy: nil)
             if restored { dimmedDisplays.remove(id) }
             return restored
         }
-        let factor = BrightnessSupport.softwareDimFactor(for: value)
-        let red = BrightnessSupport.scaledGammaTable(baseline.red, factor: factor)
-        let green = BrightnessSupport.scaledGammaTable(baseline.green, factor: factor)
-        let blue = BrightnessSupport.scaledGammaTable(baseline.blue, factor: factor)
-        let applied = CGSetDisplayTransferByTable(id, baseline.count, red, green, blue) == .success
+        let applied = writeGammaBaseline(
+            id, dimmedBy: BrightnessSupport.softwareDimFactor(for: value))
         if applied { dimmedDisplays.insert(id) }
         return applied
     }

@@ -14142,6 +14142,19 @@ struct MetricsTests {
         expect(!brightnessWorkQueueHalf.isEmpty && !brightnessWorkQueueCode.contains("NSScreen"),
                "the brightness work queue resolves display names without touching NSScreen")
 
+        // A remembered gamma curve belongs to the monitor it was read from,
+        // never to whatever inherits its display number after a reconnection,
+        // and the curves are deliberately kept across that gap. The check
+        // cannot live at each write site: four of them existed and one had
+        // been left without it. Funnelling every write through the one helper
+        // that checks is what the count below holds in place.
+        let brightnessCode = brightnessSource
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        expect(brightnessCode.components(separatedBy: "CGSetDisplayTransferByTable").count - 1 == 1,
+               "every gamma write goes through the one helper that checks the display fingerprint")
+
         let ddcWrite = BrightnessSupport.writePacket(code: 0x10, value: 0x1234)
         let expectedDDCWrite: [UInt8] = [0x84, 0x03, 0x10, 0x12, 0x34, 0x8E]
         expect(ddcWrite == expectedDDCWrite,
