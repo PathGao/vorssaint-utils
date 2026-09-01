@@ -21294,30 +21294,39 @@ struct MetricsTests {
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
         let signingSetupCode = signingSetupLines.joined(separator: "\n")
 
-        // MARK: Signing identity checks only ever count identities that can sign
-        // `security find-identity` without -v lists certificates that cannot
-        // sign, an expired self-signed one included. Matching one of those made
-        // build.sh prefer an unusable identity over the ad-hoc fallback, and
-        // codesign then failed the whole build with errSecInternalComponent --
-        // on a machine whose only fault was a stale certificate left in the
-        // keychain. setup-signing.sh asks the same question twice and both
-        // answers matter: the front-door check decides whether the repair runs
-        // at all, and the post-import read-back decides whether the new
-        // identity counts as installed. Either one reading a dead certificate
-        // as usable puts the build back on the failing path. The flag is the
-        // contract here, so it is what is pinned, in both scripts.
-        let buildScriptQueries = buildScript.components(separatedBy: "\n")
+        // MARK: The stable identity is judged by whether codesign can sign with it
+        // Neither spelling of `find-identity` answers that. Without -v the
+        // listing includes certificates that cannot sign, an expired one
+        // included, which failed a build with errSecInternalComponent after a
+        // clean compile. With -v it answers whether the certificate is trusted,
+        // and a self-signed one never is: on a machine where codesign signs
+        // with that identity happily, -v reports zero valid identities. Pinning
+        // that flag would send every build to the ad-hoc fallback this identity
+        // exists to prevent -- releases included, since CI imports the same
+        // self-signed certificate -- and would have setup-signing.sh delete and
+        // recreate a working identity on every run. So both scripts ask
+        // codesign, and unlock the dedicated keychain before they do: it is not
+        // the login keychain, so it is locked again after every login, and a
+        // locked one turns the probe, and then the build, into a GUI prompt for
+        // a password only setup-signing.sh knows.
+        let buildScriptLines = buildScript.components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
+        let identityQueries = (buildScriptLines + signingSetupLines)
             .filter { $0.contains("find-identity") }
-        let setupScriptQueries = signingSetupLines.filter { $0.contains("find-identity") }
-        expect(!buildScriptQueries.isEmpty, "build.sh still asks for a signing identity")
-        expect(!setupScriptQueries.isEmpty,
-               "setup-signing.sh still asks for a signing identity")
-        let identityQueries = buildScriptQueries + setupScriptQueries
-        let unvalidatedQueries = identityQueries.filter { !$0.contains("-v") }
-        expect(unvalidatedQueries.isEmpty,
-               "every find-identity in build.sh and Tools/setup-signing.sh asks for "
-                + "valid identities only, found \(unvalidatedQueries.count) without -v")
+            .filter { $0.contains("$LEGACY_IDENTITY") || $0.contains("$IDENTITY") }
+        expect(!identityQueries.isEmpty,
+               "both scripts still look the stable identity up by name")
+        let trustQueries = identityQueries.filter { $0.contains("-v") }
+        expect(trustQueries.isEmpty,
+               "no lookup of the self-signed identity asks find-identity for valid "
+                + "identities only, found \(trustQueries.count) that do")
+        for (script, code) in [("build.sh", buildScriptLines.joined(separator: "\n")),
+                               ("Tools/setup-signing.sh", signingSetupCode)] {
+            expect(code.contains("unlock-keychain -p"),
+                   "\(script) unlocks the dedicated signing keychain itself")
+            expect(code.contains("codesign --force --sign"),
+                   "\(script) asks codesign whether the identity can sign before relying on it")
+        }
 
         // The setup script must run against the stock /usr/bin/openssl, which
         // is LibreSSL: it rejects OpenSSL 3's -legacy flag outright, and the

@@ -25,11 +25,29 @@ IDENTITY="Vorssaint Utils Signing"
 KC="$HOME/Library/Keychains/vorssaint-signing.keychain-db"
 KCPASS="vorssaint-signing"
 
-# -v is what makes this idempotent rather than merely quiet: without it the
-# search also lists certificates that cannot sign, so a stale one left in the
-# keychain reports "already installed" and the repair build.sh just asked for
-# never happens — the build then signs ad-hoc and loses its grants anyway.
-if security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
+# What makes this idempotent rather than merely quiet: whether codesign can sign
+# with the identity, not whether one is listed. The unvalidated listing includes
+# certificates that cannot sign, so a stale one reports "already installed" and
+# the repair build.sh just asked for never happens. `find-identity -v` is not
+# the fix — it asks whether the certificate is trusted, which a self-signed one
+# never is, so it would delete and recreate a perfectly good identity on every
+# single build. codesign is the only thing that answers the real question.
+identity_can_sign() {
+    security find-identity -p codesigning 2>/dev/null | grep -q "$IDENTITY" || return 1
+    # Unlock first: the keychain is locked again after every login, and a locked
+    # one makes codesign raise a GUI password prompt instead of answering.
+    if [[ -f "$KC" ]] && ! security unlock-keychain -p "$KCPASS" "$KC" 2>/dev/null; then
+        return 1
+    fi
+    local probe status=1
+    probe="$(mktemp -d)"
+    cp /bin/echo "$probe/probe"
+    codesign --force --sign "$IDENTITY" "$probe/probe" >/dev/null 2>&1 && status=0
+    rm -rf "$probe"
+    return $status
+}
+
+if identity_can_sign; then
     echo "✓ Signing identity already installed."
     exit 0
 fi
@@ -65,8 +83,8 @@ security list-keychains -d user -s "$KC" ${=EXISTING}
 # Import succeeding is not evidence codesign can see it: read it back the same
 # way build.sh looks it up, so a broken search list fails here and not as a
 # silent ad-hoc fallback three builds later.
-security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY" || {
-    echo "✗ Identity imported but codesign cannot find it; keychain search list may be off." >&2
+identity_can_sign || {
+    echo "✗ Identity imported but codesign cannot sign with it; keychain search list may be off." >&2
     exit 1
 }
 echo "✓ Created signing identity '$IDENTITY'. Future ./build.sh runs use it automatically."

@@ -10,14 +10,16 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# The icon catalog and the bundle are staged in temp dirs; sweep both however
-# the script ends.
+# The icon catalog, the bundle and the signing probe are staged in temp dirs;
+# sweep all three however the script ends.
 ICON_TMP=""
 STAGE_TMP=""
+PROBE_TMP=""
 
 cleanup() {
     [[ -n "$ICON_TMP" ]] && rm -rf "$ICON_TMP"
     [[ -n "$STAGE_TMP" ]] && rm -rf "$STAGE_TMP"
+    [[ -n "$PROBE_TMP" ]] && rm -rf "$PROBE_TMP"
     return 0
 }
 trap cleanup EXIT
@@ -58,6 +60,10 @@ FAN_HELPER_ID="$APP_BUNDLE_ID.fan-control"
 TARGET="arm64-apple-macosx14.0"
 ENTITLEMENTS="Resources/Vorssaint.entitlements"
 LEGACY_IDENTITY="Vorssaint Utils Signing"
+# Tools/setup-signing.sh keeps that identity in a keychain of its own, with a
+# password that lives in that script and nowhere else.
+LEGACY_KEYCHAIN="$HOME/Library/Keychains/vorssaint-signing.keychain-db"
+LEGACY_KEYCHAIN_PASSWORD="vorssaint-signing"
 
 developer_id_identity() {
     security find-identity -v -p codesigning 2>/dev/null \
@@ -66,12 +72,41 @@ developer_id_identity() {
         | sed -E 's/.*"(.*)".*/\1/' || true
 }
 
-# `find-identity` without -v lists identities that cannot sign: a self-signed
-# certificate that has expired still appears. Matching one of those picked an
-# unusable identity over the ad-hoc fallback, and codesign then failed the
-# build outright with errSecInternalComponent. Only a valid identity counts.
+# Whether codesign can sign with the stable self-signed identity, asked once
+# and reused. Neither spelling of `find-identity` answers that question: without
+# -v the listing includes certificates that cannot sign, which is how an expired
+# one failed a build with errSecInternalComponent; with -v it answers "is this
+# certificate trusted", and a self-signed one never is, so it reports zero valid
+# identities on a machine where codesign signs with that identity happily.
+# Deciding by either would send builds to the ad-hoc fallback this identity
+# exists to avoid — releases included, since CI imports the same self-signed
+# certificate. Ask codesign itself instead.
+#
+# The keychain is unlocked first: it is not the login keychain, so it is locked
+# again after every login and nothing else opens it. That is what made the first
+# signing build after a reboot stop on a GUI prompt for a keychain password only
+# setup-signing.sh knows. A keychain that will not open counts as no identity,
+# rather than letting the probe raise that same dialog — for --dev that runs
+# setup-signing.sh, which rebuilds the keychain from scratch.
+LEGACY_IDENTITY_USABLE=""
 legacy_identity_installed() {
-    security find-identity -v -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"
+    if [[ -z "$LEGACY_IDENTITY_USABLE" ]]; then
+        LEGACY_IDENTITY_USABLE=no
+        if security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY" \
+            && { [[ ! -f "$LEGACY_KEYCHAIN" ]] \
+                || security unlock-keychain -p "$LEGACY_KEYCHAIN_PASSWORD" \
+                    "$LEGACY_KEYCHAIN" 2>/dev/null; }; then
+            PROBE_TMP="$(mktemp -d)"
+            cp /bin/echo "$PROBE_TMP/probe"
+            if /usr/bin/codesign --force --sign "$LEGACY_IDENTITY" \
+                "$PROBE_TMP/probe" >/dev/null 2>&1; then
+                LEGACY_IDENTITY_USABLE=yes
+            fi
+            rm -rf "$PROBE_TMP"
+            PROBE_TMP=""
+        fi
+    fi
+    [[ "$LEGACY_IDENTITY_USABLE" == yes ]]
 }
 
 # The Developer build exists for iterative local work, where an ad-hoc
