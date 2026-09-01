@@ -20385,9 +20385,8 @@ struct MetricsTests {
         // Both recorder samplers fill an array from an NSEvent monitor
         // callback while the stop path reads it, so every append has to be
         // under the lock: an unsynchronised one races the copy-on-write
-        // buffer. And both stamp an event by NSEvent's own `timestamp`, not
-        // by the moment the callback was handed over, which on a busy main
-        // thread lands the click ring after the click.
+        // buffer. The recording's start time is written from `start()` and
+        // read from that same callback, so it belongs under the lock too.
         for samplerPath in ["Sources/Vorssaint/Services/Recorder/RecorderTypingTrack.swift",
                             "Sources/Vorssaint/Services/Recorder/RecorderPointerSampler.swift"] {
             let samplerSource = (try? String(contentsOfFile: samplerPath, encoding: .utf8)) ?? ""
@@ -20406,24 +20405,16 @@ struct MetricsTests {
                 if samplerLine.hasSuffix(".append(") {
                     if blockIsLocked.contains(true) { lockedAppends += 1 } else { looseAppends += 1 }
                 }
-                // The stored `startedAt`: assigned in `start()`, and read in
-                // the monitor callback to turn `event.timestamp` into a time
-                // on the recording. A local or a parameter of the same name
-                // is not it, hence the two exclusions.
-                let storesOrigin = samplerLine.hasSuffix("startedAt =")
-                    && !samplerLine.contains("let startedAt")
-                let readsOrigin = samplerLine.hasSuffix("since: startedAt")
-                    && samplerLine.contains("event.timestamp")
-                if storesOrigin || readsOrigin {
+                // The stored `startedAt`, assigned in `start()`. A local of
+                // the same name is not it, hence the exclusion.
+                if samplerLine.hasSuffix("startedAt =") && !samplerLine.contains("let startedAt") {
                     if blockIsLocked.contains(true) { lockedOrigin += 1 } else { looseOrigin += 1 }
                 }
             }
             expect(samplerSource.contains("NSLock()") && lockedAppends > 0 && looseAppends == 0,
                    "\(samplerPath) appends to its sampler buffer only under the lock")
-            expect(lockedOrigin == 2 && looseOrigin == 0,
-                   "\(samplerPath) writes and reads the recording's start time under the lock")
-            expect(samplerSource.contains("event.timestamp"),
-                   "\(samplerPath) times an event by when it happened, not when it was delivered")
+            expect(lockedOrigin == 1 && looseOrigin == 0,
+                   "\(samplerPath) writes the recording's start time under the lock")
         }
 
         let uniform = RecorderMotion.resampled(

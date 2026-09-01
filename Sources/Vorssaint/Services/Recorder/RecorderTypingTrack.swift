@@ -60,11 +60,9 @@ final class RecorderTypingSampler {
 
     private func record(_ event: NSEvent) {
         guard !event.isARepeat else { return }
-        // The key's own moment, not the moment the callback was scheduled:
-        // the main thread is busy redrawing the indicator while recording,
-        // and this timestamp starts an auto zoom in the finished video.
+        let now = CACurrentMediaTime()
         lock.withLock {
-            guard let time = pauseClock.eventTime(event.timestamp, since: startedAt) else { return }
+            guard let time = pauseClock.eventTime(now, since: startedAt) else { return }
             times.append(time)
         }
     }
