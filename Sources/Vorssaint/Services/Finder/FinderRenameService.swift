@@ -107,7 +107,7 @@ final class FinderRenameService {
 
             let shouldStop = lifecycleLock.withLock { shouldStopTapThread }
             guard !shouldStop else {
-                if clearEventTapThread() { installTap() }
+                if clearEventTapThread() { restartTapOnMain() }
                 return
             }
 
@@ -144,7 +144,7 @@ final class FinderRenameService {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFRunLoopRemoveSource(runLoop, source, .commonModes)
             CFMachPortInvalidate(tap)
-            if clearEventTapThread() { installTap() }
+            if clearEventTapThread() { restartTapOnMain() }
         }
     }
 
@@ -158,6 +158,15 @@ final class FinderRenameService {
             pendingStartAfterStop = false
             return shouldRestart
         }
+    }
+
+    /// Runs on the tap thread once its run loop has stopped. A restart that
+    /// `installTap` left pending goes back through `syncWithPreferences`
+    /// instead of straight to `installTap`: the session flag is written on the
+    /// main thread, and a tap rebuilt into a session that is no longer on
+    /// screen stalls the account that is (issue #1075).
+    private func restartTapOnMain() {
+        DispatchQueue.main.async { [weak self] in self?.syncWithPreferences() }
     }
 
     /// Puts the tap back after the window server disabled it, unless a stop is
