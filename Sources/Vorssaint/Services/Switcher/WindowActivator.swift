@@ -63,20 +63,8 @@ enum WindowActivator {
             }
             return
         }
-        // Every Accessibility step of this pass asks the same app for the same
-        // window, and each ask copies `kAXWindows` and walks it. Resolve the
-        // element once here and hand it down; `liveWindow` gives each step back
-        // a working element if the app rebuilt its windows in between, which
-        // `prepareWindowForActivation` can provoke by deminiaturizing. Work
-        // scheduled with `asyncAfter` is handed nothing and resolves for itself.
-        let axTargetWindow: AXUIElement? = {
-            guard Permissions.shared.accessibility else { return nil }
-            let axApp = AXUIElementCreateApplication(windowOwnerPID)
-            AXUIElementSetMessagingTimeout(axApp, 0.35)
-            return axElement(windowID: windowID, in: axApp)
-        }()
         let targetStartedMinimized = item.isMinimized
-            || windowIsMinimized(windowID: windowID, pid: windowOwnerPID, axWindow: axTargetWindow)
+            || windowIsMinimized(windowID: windowID, pid: windowOwnerPID)
         // A window parked on a Space that is not visible cannot be reached by
         // the Accessibility passes below; the hop travels there first and then
         // runs the same focus pass on arrival (issue #339). A minimized window
@@ -95,19 +83,14 @@ enum WindowActivator {
                                     sourcePID: sourcePID,
                                     sourceWindowID: sourceWindowID,
                                     sourceWindowOwnerPID: sourceWindowOwnerPID,
-                                    activationPlan: activationPlan,
-                                    axWindow: axTargetWindow)
-        prepareWindowForActivation(windowID: windowID,
-                                   pid: windowOwnerPID,
-                                   axWindow: axTargetWindow)
+                                    activationPlan: activationPlan)
+        prepareWindowForActivation(windowID: windowID, pid: windowOwnerPID)
         if sourceWasFullscreen || item.isFullscreen {
             let retryState = SwitcherWindowFocusRetryState(
                 targetStartedMinimized: targetStartedMinimized
             )
             retryState.observe(
-                targetMinimizedState: windowMinimizedState(windowID: windowID,
-                                                           pid: windowOwnerPID,
-                                                           axWindow: axTargetWindow)
+                targetMinimizedState: windowMinimizedState(windowID: windowID, pid: windowOwnerPID)
             )
             activateApp(app, allWindows: activationPlan.activateAllWindows)
             guard retry else {
@@ -151,25 +134,21 @@ enum WindowActivator {
         activateApp(app, allWindows: activationPlan.activateAllWindows)
         focusWindow(windowID: windowID,
                     pid: windowOwnerPID,
-                    makeAppFrontmost: activationPlan.makeAppFrontmostAfterActivation,
-                    axWindow: axTargetWindow)
+                    makeAppFrontmost: activationPlan.makeAppFrontmostAfterActivation)
         stageSourceBehindTargetIfNeeded(targetWindowID: windowID,
                                         targetPID: item.pid,
                                         targetWindowOwnerPID: windowOwnerPID,
                                         sourcePID: sourcePID,
                                         sourceWindowID: sourceWindowID,
                                         sourceWindowOwnerPID: sourceWindowOwnerPID,
-                                        activationPlan: activationPlan,
-                                        targetAXWindow: axTargetWindow)
+                                        activationPlan: activationPlan)
 
         guard retry else { return }
         let retryState = SwitcherWindowFocusRetryState(
             targetStartedMinimized: targetStartedMinimized
         )
         retryState.observe(
-            targetMinimizedState: windowMinimizedState(windowID: windowID,
-                                                       pid: windowOwnerPID,
-                                                       axWindow: axTargetWindow)
+            targetMinimizedState: windowMinimizedState(windowID: windowID, pid: windowOwnerPID)
         )
         scheduleFocusRetries(windowID: windowID,
                               targetPID: item.pid,
@@ -206,24 +185,17 @@ enum WindowActivator {
         return AXWindowResolver.windowID(for: value as! AXUIElement)
     }
 
-    static func windowIsMinimized(windowID: CGWindowID,
-                                  pid: pid_t,
-                                  axWindow: AXUIElement? = nil) -> Bool {
-        windowMinimizedState(windowID: windowID, pid: pid, axWindow: axWindow) == true
+    static func windowIsMinimized(windowID: CGWindowID, pid: pid_t) -> Bool {
+        windowMinimizedState(windowID: windowID, pid: pid) == true
     }
 
     /// Three-state minimized check for callers that must distinguish a window
     /// reported as restored from one that could not be resolved or queried.
-    ///
-    /// `axWindow` lets a caller that already resolved this window hand the
-    /// element over instead of paying for another lookup; see `activate`.
-    static func windowMinimizedState(windowID: CGWindowID,
-                                     pid: pid_t,
-                                     axWindow: AXUIElement? = nil) -> Bool? {
+    static func windowMinimizedState(windowID: CGWindowID, pid: pid_t) -> Bool? {
         guard Permissions.shared.accessibility else { return nil }
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        guard let axWindow = liveWindow(axWindow, windowID: windowID, in: axApp) else { return nil }
+        guard let axWindow = axElement(windowID: windowID, in: axApp) else { return nil }
         return minimizedState(of: axWindow)
     }
 
@@ -530,8 +502,7 @@ enum WindowActivator {
                                                     sourcePID: pid_t?,
                                                     sourceWindowID: CGWindowID?,
                                                     sourceWindowOwnerPID: pid_t?,
-                                                    activationPlan: SwitcherActivationPlan,
-                                                    axWindow: AXUIElement? = nil) {
+                                                    activationPlan: SwitcherActivationPlan) {
         guard activationPlan.restoreSourceWhenTargetMinimizes,
               let sourcePID,
               SwitcherSupport.shouldRestoreSourceAfterTargetMinimize(targetPID: targetPID,
@@ -545,8 +516,7 @@ enum WindowActivator {
                                                                targetWindowOwnerPID: targetWindowOwnerPID,
                                                                sourcePID: sourcePID,
                                                                sourceWindowID: sourceWindowID,
-                                                               sourceWindowOwnerPID: sourceWindowOwnerPID,
-                                                               axWindow: axWindow)
+                                                               sourceWindowOwnerPID: sourceWindowOwnerPID)
     }
 
     fileprivate static func cancelPendingMinimizeRestore() {
@@ -633,13 +603,11 @@ enum WindowActivator {
     }
 
     @discardableResult
-    private static func prepareWindowForActivation(windowID: CGWindowID,
-                                                   pid: pid_t,
-                                                   axWindow: AXUIElement? = nil) -> Bool {
+    private static func prepareWindowForActivation(windowID: CGWindowID, pid: pid_t) -> Bool {
         guard Permissions.shared.accessibility else { return false }
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        guard let axWindow = liveWindow(axWindow, windowID: windowID, in: axApp) else { return false }
+        guard let axWindow = axElement(windowID: windowID, in: axApp) else { return false }
 
         var minimized: CFTypeRef?
         if AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minimized) == .success,
@@ -662,8 +630,7 @@ enum WindowActivator {
                                                         sourcePID: pid_t?,
                                                         sourceWindowID: CGWindowID?,
                                                         sourceWindowOwnerPID: pid_t?,
-                                                        activationPlan: SwitcherActivationPlan,
-                                                        targetAXWindow: AXUIElement? = nil) -> Bool {
+                                                        activationPlan: SwitcherActivationPlan) -> Bool {
         guard activationPlan.restoreSourceWhenTargetMinimizes,
               SwitcherSupport.shouldStageSourceBehindTarget(targetPID: targetPID,
                                                             sourcePID: sourcePID,
@@ -677,8 +644,7 @@ enum WindowActivator {
         AXUIElementSetMessagingTimeout(sourceApp, 0.35)
         AXUIElementSetMessagingTimeout(targetApp, 0.35)
         guard let sourceWindow = axElement(windowID: sourceWindowID, in: sourceApp),
-              let targetWindow = liveWindow(targetAXWindow, windowID: targetWindowID, in: targetApp)
-        else { return false }
+              let targetWindow = axElement(windowID: targetWindowID, in: targetApp) else { return false }
 
         var sourceMinimized: CFTypeRef?
         if AXUIElementCopyAttributeValue(sourceWindow, kAXMinimizedAttribute as CFString, &sourceMinimized) == .success,
@@ -696,14 +662,11 @@ enum WindowActivator {
     }
 
     @discardableResult
-    private static func focusWindow(windowID: CGWindowID,
-                                    pid: pid_t,
-                                    makeAppFrontmost: Bool = true,
-                                    axWindow: AXUIElement? = nil) -> Bool {
+    private static func focusWindow(windowID: CGWindowID, pid: pid_t, makeAppFrontmost: Bool = true) -> Bool {
         guard Permissions.shared.accessibility else { return false }
         let axApp = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        guard let axWindow = liveWindow(axWindow, windowID: windowID, in: axApp) else { return false }
+        guard let axWindow = axElement(windowID: windowID, in: axApp) else { return false }
 
         var minimized: CFTypeRef?
         if AXUIElementCopyAttributeValue(axWindow, kAXMinimizedAttribute as CFString, &minimized) == .success,
@@ -745,24 +708,8 @@ enum WindowActivator {
         return nil
     }
 
-    /// Resolves the window, reusing `axWindow` when that handle is still alive.
-    ///
-    /// An element handed down from an earlier step dies the moment the app
-    /// rebuilds its windows, and deminiaturizing is enough to make some apps do
-    /// that. Every write to a dead element then answers `.invalidUIElement`
-    /// into a discarded result, so a pass reports success while nothing moved.
-    /// Resolving from `kAXWindows` at every step is what used to heal that; one
-    /// attribute read keeps the healing without paying for the enumeration.
-    /// `axWindow == nil` is the ordinary case and costs nothing extra.
-    fileprivate static func liveWindow(_ axWindow: AXUIElement?,
-                                       windowID: CGWindowID,
-                                       in axApp: AXUIElement) -> AXUIElement? {
-        var role: CFTypeRef?
-        if let axWindow,
-           AXUIElementCopyAttributeValue(axWindow, kAXRoleAttribute as CFString, &role) == .success {
-            return axWindow
-        }
-        return axElement(windowID: windowID, in: axApp)
+    fileprivate static func axElementForMinimizeRestore(windowID: CGWindowID, in axApp: AXUIElement) -> AXUIElement? {
+        axElement(windowID: windowID, in: axApp)
     }
 
     fileprivate static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
@@ -974,13 +921,12 @@ fileprivate final class SwitcherWindowMinimizeRestore {
           targetWindowOwnerPID: pid_t,
           sourcePID: pid_t,
           sourceWindowID: CGWindowID?,
-          sourceWindowOwnerPID: pid_t?,
-          axWindow: AXUIElement? = nil) {
+          sourceWindowOwnerPID: pid_t?) {
         guard Permissions.shared.accessibility else { return nil }
 
         let axApp = AXUIElementCreateApplication(targetWindowOwnerPID)
         AXUIElementSetMessagingTimeout(axApp, 0.35)
-        guard let axWindow = WindowActivator.liveWindow(axWindow, windowID: windowID, in: axApp) else {
+        guard let axWindow = WindowActivator.axElementForMinimizeRestore(windowID: windowID, in: axApp) else {
             return nil
         }
 
