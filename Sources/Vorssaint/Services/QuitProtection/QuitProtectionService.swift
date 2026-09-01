@@ -498,15 +498,25 @@ final class QuitProtectionService: ObservableObject {
 
     // MARK: Event helpers
 
+    /// Every key press and release on the machine reaches this, so the
+    /// character is read only on the path that still needs it. Where a layout
+    /// answered, matching is a key code comparison and the character is never
+    /// consulted; building it anyway cost an `NSEvent` and a layout
+    /// translation on each of those events.
     private func matchingShortcut(for event: CGEvent) -> QuitProtectionShortcut? {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        let character = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased()
-        return QuitProtectionShortcut.allCases.first {
+        let resolved = QuitProtectionShortcut.allCases.map {
+            ($0, QuitProtectionKeyLayout.commandKeyCode(for: $0))
+        }
+        let character = resolved.contains { $0.1 == nil }
+            ? NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased()
+            : nil
+        return resolved.first {
             QuitProtectionSupport.matchesKey(keyCharacter: character,
                                              keyCode: keyCode,
-                                             commandKeyCode: QuitProtectionKeyLayout.commandKeyCode(for: $0),
-                                             shortcut: $0)
-        }
+                                             commandKeyCode: $0.1,
+                                             shortcut: $0.0)
+        }?.0
     }
 
     private func isSynthetic(_ event: CGEvent) -> Bool {
