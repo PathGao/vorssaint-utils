@@ -21758,12 +21758,18 @@ struct MetricsTests {
             let code = source.components(separatedBy: "\n")
                 .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
                 .joined(separator: "\n")
-            // A listen-only tap hands every event straight back, so a session
-            // that is off screen cannot swallow the keystrokes of the account
-            // on it, and the window server does not wait on the port. That is
-            // the whole reason these are excused, and it is re-derived from the
-            // source on every run: flip one to .defaultTap and it joins the
-            // gated set the same second, with nothing to remember.
+            // Releasing the port is asked of every owner, listen-only ones
+            // included: switching a tap off leaves the process holding it, and
+            // that is what the window server waits on. Nothing about handing
+            // events back changes who owns the port.
+            expect(code.contains("CFMachPortInvalidate"),
+                   "\(tapOwner) hands its tap back rather than only disabling it")
+            // The session gate is a different question, and a listen-only tap
+            // is genuinely excused from it: it returns every event unchanged,
+            // so a session that is off screen cannot swallow the keystrokes of
+            // the account on it. Re-derived from the source on every run --
+            // flip one to .defaultTap and it joins the gated set the same
+            // second, with nothing to remember.
             if code.contains(".listenOnly") && !code.contains(".defaultTap") { continue }
             if knownUngatedTaps[tapOwner] != nil { continue }
             expect(code.contains("SessionActivity.shared.onChange"),
@@ -21778,10 +21784,6 @@ struct MetricsTests {
             expect(code.contains("SessionActivitySupport.tapShouldRun(")
                     || code.contains("AXIsProcessTrusted()"),
                    "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
-            // Switching a tap off leaves the process owning it, which is what
-            // the window server waits on; teardown must invalidate the port.
-            expect(code.contains("CFMachPortInvalidate"),
-                   "\(tapOwner) hands its tap back rather than only disabling it")
         }
         // A line that outlives its file stops naming a real gap and starts
         // excusing whatever moves in under that path.
