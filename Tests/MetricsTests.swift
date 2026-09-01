@@ -21725,6 +21725,22 @@ struct MetricsTests {
                          "\(language.rawValue) quit protection modifier HUD format")
         }
 
+        // MARK: Paste as plain text neither stalls on the clipboard nor fails quietly
+        let pastePlainCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/QuickTools/PastePlainService.swift",
+            encoding: .utf8)) ?? "").components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        expect(pastePlainCode.contains("GeneralPasteboardAccess.shared.async")
+                && !pastePlainCode.contains("NSPasteboard.general"),
+               "paste as plain text reads the clipboard on the serial lane, never on the main thread")
+        let pastePlainTransientPaste = pastePlainCode
+            .components(separatedBy: "TransientPaste.shared.paste").dropFirst().first ?? ""
+        expect(!pastePlainCode.contains("_ = TransientPaste")
+                && pastePlainTransientPaste.contains("didFail:")
+                && pastePlainTransientPaste.contains("NSSound.beep()"),
+               "a refused plain-text paste is reported instead of swallowed")
+
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")
             exit(0)

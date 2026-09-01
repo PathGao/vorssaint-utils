@@ -48,9 +48,23 @@ final class PastePlainService: ObservableObject {
             }
             return
         }
-        let pasteboard = NSPasteboard.general
-        guard let plain = Self.plainText(from: pasteboard), !plain.isEmpty else { return }
+        // The read goes through the app's serial lane. Rich text put there by
+        // another app is exactly what this feature exists for, and that content
+        // is often promised: it is rendered only when asked for, so a busy
+        // source app can hold the read for as long as it likes. Waiting for
+        // that on the main thread is a frozen app (issue #887).
+        GeneralPasteboardAccess.shared.async({ Self.plainText(from: .general) }) { [weak self] plain in
+            guard let self, let plain, !plain.isEmpty else { return }
+            self.pastePlain(plain)
+        }
+    }
 
+    /// Pastes the already-read plain text, back on the main queue. The
+    /// frontmost app is resolved here rather than before the read: both routes
+    /// below land in whichever app is in front when the paste happens, so an
+    /// app switch during the read has to move the target with it instead of
+    /// pressing a menu item in an app the user has left.
+    private func pastePlain(_ plain: String) {
         // An app that ships its own matching-style paste does this better
         // than any synthesized ⌘V: the destination decides the typing
         // attributes (a stripped string pasted normally can leave the
@@ -62,7 +76,11 @@ final class PastePlainService: ObservableObject {
         if pressNativeMatchStyleItem() { return }
 
         var releaseHotkey = false
-        _ = TransientPaste.shared.paste(
+        // Every way the transient paste can give up is reported the same way
+        // the missing permission above is: a refused paste that says nothing
+        // reads as "the feature does nothing". The false return covers the two
+        // it rejects outright, didFail the four it discovers on its lane.
+        let started = TransientPaste.shared.paste(
             plain,
             willPostShortcut: { [weak self] in
                 guard let self else { return }
@@ -73,8 +91,10 @@ final class PastePlainService: ObservableObject {
             },
             didPostShortcut: { [weak self] in
                 if releaseHotkey { self?.syncWithPreferences() }
-            }
+            },
+            didFail: { NSSound.beep() }
         )
+        if !started { NSSound.beep() }
     }
 
     /// Presses the frontmost app's own matching-style paste when its menus
