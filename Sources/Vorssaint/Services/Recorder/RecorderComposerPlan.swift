@@ -122,6 +122,9 @@ extension RecorderComposer {
             var amountTargets = [Double](repeating: 1, count: frames)
             var travelX = [Double](repeating: 0.5, count: frames)
             var travelY = [Double](repeating: 0.5, count: frames)
+            // `sourceTimes` never goes backwards, so the lookups below walk
+            // their lists once across the whole loop instead of per frame.
+            var focusCursor = 0
             for index in 0..<frames {
                 let time = sourceTimes[index]
                 let state = RecorderTimeline.zoomState(at: time, segments: segments)
@@ -135,7 +138,9 @@ extension RecorderComposer {
                     travelY[index] = RecorderMotion.travelParameter(exactFocus: Double(aimed.y),
                                                                     zoom: state.amount)
                 } else {
-                    let focus = RecorderMotion.focus(at: time, clusters: clusters)
+                    let focus = RecorderMotion.focus(at: time,
+                                                     clusters: clusters,
+                                                     cursor: &focusCursor)
                     travelX[index] = RecorderMotion.travelParameter(focus: Double(focus.x))
                     travelY[index] = RecorderMotion.travelParameter(focus: Double(focus.y))
                 }
@@ -165,11 +170,16 @@ extension RecorderComposer {
         var pressScale = [Double](repeating: 1, count: frames)
         var ring = [Double](repeating: -1, count: frames)
         if showsPointer {
+            var clickCursor = RecorderMotion.ClickCursor()
             for index in 0..<frames {
                 let time = sourceTimes[index]
-                pressScale[index] = RecorderMotion.pressScale(at: time, clicks: track.clicks)
+                pressScale[index] = RecorderMotion.pressScale(at: time,
+                                                              clicks: track.clicks,
+                                                              cursor: &clickCursor)
                 if document.showsClickRing,
-                   let progress = RecorderMotion.ringProgress(at: time, clicks: track.clicks) {
+                   let progress = RecorderMotion.ringProgress(at: time,
+                                                              clicks: track.clicks,
+                                                              cursor: &clickCursor) {
                     ring[index] = progress
                 }
             }

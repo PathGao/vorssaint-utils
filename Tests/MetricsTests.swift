@@ -20392,6 +20392,97 @@ struct MetricsTests {
         expect(RecorderMotion.resampled([], frameRate: 10, duration: 1).count == 10,
                "an empty track still yields a full grid instead of crashing the export")
 
+        // The composer's frame loop carries one cursor across every frame
+        // instead of rescanning the whole click list per frame. That is only
+        // allowed to be faster, so both queries are compared bit for bit
+        // against the scans they replaced, over a list with bursts, held
+        // buttons, presses that are never released and one at the very end.
+        var scanClicks: [RecorderMotion.Click] = []
+        var scanSeed: UInt64 = 0x9E37_79B9_7F4A_7C15
+        var scanAt: Double = 0.05
+        for step in 0..<300 {
+            scanSeed = scanSeed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+            scanAt += Double((scanSeed >> 33) % 37) / 100 + 0.01
+            scanClicks.append(RecorderMotion.Click(time: scanAt, isDown: true))
+            guard step % 7 != 0 else { continue }
+            scanAt += Double((scanSeed >> 17) % 29) / 100 + 0.005
+            scanClicks.append(RecorderMotion.Click(time: scanAt, isDown: false))
+        }
+        func scannedPunchWeight(at time: Double) -> Double {
+            var weight: Double = 0
+            var pressedAt: Double?
+            for click in scanClicks {
+                if click.isDown {
+                    pressedAt = click.time
+                    if time >= click.time - RecorderMotion.pressPunchWindow, time <= click.time {
+                        weight = max(weight, RecorderMotion.smoothstep(
+                            (time - (click.time - RecorderMotion.pressPunchWindow))
+                                / RecorderMotion.pressPunchWindow))
+                    }
+                } else if let down = pressedAt {
+                    if time >= down, time <= click.time { weight = 1 }
+                    if time > click.time, time <= click.time + RecorderMotion.pressPunchWindow {
+                        weight = max(weight, RecorderMotion.smoothstep(
+                            1 - (time - click.time) / RecorderMotion.pressPunchWindow))
+                    }
+                    pressedAt = nil
+                }
+            }
+            if let down = pressedAt, time >= down { weight = 1 }
+            return min(1, weight)
+        }
+        func scannedRing(at time: Double) -> Double? {
+            var best: Double?
+            for click in scanClicks where click.isDown {
+                let elapsed = time - click.time
+                guard elapsed >= 0, elapsed <= RecorderMotion.ringDuration else { continue }
+                best = min(best ?? elapsed / RecorderMotion.ringDuration,
+                           elapsed / RecorderMotion.ringDuration)
+            }
+            return best
+        }
+        var scanCursor = RecorderMotion.ClickCursor()
+        var punchMatches = true
+        var ringMatches = true
+        var freshMatches = true
+        let scanFrames = Int((scanAt + 1) * 60)
+        for frame in 0..<scanFrames {
+            let time = Double(frame) / 60
+            let carriedPunch = RecorderMotion.pressScale(at: time,
+                                                         clicks: scanClicks,
+                                                         cursor: &scanCursor)
+            let carriedRing = RecorderMotion.ringProgress(at: time,
+                                                          clicks: scanClicks,
+                                                          cursor: &scanCursor)
+            let scannedPunch = 1 - (1 - RecorderMotion.pressPunchScale)
+                * scannedPunchWeight(at: time)
+            if carriedPunch != scannedPunch { punchMatches = false }
+            if carriedRing != scannedRing(at: time) { ringMatches = false }
+            if RecorderMotion.pressScale(at: time, clicks: scanClicks) != scannedPunch
+                || RecorderMotion.ringProgress(at: time, clicks: scanClicks)
+                    != scannedRing(at: time) {
+                freshMatches = false
+            }
+        }
+        expect(scanFrames > 5_000 && scanClicks.count > 500,
+               "the cursor comparison covers a long recording and a busy click list")
+        expect(punchMatches, "carrying the cursor gives the press punch the full scan gave")
+        expect(ringMatches, "carrying the cursor gives the click ring the full scan gave")
+        expect(freshMatches, "a fresh cursor still answers exactly what the full scan answered")
+
+        var carriedFocusCursor = 0
+        var focusMatches = true
+        for frame in 0..<600 {
+            let time = Double(frame) / 60
+            var scanned = cluster.first?.center ?? CGPoint(x: 0.5, y: 0.5)
+            for entry in cluster where entry.time <= time { scanned = entry.center }
+            if RecorderMotion.focus(at: time, clusters: cluster, cursor: &carriedFocusCursor)
+                != scanned {
+                focusMatches = false
+            }
+        }
+        expect(focusMatches, "carrying the cursor gives the focus the full scan gave")
+
         // MARK: Screen recorder timeline
 
         let cutTrim = RecorderSupport.Trim(start: 0, end: 20)

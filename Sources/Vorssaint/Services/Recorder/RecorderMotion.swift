@@ -433,9 +433,19 @@ enum RecorderMotion {
     }
 
     static func focus(at time: Double, clusters: [FocusCluster]) -> CGPoint {
-        var current = clusters.first?.center ?? CGPoint(x: 0.5, y: 0.5)
-        for cluster in clusters where cluster.time <= time {
-            current = cluster.center
+        var cursor = 0
+        return focus(at: time, clusters: clusters, cursor: &cursor)
+    }
+
+    /// The same answer, for a caller that asks in time order. `cursor` starts
+    /// at zero and is carried across the calls; a fresh one gives exactly what
+    /// a full scan gives.
+    static func focus(at time: Double, clusters: [FocusCluster], cursor: inout Int) -> CGPoint {
+        guard let first = clusters.first else { return CGPoint(x: 0.5, y: 0.5) }
+        var current = cursor == 0 ? first.center : clusters[cursor - 1].center
+        while cursor < clusters.count, clusters[cursor].time <= time {
+            current = clusters[cursor].center
+            cursor += 1
         }
         return current
     }
@@ -535,30 +545,66 @@ enum RecorderMotion {
     static let pressPunchWindow: Double = 0.13
     static let pressPunchScale: Double = 0.8
 
+    /// Where a caller asking in time order got to in the click list, so an
+    /// export does not rescan every click for every frame: an hour of busy
+    /// recording is thirty six thousand frames against a four figure click
+    /// list. A fresh cursor gives exactly what a full scan gives; carrying one
+    /// is only valid when the times asked for never go backwards, which the
+    /// composer's frame loop guarantees.
+    struct ClickCursor {
+        fileprivate var punch = 0
+        fileprivate var ring = 0
+
+        init() {}
+    }
+
     static func pressScale(at time: Double, clicks: [Click]) -> Double {
-        let weight = anchorWeightForPunch(at: time, clicks: clicks)
+        var cursor = ClickCursor()
+        return pressScale(at: time, clicks: clicks, cursor: &cursor)
+    }
+
+    static func pressScale(at time: Double, clicks: [Click], cursor: inout ClickCursor) -> Double {
+        let weight = anchorWeightForPunch(at: time, clicks: clicks, cursor: &cursor)
         return 1 - (1 - pressPunchScale) * weight
     }
 
-    private static func anchorWeightForPunch(at time: Double, clicks: [Click]) -> Double {
+    private static func anchorWeightForPunch(at time: Double,
+                                             clicks: [Click],
+                                             cursor: inout ClickCursor) -> Double {
         var weight: Double = 0
         var pressedAt: Double?
-        for click in clicks {
+        // Where the next question may start from: everything before it is a
+        // press whose release faded out before this moment, which no later
+        // moment can reach back to either.
+        var settled = cursor.punch
+        var index = cursor.punch
+        while index < clicks.count {
+            let click = clicks[index]
+            // Nothing this late weighs on this moment, and with no button
+            // held there is no earlier press waiting for its release either.
+            if pressedAt == nil, click.time > time + pressPunchWindow { break }
+            index += 1
             if click.isDown {
                 pressedAt = click.time
                 if time >= click.time - pressPunchWindow, time <= click.time {
                     weight = max(weight, smoothstep((time - (click.time - pressPunchWindow))
                                                      / pressPunchWindow))
                 }
-            } else if let down = pressedAt {
-                if time >= down, time <= click.time { weight = 1 }
-                if time > click.time, time <= click.time + pressPunchWindow {
-                    weight = max(weight, smoothstep(1 - (time - click.time) / pressPunchWindow))
+            } else {
+                if let down = pressedAt {
+                    if time >= down, time <= click.time { weight = 1 }
+                    if time > click.time, time <= click.time + pressPunchWindow {
+                        weight = max(weight, smoothstep(1 - (time - click.time) / pressPunchWindow))
+                    }
+                    pressedAt = nil
                 }
-                pressedAt = nil
+                if click.time + pressPunchWindow < time { settled = index }
             }
         }
-        if let down = pressedAt, time >= down { weight = 1 }
+        cursor.punch = settled
+        // A press with no release after it holds for everything that follows,
+        // and only the last click can be one, whatever the scan started from.
+        if let last = clicks.last, last.isDown, time >= last.time { weight = 1 }
         return min(1, weight)
     }
 
@@ -568,10 +614,24 @@ enum RecorderMotion {
     static let ringRadius: Double = 22
 
     static func ringProgress(at time: Double, clicks: [Click]) -> Double? {
+        var cursor = ClickCursor()
+        return ringProgress(at: time, clicks: clicks, cursor: &cursor)
+    }
+
+    static func ringProgress(at time: Double,
+                             clicks: [Click],
+                             cursor: inout ClickCursor) -> Double? {
         var best: Double?
-        for click in clicks where click.isDown {
+        var index = cursor.ring
+        while index < clicks.count {
+            let click = clicks[index]
             let elapsed = time - click.time
-            guard elapsed >= 0, elapsed <= ringDuration else { continue }
+            // Ahead of this moment, so ahead of every moment asked for so far.
+            if elapsed < 0 { break }
+            index += 1
+            // Faded out before this moment, so before every later one too.
+            if elapsed > ringDuration { cursor.ring = index; continue }
+            guard click.isDown else { continue }
             let progress = elapsed / ringDuration
             // A burst of clicks restarts the same ring instead of stacking.
             best = min(best ?? progress, progress)
