@@ -4858,6 +4858,19 @@ struct MetricsTests {
                "device backups joined the cleaner with a stable category id")
         expect(!CleanerPolicy.precheckDeviceBackups,
                "device backups never start checked, they are the user's safety net")
+        expect(!CleanerPolicy.escalateOnAutomaticRun,
+               "a scheduled clean never escalates, so it cannot prompt an empty desk for a password")
+        // CleanerScheduler is not part of this test binary, so pin the one
+        // call that hands it that policy: reaching cleanSelected() with the
+        // escalating default is what puts an administrator prompt on screen
+        // at 03:00.
+        let cleanerSchedulerCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Cleaner/CleanerScheduler.swift",
+            encoding: .utf8)) ?? "").split(whereSeparator: \.isWhitespace).joined()
+        expect(cleanerSchedulerCode.components(separatedBy: "cleanSelected(").count == 2
+               && cleanerSchedulerCode.contains(
+                   "cleanSelected(escalate:CleanerPolicy.escalateOnAutomaticRun)"),
+               "the scheduled pass is the only automatic clean and it asks for no escalation")
         expect(CleanerPolicy.developerJunkPaths.contains("/Library/Developer/Xcode/iOS DeviceSupport")
                && CleanerPolicy.developerJunkPaths.contains("/Library/Developer/Xcode/watchOS DeviceSupport"),
                "stale DeviceSupport symbol caches count as developer junk")

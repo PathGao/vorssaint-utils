@@ -9,6 +9,10 @@ import Combine
 /// with already checked (the safe groups), everything still goes to the
 /// Trash, and an optional notification reports the outcome. Nothing exists
 /// while the schedule is off: no timer, no observers, no cost.
+///
+/// The pass also never asks for anything. A find this app cannot move on its
+/// own - a root owned launch daemon, say - is left for the next manual clean
+/// rather than raising an administrator prompt at an unattended Mac.
 final class CleanerScheduler: ObservableObject {
     static let shared = CleanerScheduler()
 
@@ -141,7 +145,8 @@ final class CleanerScheduler: ObservableObject {
                     // The scan pre checks exactly the safe groups; an
                     // automatic run takes that selection as is.
                     if cleaner.selectedCount > 0 {
-                        cleaner.cleanSelected()
+                        cleaner.cleanSelected(
+                            escalate: CleanerPolicy.escalateOnAutomaticRun)
                     } else {
                         self.finishRun(freed: 0)
                     }

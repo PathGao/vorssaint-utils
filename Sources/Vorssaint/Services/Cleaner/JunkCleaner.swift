@@ -150,7 +150,11 @@ final class JunkCleaner: ObservableObject {
 
     // MARK: - Clean
 
-    func cleanSelected() {
+    /// `escalate` false keeps the pass inside what this app may do on its
+    /// own: items the Trash move refuses count as failed instead of going to
+    /// Finder for an administrator prompt. The scheduled pass runs unattended,
+    /// so it never asks.
+    func cleanSelected(escalate: Bool = true) {
         let chosen = items.filter(\.include)
         guard !chosen.isEmpty else { return }
         phase = .cleaning
@@ -200,11 +204,17 @@ final class JunkCleaner: ObservableObject {
                 }
             }
 
-            // Root owned files (system LaunchDaemons and friends) go through
-            // Finder, which shows the standard administrator prompt and moves
-            // them to the Trash exactly like a drag would. One batch, one
-            // prompt; a cancel leaves them in place and they count as failed.
-            if !stubborn.isEmpty {
+            if !escalate {
+                // Nobody is here to answer a password prompt. What the Trash
+                // move refused stays exactly where it is and counts as failed,
+                // so the next manual clean still offers it.
+                failed += stubborn.count
+            } else if !stubborn.isEmpty {
+                // Root owned files (system LaunchDaemons and friends) go
+                // through Finder, which shows the standard administrator
+                // prompt and moves them to the Trash exactly like a drag
+                // would. One batch, one prompt; a cancel leaves them in place
+                // and they count as failed.
                 let stillSafe = stubborn.filter { Self.mayRemove($0, installed: installed) }
                 failed += stubborn.count - stillSafe.count
                 Self.trashViaFinder(stillSafe.map(\.url))

@@ -18,6 +18,14 @@ enum CleanerPolicy {
     /// checked; they are the ghosts in Login Items and Extensions.
     static let precheckLoginItems = true
 
+    /// Root owned finds (the LaunchAgents and LaunchDaemons under /Library)
+    /// cannot be moved by this app alone; a manual clean hands them to Finder,
+    /// which asks for the administrator password. A scheduled pass runs at an
+    /// hour the user picked precisely so they need not be there, so it leaves
+    /// those items for the next manual clean instead of putting a password
+    /// prompt on an empty desk.
+    static let escalateOnAutomaticRun = false
+
     /// Logs are diagnostic text apps rewrite freely.
     static let precheckLogs = true
 
