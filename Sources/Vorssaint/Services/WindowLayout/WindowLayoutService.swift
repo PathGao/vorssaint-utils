@@ -732,9 +732,16 @@ final class WindowLayoutService: ObservableObject {
                                                       action: nil,
                                                       manualOverride: nil)
         showDirectionalIndicator(at: NSEvent.mouseLocation, action: nil)
-        directionalTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) {
+        // The gesture's own tap takes leftMouseDown and rightMouseDown, so a
+        // held mouse button puts the main run loop into event tracking and a
+        // default-mode timer stops firing: the indicator and the snap preview
+        // hold the frame from before the press. The settle timer in this same
+        // service is already in common modes; the feedback timer now is too.
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) {
             [weak self] _ in self?.updateDirectionalGesture()
         }
+        directionalTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
         startDirectionalTap()
     }
 

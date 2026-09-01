@@ -21808,6 +21808,27 @@ struct MetricsTests {
             .dropFirst().first?.components(separatedBy: "Permissions.shared.$screenRecording").first ?? ""
         expect(accessibilitySink.contains(".quitWindowProtection"),
                "granting Accessibility starts quit protection without a relaunch")
+        // The directional gesture's own tap takes leftMouseDown, so holding a
+        // button puts the main run loop into event tracking. A feedback timer
+        // scheduled in the default mode alone stops firing there and the
+        // indicator holds the frame from before the press. Sliced to the
+        // gesture's own start, so the settle timer in the same file — which has
+        // been in common modes all along — cannot answer for it.
+        let directionalStart = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/WindowLayout/WindowLayoutService.swift",
+            encoding: .utf8)) ?? "")
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") }
+            .joined(separator: "\n")
+            .components(separatedBy: "showDirectionalIndicator(at: NSEvent.mouseLocation, action: nil)")
+            .dropFirst().first?
+            .components(separatedBy: "startDirectionalTap()").first ?? ""
+        expect(!directionalStart.isEmpty
+                && directionalStart.contains("RunLoop.main.add(timer, forMode: .common)")
+                && !directionalStart.contains("Timer.scheduledTimer"),
+               "the directional gesture's feedback timer keeps firing while a mouse button is held")
+
         let smoothSchedulerSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/SmoothScrollService.swift",
             encoding: .utf8)) ?? ""
