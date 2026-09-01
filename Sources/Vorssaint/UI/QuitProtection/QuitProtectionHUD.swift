@@ -12,10 +12,10 @@ final class QuitProtectionHUD {
     private var panel: NSPanel?
 
     /// The confirmation lines are localized and formatted with the shortcut
-    /// symbol, so their rendered width is only known at show time. Widest of
-    /// the shipped translations is ~300pt of text, well past what the fixed
-    /// 300pt panel left for it. The labels are asked rather than the strings
-    /// measured, so whatever inset their cells add is inside the answer.
+    /// symbol, so their rendered width is only known at show time. The widest
+    /// translations need more than the fixed 300pt panel left for text. The
+    /// labels are asked rather than the strings measured, so whatever inset
+    /// their cells add is inside the answer.
     private static func fittingSize(_ content: ContentView) -> CGSize {
         CGSize(width: max(minimumSize.width, (content.textWidth + textInset * 2).rounded(.up)),
                height: minimumSize.height)
