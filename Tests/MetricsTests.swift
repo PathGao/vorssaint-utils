@@ -21859,6 +21859,44 @@ struct MetricsTests {
                 && cleaningModeSource.contains("AXIsProcessTrusted()")
                 && cleaningModeSource.contains("CFMachPortInvalidate"),
                "Cleaning Mode ends and releases its filter tap when the login session leaves the screen")
+        // The two Finder taps run their callback on a thread of their own, so
+        // their timeout re-arm cannot read the session flag the main thread
+        // writes. They take the gate's answer from the preference sync and keep
+        // it under the lock that holds the tap, which is why the re-arm here is
+        // spelled as a sampled field rather than as SessionActivity.shared.
+        // Comments are stripped so prose naming the API cannot answer for it.
+        for finderTapOwner in ["Sources/Vorssaint/Services/Finder/FinderCutPaste.swift",
+                               "Sources/Vorssaint/Services/Finder/FinderRenameService.swift"] {
+            let code = ((try? String(contentsOfFile: finderTapOwner, encoding: .utf8)) ?? "")
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+            expect(code.contains("SessionActivity.shared.onChange")
+                    && code.contains("SessionActivitySupport.tapShouldRun(")
+                    && code.contains("CFMachPortInvalidate"),
+                   "\(finderTapOwner) joins the session gate and releases its port on teardown")
+            let rearm = code.components(separatedBy: "tapDisabledByTimeout")
+                .dropFirst().first?.components(separatedBy: "return").first ?? ""
+            expect(!rearm.isEmpty && !rearm.contains("SessionActivity.shared."),
+                   "\(finderTapOwner) re-arms off the sampled answer, never off main-thread state")
+        }
+        // ⌘C and ⌘V are pressed everywhere, and outside Finder the answer is
+        // always no. Asking the main thread for it would put the app's drawing
+        // in front of every copy on the machine, so the tap thread decides from
+        // an answer the activation observer leaves for it.
+        let cutPasteCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Finder/FinderCutPaste.swift",
+            encoding: .utf8)) ?? "")
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        expect(cutPasteCode.contains("didActivateApplicationNotification"),
+               "an activation observer keeps the front app the cut-paste tap reads current")
+        let beforeMainThread = cutPasteCode
+            .components(separatedBy: "eventSourceUserData").dropFirst().first?
+            .components(separatedBy: "DispatchQueue.main.sync").first ?? ""
+        expect(!beforeMainThread.isEmpty && !beforeMainThread.contains("NSWorkspace"),
+               "the cut-paste tap thread turns a shortcut down without waiting for the main thread")
 
         // MARK: Uninstallation paths stay aligned across SelfUninstall and Tools/uninstall.sh
         let selfUninstallSource = (try? String(contentsOfFile: "Sources/Vorssaint/Services/SelfUninstall.swift",

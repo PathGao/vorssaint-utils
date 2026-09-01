@@ -9,7 +9,8 @@ import Foundation
 
 /// Turns one chosen key combination into Finder's native Rename command.
 /// Unrelated keys stay on the tap thread's fast path, and the tap only lives
-/// while the feature is on and Accessibility is available.
+/// while the feature is on, Accessibility is available and this login session
+/// is the one on screen.
 final class FinderRenameService {
     static let shared = FinderRenameService()
 
@@ -20,13 +21,25 @@ final class FinderRenameService {
 
     private let lifecycleLock = NSLock()
     private var tap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
     private var tapRunLoop: CFRunLoop?
     private var tapThread: Thread?
     private var shouldStopTapThread = false
     private var pendingStartAfterStop = false
+    /// `SessionActivitySupport.tapShouldRun`'s answer, sampled by the
+    /// preference sync. The timeout re-arm runs on the tap thread and the
+    /// session flag is written on the main one, so the re-arm reads the sample
+    /// instead of reaching across for the flag itself.
+    private var tapShouldRun = false
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain, so the window server waits out the tap timeout on every
+        // key the account on screen presses (issue #1075). Hand the tap back on
+        // resign and build it from the preferences again on the way in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     func syncWithPreferences() {
         let shortcut = GlobalShortcut.saved(for: DefaultsKey.finderRenameShortcut,
@@ -34,7 +47,12 @@ final class FinderRenameService {
         routeLock.withLock { routeShortcut = shortcut }
         let enabled = AppFeature.finderRename.isAvailable
             && UserDefaults.standard.bool(forKey: DefaultsKey.finderRenameEnabled)
-        if enabled, Permissions.shared.accessibility {
+        let wanted = SessionActivitySupport.tapShouldRun(
+            featureWanted: enabled,
+            accessibilityGranted: Permissions.shared.accessibility,
+            sessionIsActive: SessionActivity.shared.isActive)
+        lifecycleLock.withLock { tapShouldRun = wanted }
+        if wanted {
             installTap()
         } else {
             removeTap()
@@ -116,10 +134,7 @@ final class FinderRenameService {
             }
 
             let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-            lifecycleLock.withLock {
-                self.tap = tap
-                runLoopSource = source
-            }
+            lifecycleLock.withLock { self.tap = tap }
             CFRunLoopAddSource(runLoop, source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
 
@@ -140,7 +155,6 @@ final class FinderRenameService {
         lifecycleLock.withLock {
             let shouldRestart = pendingStartAfterStop
             tap = nil
-            runLoopSource = nil
             tapRunLoop = nil
             tapThread = nil
             shouldStopTapThread = false
@@ -154,7 +168,14 @@ final class FinderRenameService {
     /// combination.
     private func route(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            let currentTap = lifecycleLock.withLock { shouldStopTapThread ? nil : tap }
+            // The gate the preference sync applied, asked again: a tap re-armed
+            // into a session that is no longer on screen puts the stall it was
+            // handed back to avoid straight back on the account that is
+            // (issue #1075). Its answer was sampled with the tap, so nothing
+            // here reaches for main-thread state.
+            let currentTap = lifecycleLock.withLock {
+                tapShouldRun && !shouldStopTapThread ? tap : nil
+            }
             if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
             return Unmanaged.passUnretained(event)
         }

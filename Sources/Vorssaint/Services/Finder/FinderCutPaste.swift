@@ -12,9 +12,12 @@ import SwiftUI
 /// shortcuts only while Finder is frontmost and no text field is being edited,
 /// so renaming and text editing keep working untouched.
 ///
-/// The decision to swallow a keystroke is made synchronously (in-memory marks +
-/// the pasteboard change count + a fast Accessibility role check); the slow
-/// parts (reading the Finder selection, moving files) run off the tap thread.
+/// A keystroke is answered on the tap thread wherever it can be: which app is
+/// in front is kept there, so ⌘C and ⌘V outside Finder are handed straight
+/// back. Only those combinations inside Finder cross to the main thread, where
+/// the marks, the pasteboard change count and a fast Accessibility role check
+/// decide; the slow parts (reading the Finder selection, moving files) run off
+/// both threads.
 /// Requires Accessibility, and Automation consent for Finder on first use.
 final class FinderCutPaste: ObservableObject {
     static let shared = FinderCutPaste()
@@ -68,6 +71,11 @@ final class FinderCutPaste: ObservableObject {
     private var tapThread: Thread?
     private var shouldStopTapThread = false
     private var pendingTapRestart = false
+    /// `SessionActivitySupport.tapShouldRun`'s answer, sampled by the
+    /// preference sync. The timeout re-arm runs on the tap thread and the
+    /// session flag is written on the main one, so the re-arm reads the sample
+    /// instead of reaching across for the flag itself.
+    private var tapShouldRun = false
     private var panel: NSPanel?
     private var resultDismiss: DispatchWorkItem?
     private var operationGeneration = 0
@@ -77,6 +85,13 @@ final class FinderCutPaste: ObservableObject {
     private var pasteImageAsFileEnabled = false
     private var imagePasteInProgress = false
     private var appObserver: NSObjectProtocol?
+
+    /// Which app is in front, written by the activation observer on the main
+    /// thread and read by the tap callback on its own. Nil whenever the
+    /// observer is not installed, so a cached answer can never outlive the
+    /// thing that maintains it.
+    private let routeLock = NSLock()
+    private var frontmostBundleID: String?
 
     private static let finderBundleID = "com.apple.finder"
     private static let syntheticPasteMarker: Int64 = 0x564F5249
@@ -89,7 +104,15 @@ final class FinderCutPaste: ObservableObject {
         static let v: Int64 = 9
     }
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain, so the window server waits out the tap timeout on every
+        // key the account on screen presses (issue #1075). Hand the tap back on
+        // resign and build it from the preferences again on the way in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     var isRunning: Bool { tapLifecycleLock.withLock { tap != nil } }
 
@@ -105,16 +128,25 @@ final class FinderCutPaste: ObservableObject {
         showHUD = UserDefaults.standard.object(forKey: DefaultsKey.finderCutPasteShowHUD) as? Bool ?? true
         pasteImageAsFileEnabled = available
             && UserDefaults.standard.bool(forKey: DefaultsKey.finderPasteImageAsFile)
-        if (cutPasteEnabled || pasteImageAsFileEnabled), Permissions.shared.accessibility {
-            installTap()
-        } else {
-            removeTap()
-        }
-        if cutPasteEnabled {
+        // The observer is what keeps the front app the tap thread reads
+        // current, so it follows either shortcut path rather than cut and paste
+        // alone, and it goes up before the tap: a live tap with nothing
+        // maintaining that answer behind it hands every shortcut back.
+        if cutPasteEnabled || pasteImageAsFileEnabled {
             installAppObserver()
         } else {
             removeAppObserver()
             clearMarks()
+        }
+        let wanted = SessionActivitySupport.tapShouldRun(
+            featureWanted: cutPasteEnabled || pasteImageAsFileEnabled,
+            accessibilityGranted: Permissions.shared.accessibility,
+            sessionIsActive: SessionActivity.shared.isActive)
+        tapLifecycleLock.withLock { tapShouldRun = wanted }
+        if wanted {
+            installTap()
+        } else {
+            removeTap()
         }
         refreshPanel()
     }
@@ -130,6 +162,8 @@ final class FinderCutPaste: ObservableObject {
 
     private func installAppObserver() {
         guard appObserver == nil else { return }
+        // The app already in front sends no activation of its own.
+        cacheFrontmostApplication()
         appObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
@@ -144,11 +178,18 @@ final class FinderCutPaste: ObservableObject {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             appObserver = nil
         }
+        routeLock.withLock { frontmostBundleID = nil }
     }
 
     private func handleApplicationActivation() {
+        cacheFrontmostApplication()
         guard cutPasteEnabled else { return }
         refreshPanel()
+    }
+
+    private func cacheFrontmostApplication() {
+        let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        routeLock.withLock { frontmostBundleID = bundleID }
     }
 
     // MARK: - Event tap
@@ -247,12 +288,20 @@ final class FinderCutPaste: ObservableObject {
         }
     }
 
-    /// Runs on the tap thread. Every key except plain Command-X/C/V returns
-    /// after reading only the event itself; the rare candidate is handed to
-    /// the main thread where the service's UI and pasteboard state live.
+    /// Runs on the tap thread. Every key except a plain Command-X/C/V pressed
+    /// in Finder returns after reading only the event and one cached string;
+    /// the rare candidate is handed to the main thread where the service's UI
+    /// and pasteboard state live.
     private func route(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            let currentTap = tapLifecycleLock.withLock { shouldStopTapThread ? nil : tap }
+            // The gate the preference sync applied, asked again: a tap re-armed
+            // into a session that is no longer on screen puts the stall it was
+            // handed back to avoid straight back on the account that is
+            // (issue #1075). Its answer was sampled with the tap, so nothing
+            // here reaches for main-thread state.
+            let currentTap = tapLifecycleLock.withLock {
+                tapShouldRun && !shouldStopTapThread ? tap : nil
+            }
             if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
@@ -265,6 +314,14 @@ final class FinderCutPaste: ObservableObject {
         guard flags.contains(.maskCommand),
               !flags.contains(.maskControl), !flags.contains(.maskAlternate),
               keyCode == Key.x || keyCode == Key.c || keyCode == Key.v
+        else { return Unmanaged.passUnretained(event) }
+
+        // ⌘C and ⌘V are the two most-pressed combinations on the machine, and
+        // outside Finder the answer is always no. Learning that on the main
+        // thread would make every copy anywhere wait for whatever this app is
+        // drawing, so the activation observer keeps the answer over here. The
+        // main thread reads the live value again before acting on it.
+        guard routeLock.withLock({ frontmostBundleID }) == Self.finderBundleID
         else { return Unmanaged.passUnretained(event) }
 
         var verdict: Unmanaged<CGEvent>?
