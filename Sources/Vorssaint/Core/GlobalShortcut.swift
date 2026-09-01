@@ -525,13 +525,33 @@ struct GlobalShortcut: Equatable, Hashable {
         return nil
     }
 
+    /// The same question the keycaps ask, backwards: a caller that knows the
+    /// character a shortcut is named for (Command-Q) needs the key the system
+    /// will resolve it to, which moves with the layout. `usesCommand` picks the
+    /// same table the caps read, so Command-Q answers 12 on Russian and Greek,
+    /// 7 on Dvorak, and 12 again on DVORAK-QWERTYCMD.
+    ///
+    /// Answered from the cache alone, so an event tap can ask on every key from
+    /// its own thread. nil until a layout has been read, which leaves the caller
+    /// on whatever it did without one.
+    static func layoutKeyCode(for character: String, usesCommand: Bool) -> Int64? {
+        let key = LayoutKeyCodeKey(label: character.uppercased(), usesCommand: usesCommand)
+        return layoutLabelLock.withLock { layoutKeyCodes[key] }
+    }
+
     private struct LayoutLabelKey: Hashable {
         let keyCode: Int64
         let usesCommand: Bool
     }
 
+    private struct LayoutKeyCodeKey: Hashable {
+        let label: String
+        let usesCommand: Bool
+    }
+
     private static let layoutLabelLock = NSLock()
     private static var layoutLabels: [LayoutLabelKey: String] = [:]
+    private static var layoutKeyCodes: [LayoutKeyCodeKey: Int64] = [:]
     private static var keyboardLayoutObserver: AnyObject?
 
     /// Starts observing system keyboard layout changes so the keycap cache stays
@@ -550,10 +570,14 @@ struct GlobalShortcut: Equatable, Hashable {
     /// or when simulating a specific keyboard layout in tests.
     static func refreshLayoutLabels(layoutData: Data? = currentLayoutData()) {
         guard let layoutData else {
-            layoutLabelLock.withLock { layoutLabels.removeAll() }
+            layoutLabelLock.withLock {
+                layoutLabels.removeAll()
+                layoutKeyCodes.removeAll()
+            }
             return
         }
         var labels: [LayoutLabelKey: String] = [:]
+        var keyCodes: [LayoutKeyCodeKey: Int64] = [:]
         for keyCode in UInt16(0)...127 {
             for usesCommand in [false, true] {
                 if let label = derivedLayoutKeyLabel(for: keyCode,
@@ -561,10 +585,20 @@ struct GlobalShortcut: Equatable, Hashable {
                                                      usesCommand: usesCommand) {
                     labels[LayoutLabelKey(keyCode: Int64(keyCode),
                                           usesCommand: usesCommand)] = label
+                    // Ascending, so a character two keys can type answers with
+                    // the first of them rather than with whichever the
+                    // dictionary happens to hand back.
+                    let keyCodeKey = LayoutKeyCodeKey(label: label, usesCommand: usesCommand)
+                    if keyCodes[keyCodeKey] == nil {
+                        keyCodes[keyCodeKey] = Int64(keyCode)
+                    }
                 }
             }
         }
-        layoutLabelLock.withLock { layoutLabels = labels }
+        layoutLabelLock.withLock {
+            layoutLabels = labels
+            layoutKeyCodes = keyCodes
+        }
     }
 
     private static func derivedLayoutKeyLabel(for keyCode: Int64,

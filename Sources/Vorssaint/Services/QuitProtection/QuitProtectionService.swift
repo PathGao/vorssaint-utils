@@ -83,7 +83,9 @@ final class QuitProtectionService: ObservableObject {
 
     private func start() {
         guard !isRunning else { return }
-        QuitProtectionKeyLayout.startObserving()
+        // Fills and follows the keycap cache the shortcut resolution reads.
+        // Idempotent; the app already starts it at launch.
+        GlobalShortcut.startObservingKeyboardLayout()
         guard installTap() else { return }
         isRunning = true
         let frontmost = NSWorkspace.shared.frontmostApplication
@@ -244,7 +246,7 @@ final class QuitProtectionService: ObservableObject {
         let option = flags.contains(.maskAlternate)
         let shift = flags.contains(.maskShift)
         let character = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased()
-        let commandKeyCode = QuitProtectionKeyLayout.commandKeyCode(for: shortcut)
+        let commandKeyCode = shortcut.commandKeyCode
 
         switch configuration.mode {
         case .hold:
@@ -506,9 +508,7 @@ final class QuitProtectionService: ObservableObject {
     /// translation on each of those events.
     private func matchingShortcut(for event: CGEvent) -> QuitProtectionShortcut? {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        let resolved = QuitProtectionShortcut.allCases.map {
-            ($0, QuitProtectionKeyLayout.commandKeyCode(for: $0))
-        }
+        let resolved = QuitProtectionShortcut.allCases.map { ($0, $0.commandKeyCode) }
         let character = resolved.contains { $0.1 == nil }
             ? NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased()
             : nil

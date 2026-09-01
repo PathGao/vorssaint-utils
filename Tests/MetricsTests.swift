@@ -21975,7 +21975,10 @@ struct MetricsTests {
         // back at the Latin letters, which is why the key that types \u{439} still quits.
         func quitProtectionKeyCodes(_ layoutID: String) -> [QuitProtectionShortcut: Int64]? {
             guard let data = testLayoutData(for: layoutID) else { return nil }
-            return QuitProtectionKeyLayout.keyCodes(in: data)
+            GlobalShortcut.refreshLayoutLabels(layoutData: data)
+            return QuitProtectionShortcut.allCases.reduce(into: [:]) {
+                $0[$1] = $1.commandKeyCode
+            }
         }
         if let us = quitProtectionKeyCodes("com.apple.keylayout.US") {
             expect(us[.quit] == 12 && us[.close] == 13,
@@ -22001,6 +22004,7 @@ struct MetricsTests {
             expect(french[.quit] == 0 && french[.close] == 6,
                    "French AZERTY moves Command-Q and Command-W to its own q and w keys")
         }
+        GlobalShortcut.refreshLayoutLabels()
 
         expect(QuitProtectionSupport.dropsAutorepeat(isRepeat: true, command: true),
                "a held Command-Q does not repeat into the app it is protecting")
