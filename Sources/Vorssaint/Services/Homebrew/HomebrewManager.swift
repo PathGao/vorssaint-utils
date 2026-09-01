@@ -668,6 +668,19 @@ final class HomebrewManager: ObservableObject {
     private static let brewReadTimeout: TimeInterval = 30
     private static let processTerminationGrace: TimeInterval = 2
 
+    /// Timeout for an operation the person started (install, upgrade,
+    /// uninstall). Deliberately far beyond any real command: a large cask on
+    /// a slow line legitimately runs for many minutes, and cutting one of
+    /// those off is worse than the stall this exists to end. It only has to
+    /// be finite, because the wait holds the serial queue and everything
+    /// behind it.
+    private static let brewOperationTimeout: TimeInterval = 30 * 60
+
+    /// How much of an operation's output is kept for the completion handler,
+    /// which reads the last few lines of it. The download phase is a curl
+    /// progress bar that can run to megabytes.
+    private static let brewOperationOutputLimit = 4 * 1024 * 1024
+
     /// SIGTERM is cooperative. Escalate only when a command ignores it so a
     /// cancelled or timed-out operation cannot keep the serial queue forever.
     private static func stop(_ process: Process, finished: DispatchSemaphore? = nil) {
@@ -752,12 +765,26 @@ final class HomebrewManager: ObservableObject {
                     return
                 }
                 lock.lock()
+                // Keep draining once the retained tail is full, so the child
+                // can never block on a full pipe or turn its output into
+                // memory use. The tail is kept and not the head because the
+                // error this is read for is the last thing brew prints.
                 output.append(data)
+                if output.count > Self.brewOperationOutputLimit * 2 {
+                    output.removeFirst(output.count - Self.brewOperationOutputLimit)
+                }
                 lock.unlock()
                 if let chunk = String(data: data, encoding: .utf8) {
                     DispatchQueue.main.async { onOutput(chunk) }
                 }
             }
+            // Watched through the termination handler, never `waitUntilExit()`:
+            // that parks a worker of the shared 64-thread pool for the whole
+            // command, and one hung `brew install` used to hold this serial
+            // queue for good, with every later refresh, search and ownership
+            // lookup stuck behind it (see BoundedProcessRunner, issue #971).
+            let finished = DispatchSemaphore(value: 0)
+            process.terminationHandler = { _ in finished.signal() }
             do {
                 try process.run()
             } catch {
@@ -770,19 +797,24 @@ final class HomebrewManager: ObservableObject {
                 self.activeProcess = process
                 if self.cancelRequested { Self.stop(process) }
             }
-            process.waitUntilExit()
+            if finished.wait(timeout: .now() + Self.brewOperationTimeout) == .timedOut {
+                Self.stop(process, finished: finished)
+            }
             _ = drained.wait(timeout: .now() + 1)
             pipe.fileHandleForReading.readabilityHandler = nil
             try? pipe.fileHandleForReading.close()
             lock.lock()
-            let finalOutput = String(data: output, encoding: .utf8) ?? ""
+            // Decoded leniently: a dropped head can cut a multi-byte
+            // character in half, and losing the whole output over that would
+            // take the error message with it.
+            let finalOutput = String(decoding: output, as: UTF8.self)
             lock.unlock()
-            completion(process.terminationStatus, finalOutput)
+            completion(process.isRunning ? -1 : process.terminationStatus, finalOutput)
         }
     }
 
     private func appendLog(_ text: String) {
-        log.append(text)
+        log = HomebrewProgressParser.appendingToLog(log, text)
     }
 
     private func appleScriptString(_ value: String) -> String {

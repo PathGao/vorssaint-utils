@@ -11501,6 +11501,14 @@ struct MetricsTests {
                == "Error: Cask failed",
                "Homebrew progress parser hides command lines from visible errors")
 
+        expect(HomebrewProgressParser.appendingToLog("head\n", "tail\n", limit: 64) == "head\ntail\n",
+               "Homebrew operation log is left alone while it fits")
+        let cappedLog = HomebrewProgressParser.appendingToLog(
+            String(repeating: "old\n", count: 200), "last line\n", limit: 32)
+        expect(cappedLog.hasSuffix("last line\n") && cappedLog.utf8.count <= 96
+                && !cappedLog.hasPrefix("old"),
+               "Homebrew operation log keeps its tail instead of growing without bound")
+
         let homebrewJSON = """
         {
           "formulae": [

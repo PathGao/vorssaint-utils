@@ -496,10 +496,36 @@ enum HomebrewAnalytics {
 }
 
 enum HomebrewProgressParser {
+    /// Compiled once. Every one of these runs on the main thread for every
+    /// chunk a running operation emits, and brew's download phase is a curl
+    /// progress bar that refreshes many times a second.
+    private static let percentRegex = try? NSRegularExpression(
+        pattern: #"([0-9]{1,3}(?:\.[0-9]+)?)%"#)
+    private static let ansiRegex = try? NSRegularExpression(
+        pattern: #"\u001B\[[0-9;?]*[ -/]*[@-~]"#)
+
+    /// How much of a running operation's log is kept. `brew upgrade --cask
+    /// --greedy` across several packages emits megabytes of progress bars,
+    /// and every append republishes the whole string for the view to lay out
+    /// again.
+    static let logLimit = 64 * 1024
+
+    /// The log with `text` appended, cut back to its last `limit` characters
+    /// once it grows past twice that. The tail is what says where the
+    /// operation is, so the head is what goes.
+    static func appendingToLog(_ existing: String, _ text: String,
+                               limit: Int = logLimit) -> String {
+        var log = existing
+        log.append(text)
+        guard log.utf8.count > limit * 2 else { return log }
+        let tail = log.suffix(limit)
+        let wholeLines = tail.drop { !$0.isNewline }.dropFirst()
+        return "…\n" + (wholeLines.isEmpty ? tail : wholeLines)
+    }
+
     static func progressFraction(in output: String) -> Double? {
         var latest: Double?
-        let pattern = #"([0-9]{1,3}(?:\.[0-9]+)?)%"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        guard let regex = percentRegex else { return nil }
         let range = NSRange(output.startIndex..<output.endIndex, in: output)
         regex.enumerateMatches(in: output, range: range) { match, _, _ in
             guard let match,
@@ -601,9 +627,7 @@ enum HomebrewProgressParser {
     }
 
     private static func stripANSI(_ value: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: #"\u001B\[[0-9;?]*[ -/]*[@-~]"#) else {
-            return value
-        }
+        guard let regex = ansiRegex else { return value }
         let range = NSRange(value.startIndex..<value.endIndex, in: value)
         return regex.stringByReplacingMatches(in: value, range: range, withTemplate: "")
     }
