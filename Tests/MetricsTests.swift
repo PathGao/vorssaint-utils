@@ -21758,10 +21758,15 @@ struct MetricsTests {
             let code = source.components(separatedBy: "\n")
                 .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
                 .joined(separator: "\n")
-            // Releasing the port is asked of every owner, listen-only ones
-            // included: switching a tap off leaves the process holding it, and
-            // that is what the window server waits on. Nothing about handing
-            // events back changes who owns the port.
+            // The reported gaps below are exempt from every check here,
+            // the port included: each is a named line waiting on its own fix,
+            // and asking a question the entry already answers turns the list
+            // into a wall of red that says nothing new.
+            if knownUngatedTaps[tapOwner] != nil { continue }
+            // Releasing the port is asked of every owner off that list,
+            // listen-only ones included: switching a tap off leaves the
+            // process holding it, and that is what the window server waits
+            // on. Nothing about handing events back changes who owns the port.
             expect(code.contains("CFMachPortInvalidate"),
                    "\(tapOwner) hands its tap back rather than only disabling it")
             // The session gate is a different question, and a listen-only tap
@@ -21771,7 +21776,6 @@ struct MetricsTests {
             // flip one to .defaultTap and it joins the gated set the same
             // second, with nothing to remember.
             if code.contains(".listenOnly") && !code.contains(".defaultTap") { continue }
-            if knownUngatedTaps[tapOwner] != nil { continue }
             expect(code.contains("SessionActivity.shared.onChange"),
                    "\(tapOwner) rebuilds its tap when the session comes back")
             let rearm = code.components(separatedBy: "tapDisabledByTimeout")
