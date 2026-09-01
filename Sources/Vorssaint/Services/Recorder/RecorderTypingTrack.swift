@@ -22,6 +22,8 @@ struct RecorderTypingTrack: Codable, Equatable {
 /// The monitor exists only while recording and remembers timing, never keys.
 final class RecorderTypingSampler {
     private let pauseClock: RecorderPauseClock
+    /// Written by `start()` and read by the monitor callback, so it lives
+    /// under the same lock as the buffer it times events against.
     private var startedAt: CFTimeInterval = 0
     private var globalMonitor: Any?
     private var localMonitor: Any?
@@ -34,7 +36,7 @@ final class RecorderTypingSampler {
 
     func start() {
         guard globalMonitor == nil, localMonitor == nil else { return }
-        startedAt = CACurrentMediaTime()
+        lock.withLock { startedAt = CACurrentMediaTime() }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.record(event)
         }
@@ -61,8 +63,10 @@ final class RecorderTypingSampler {
         // The key's own moment, not the moment the callback was scheduled:
         // the main thread is busy redrawing the indicator while recording,
         // and this timestamp starts an auto zoom in the finished video.
-        guard let time = pauseClock.eventTime(event.timestamp, since: startedAt) else { return }
-        lock.withLock { times.append(time) }
+        lock.withLock {
+            guard let time = pauseClock.eventTime(event.timestamp, since: startedAt) else { return }
+            times.append(time)
+        }
     }
 
     deinit {

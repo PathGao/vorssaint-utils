@@ -20396,6 +20396,8 @@ struct MetricsTests {
             var samplerLine = ""
             var lockedAppends = 0
             var looseAppends = 0
+            var lockedOrigin = 0
+            var looseOrigin = 0
             for character in samplerSource {
                 if character == "\n" { samplerLine = ""; continue }
                 samplerLine.append(character)
@@ -20404,9 +20406,22 @@ struct MetricsTests {
                 if samplerLine.hasSuffix(".append(") {
                     if blockIsLocked.contains(true) { lockedAppends += 1 } else { looseAppends += 1 }
                 }
+                // The stored `startedAt`: assigned in `start()`, and read in
+                // the monitor callback to turn `event.timestamp` into a time
+                // on the recording. A local or a parameter of the same name
+                // is not it, hence the two exclusions.
+                let storesOrigin = samplerLine.hasSuffix("startedAt =")
+                    && !samplerLine.contains("let startedAt")
+                let readsOrigin = samplerLine.hasSuffix("since: startedAt")
+                    && samplerLine.contains("event.timestamp")
+                if storesOrigin || readsOrigin {
+                    if blockIsLocked.contains(true) { lockedOrigin += 1 } else { looseOrigin += 1 }
+                }
             }
             expect(samplerSource.contains("NSLock()") && lockedAppends > 0 && looseAppends == 0,
                    "\(samplerPath) appends to its sampler buffer only under the lock")
+            expect(lockedOrigin == 2 && looseOrigin == 0,
+                   "\(samplerPath) writes and reads the recording's start time under the lock")
             expect(samplerSource.contains("event.timestamp"),
                    "\(samplerPath) times an event by when it happened, not when it was delivered")
         }
