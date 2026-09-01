@@ -240,8 +240,11 @@ enum CleanerSupport {
 
     /// The one sentence that names what an automatic pass left behind, shared
     /// by the notification and the cleaner's own last-run line so the two can
-    /// never disagree. One deferred launch daemon is the likely count, so it
-    /// comes as a singular/plural pair like every other counted string.
+    /// never disagree. It counts every reason the pass did not move an item -
+    /// a Trash move this app may not make alone, a `mayRemove` refusal, a file
+    /// whose identity changed since the scan - so it states the fact and stops
+    /// there: a manual clean answers only the first of those. Singular/plural
+    /// pair like every other counted string.
     static func leftInPlaceSentence(count: Int, _ strings: Strings) -> String {
         String(format: count == 1 ? strings.cleanerAutoLeftSingular
                                   : strings.cleanerAutoLeftFormat, count)

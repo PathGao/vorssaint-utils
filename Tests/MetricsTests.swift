@@ -4878,14 +4878,20 @@ struct MetricsTests {
                && cleanerSchedulerCode.contains("notifyIfWanted(freed:freed,failed:failed)")
                && cleanerSchedulerCode.contains("CleanerSupport.leftInPlaceSentence(count:failed,strings)"),
                "an automatic pass reports how many items it left in place")
-        // One deferred launch daemon is the likely count, so the sentence has
-        // to read at 1 and not only in the plural.
+        // The sentence states what happened and stops there. It covers every
+        // reason the pass left something behind - a Trash move the app may not
+        // make on its own, but also a `mayRemove` refusal or a file that
+        // changed identity since the scan - and a manual clean fixes only the
+        // first of those, so it must not be offered as the remedy.
         expect(CleanerSupport.leftInPlaceSentence(count: 1, .enUS)
-                   == "1 item stayed in place; clean by hand to remove it.",
+                   == "1 item stayed in place.",
                "one deferred item reads in the singular")
         expect(CleanerSupport.leftInPlaceSentence(count: 2, .enUS)
-                   == "2 items stayed in place; clean by hand to remove them.",
+                   == "2 items stayed in place.",
                "more than one deferred item keeps the plural")
+        expect(!Strings.enUS.cleanerAutoLeftSingular.contains("by hand")
+               && !Strings.enUS.cleanerAutoLeftFormat.contains("by hand"),
+               "the deferred-count sentence names no remedy a manual clean cannot deliver")
         // The notification is optional and macOS drops it when notifications
         // are denied, so the count is persisted and the cleaner's own last-run
         // line says it too: otherwise a deferred pass reads as a clean one.

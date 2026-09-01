@@ -193,7 +193,8 @@ final class CleanerScheduler: ObservableObject {
         }
         // What this pass would not do has to be said, or a deferred find is
         // indistinguishable from one that was never there: an unattended run
-        // never escalates, so a root owned item stays and counts as failed.
+        // never escalates, so anything the Trash move refused stays and counts
+        // as failed.
         if failed > 0 {
             sentences.append(CleanerSupport.leftInPlaceSentence(count: failed, strings))
         }
