@@ -2308,34 +2308,18 @@ struct MetricsTests {
                                                   mergeWindowsByApp: false,
                                                   sessionScope: .allApps),
                "App Switcher groups all-app sessions but keeps window-scoped simple sessions per-window")
-        // The session-start layout pass reads usesWindowRow, which now depends
-        // on the session scope; teardown resets the scope to .allApps, so the
-        // scope must be assigned before the layout pass or a window-scoped
-        // panel is sized for the grouped layout on its first frame.
-        let switcherSource = (try? String(
-            contentsOfFile: "Sources/Vorssaint/Services/Switcher/AppSwitcher.swift",
-            encoding: .utf8)) ?? ""
-        // Ends on whatever declaration comes next rather than naming the
-        // neighbour: a rename would find no separator, leave the slice running
-        // to end of file, and quietly restore the whole-file search this
-        // replaced — a failure that makes the slice bigger, so an empty check
-        // cannot see it. Hence the count assertion below.
-        let finishSessionParts = (switcherSource.components(separatedBy: "private func finishPendingSession")
-            .last ?? "").components(separatedBy: "\n    private func ")
-        let finishSessionBody = finishSessionParts.first ?? ""
-        expect(finishSessionParts.count > 1,
-               "the App Switcher ordering guard finds the end of finishPendingSession")
-        let switcherCode = finishSessionBody
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
-            .joined(separator: "\n")
-        let scopeAssign = switcherCode.range(of: "sessionScope = pending.scope")
-        let startLayout = switcherCode.range(of: "recomputeLayouts(for: list)")
-        expect(!finishSessionBody.isEmpty,
-               "the App Switcher session-start ordering guard finds finishPendingSession")
-        expect(scopeAssign != nil && startLayout != nil
-               && scopeAssign!.lowerBound < startLayout!.lowerBound,
-               "the App Switcher session scope is assigned before the session-start layout pass")
+        // The session-start layout pass reads usesWindowRow, which depends on
+        // the session scope; teardown resets the scope to .allApps, so a
+        // window-scoped panel used to risk being sized for the grouped layout
+        // on its first frame. That ordering was guarded by reading the source
+        // of AppSwitcher, because the sequencing lived in a singleton no test
+        // could reach. It is now a property of SwitcherSession, which begins a
+        // session by adopting the scope before it emits a single effect, and
+        // answers the scope-dependent layout questions from that scope rather
+        // than from anything a caller measured. The runnable replacements are
+        // in switcherSessionChecks(): "a window-scoped session opens on the
+        // front app's next window" and "a session publishes its list and
+        // measures the layout before publishing the selection".
         expect(!SwitcherSupport.usesAppGroupsForMainShortcut(iconRowLayout: true,
                                                               windowRow: true)
                && SwitcherSupport.usesAppGroupsForMainShortcut(iconRowLayout: true,
@@ -22021,6 +22005,9 @@ struct MetricsTests {
             let guarded = offset("guard changed else { return }")
             expect(stored >= 0 && guarded > stored,
                    "\(pass) stores the whole sample before it decides whether the rows changed")
+
+        for switcherCheck in switcherSessionChecks() {
+            expect(switcherCheck.passed, switcherCheck.label)
         }
 
         if failures.isEmpty {
@@ -22031,6 +22018,468 @@ struct MetricsTests {
             failures.forEach { print("  - \($0)") }
             exit(1)
         }
+    }
+
+    /// Real key sequences driven through the switcher's session state machine.
+    /// Kept in one function so the checks live beside each other rather than
+    /// interleaved with the rest of the suite.
+    private static func switcherSessionChecks() -> [(passed: Bool, label: String)] {
+        var results: [(passed: Bool, label: String)] = []
+        func check(_ passed: Bool, _ label: String) { results.append((passed: passed, label: label)) }
+
+        func window(_ id: CGWindowID, _ app: String, pid: pid_t, onScreen: Bool = false) -> SwitcherItem {
+            SwitcherItem.window(id: id, title: "\(app) \(id)", appName: app, pid: pid,
+                                isOnScreen: onScreen, frame: .zero)
+        }
+        // One front window, then two apps behind it, one of them with two
+        // windows: enough to tell app steps from window steps.
+        let front = window(1, "Front", pid: 1, onScreen: true)
+        let bee = window(2, "Bee", pid: 2)
+        let cee = window(3, "Cee", pid: 3)
+        let beeSecond = window(4, "Bee", pid: 2)
+        let list = [front, bee, cee, beeSecond]
+
+        let gridEnvironment = SwitcherSessionEnvironment(iconRowMode: false, simpleMode: false,
+                                                         mergeWindowsByApp: false,
+                                                         gridColumns: 3, searchPinEnabled: false)
+        let pinEnvironment = SwitcherSessionEnvironment(iconRowMode: false, simpleMode: false,
+                                                        mergeWindowsByApp: false,
+                                                        gridColumns: 3, searchPinEnabled: true)
+        let iconRowEnvironment = SwitcherSessionEnvironment(iconRowMode: true, simpleMode: false,
+                                                           mergeWindowsByApp: false,
+                                                           gridColumns: 3, searchPinEnabled: false)
+
+        func start(_ items: [SwitcherItem],
+                   reversed: Bool = false,
+                   additionalNavigation: Int = 0,
+                   commitWhenReady: Bool = false) -> SwitcherSessionStart {
+            SwitcherSessionStart(windows: items,
+                                 frontmostPID: 1,
+                                 shortcut: .switcherDefault,
+                                 reversed: reversed,
+                                 additionalNavigation: additionalNavigation,
+                                 commitWhenReady: commitWhenReady)
+        }
+        func opened(_ items: [SwitcherItem] = list,
+                    environment: SwitcherSessionEnvironment) -> SwitcherSession {
+            var session = SwitcherSession()
+            _ = session.apply(.begin(start(items)), environment: environment)
+            return session
+        }
+        func tab(shift: Bool = false, repeats: Bool = false,
+                 at now: TimeInterval = 0) -> SwitcherSession.Event {
+            .keyDown(SwitcherKeyEvent(kind: .sessionShortcut(shiftIsNavigationModifier: true),
+                                      shiftHeld: shift, isRepeat: repeats, keyCode: 48, now: now))
+        }
+        func typed(_ text: String, keyCode: Int64) -> SwitcherSession.Event {
+            .keyDown(SwitcherKeyEvent(kind: .other, keyCode: keyCode, typedText: text))
+        }
+        func arrow(_ kind: SwitcherKeyEvent.Kind) -> SwitcherSession.Event {
+            .keyDown(SwitcherKeyEvent(kind: kind))
+        }
+
+        // MARK: a session opens on the toggle target
+
+        var session = SwitcherSession()
+        let openEffects = session.apply(.begin(start(list)), environment: gridEnvironment).effects
+        check(session.isActive, "beginning a session opens it")
+        check(session.visibleItems.map(\.id) == ["w:1", "w:2", "w:3", "w:4"],
+              "a session lists the front window first")
+        check(session.selectedIndex == 1,
+              "a session opens on the toggle target, one step past the front window")
+        check(session.itemCount == 4, "a session counts every window it opened with")
+        check(Array(openEffects.prefix(4)) == [.publishSession, .recomputeLayouts,
+                                               .seedPreviews, .publishSelection],
+              "a session publishes its list and measures the layout before publishing the selection")
+        check(openEffects.contains(.schedulePanel) && openEffects.contains(.refreshPreviews),
+              "a session that is still held asks for the panel and fresh previews")
+
+        // MARK: holding the shortcut and tabbing
+
+        check(session.apply(tab(), environment: gridEnvironment).swallowsEvent,
+              "a key the switcher owns never reaches the app underneath")
+        check(session.selectedIndex == 2, "Tab steps forward")
+        _ = session.apply(tab(), environment: gridEnvironment)
+        check(session.selectedIndex == 3, "Tab keeps stepping forward")
+        _ = session.apply(tab(), environment: gridEnvironment)
+        check(session.selectedIndex == 0, "a fresh Tab press wraps around the end of the list")
+        _ = session.apply(tab(), environment: gridEnvironment)
+        _ = session.apply(tab(), environment: gridEnvironment)
+        _ = session.apply(tab(), environment: gridEnvironment)
+        check(session.selectedIndex == 3, "Tab reaches the last entry")
+        _ = session.apply(tab(repeats: true), environment: gridEnvironment)
+        check(session.selectedIndex == 3, "a held Tab stops at the end instead of wrapping")
+        _ = session.apply(tab(shift: true), environment: gridEnvironment)
+        check(session.selectedIndex == 2, "Shift-Tab steps backward")
+        _ = session.apply(tab(shift: true), environment: gridEnvironment)
+        _ = session.apply(tab(shift: true), environment: gridEnvironment)
+        _ = session.apply(tab(shift: true), environment: gridEnvironment)
+        check(session.selectedIndex == 3, "Shift-Tab wraps around the start of the list")
+
+        // MARK: the Shift-back chord (issue #784)
+
+        session = opened(environment: gridEnvironment)
+        let shiftPress = session.apply(.modifiersChanged(shortcutModifiersHeld: true,
+                                                         shiftHeld: true, now: 100),
+                                       environment: gridEnvironment)
+        check(shiftPress.swallowsEvent, "the Shift that steps back is swallowed")
+        check(session.selectedIndex == 0, "pressing Shift mid-session steps back once")
+        _ = session.apply(tab(shift: true, at: 100.1), environment: gridEnvironment)
+        check(session.selectedIndex == 0,
+              "the Tab in the same Shift chord does not step a second time")
+        _ = session.apply(tab(shift: true, at: 100.2), environment: gridEnvironment)
+        check(session.selectedIndex == 3,
+              "a later Tab during the same Shift hold keeps walking the list")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.modifiersChanged(shortcutModifiersHeld: true, shiftHeld: true, now: 100),
+                          environment: gridEnvironment)
+        _ = session.apply(tab(shift: true, at: 100.4), environment: gridEnvironment)
+        check(session.selectedIndex == 3,
+              "a Tab past the chord window is a deliberate press and steps again")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.modifiersChanged(shortcutModifiersHeld: true, shiftHeld: true, now: 100),
+                          environment: gridEnvironment)
+        _ = session.apply(.modifiersChanged(shortcutModifiersHeld: true, shiftHeld: false, now: 101),
+                          environment: gridEnvironment)
+        _ = session.apply(.modifiersChanged(shortcutModifiersHeld: true, shiftHeld: true, now: 102),
+                          environment: gridEnvironment)
+        check(session.selectedIndex == 3, "releasing and pressing Shift again steps back again")
+        let held = session.apply(.modifiersChanged(shortcutModifiersHeld: true,
+                                                   shiftHeld: true, now: 103),
+                                 environment: gridEnvironment)
+        check(session.selectedIndex == 3 && !held.swallowsEvent,
+              "a modifier change with Shift already down changes nothing")
+
+        // MARK: releasing the shortcut commits
+
+        session = opened(environment: gridEnvironment)
+        let release = session.apply(.modifiersChanged(shortcutModifiersHeld: false,
+                                                      shiftHeld: false, now: 100),
+                                    environment: gridEnvironment)
+        check(!release.swallowsEvent, "the modifier release still reaches the app underneath")
+        check(release.effects == [.teardown,
+                                  .activate(item: bee, source: SwitcherSessionSource(item: front),
+                                            previousWindowID: 1)],
+              "releasing the shortcut raises the highlighted window and closes the session")
+        check(!session.isActive && session.visibleItems.isEmpty && session.itemCount == 0
+                && session.shortcut == nil && session.source == nil && session.startWindowID == nil
+                && session.selectedIndex == 0 && session.scope == .allApps
+                && session.searchQuery.isEmpty && !session.isSearchPinned
+                && session.closingItemIDs.isEmpty && !session.commitPendingForClose,
+              "committing leaves nothing of the session behind for the next one to inherit")
+
+        session = opened(environment: gridEnvironment)
+        check(session.apply(arrow(.escape), environment: gridEnvironment).effects == [.teardown],
+              "Esc closes the session without raising anything")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(tab(), environment: gridEnvironment)
+        check(session.apply(arrow(.enter), environment: gridEnvironment).effects.last
+                == .activate(item: cee, source: SwitcherSessionSource(item: front),
+                             previousWindowID: 1),
+              "Return raises the highlighted window")
+
+        // MARK: presses that land before the window list is ready
+
+        var pending = SwitcherPendingStarts()
+        let firstGeneration = pending.claim(shortcut: .switcherDefault, scope: .allApps, reversed: false)
+        check(firstGeneration != nil && pending.isPending,
+              "the first press claims the shortcut and schedules a session")
+        check(pending.claim(shortcut: .switcherDefault, scope: .allApps, reversed: false) == nil,
+              "a second press folds into the start already on its way")
+        check(pending.current?.additionalNavigation == 1,
+              "a press before the list is ready is replayed as one more step")
+        _ = pending.claim(shortcut: .switcherDefault, scope: .allApps, reversed: true)
+        check(pending.current?.additionalNavigation == 0,
+              "a reversed press before the list is ready steps back")
+        for _ in 0 ..< 200 {
+            _ = pending.claim(shortcut: .switcherDefault, scope: .allApps, reversed: false)
+        }
+        check(pending.current?.additionalNavigation == SwitcherPendingStarts.navigationLimit,
+              "a held shortcut cannot queue unbounded navigation")
+        check(pending.current?.scope == .allApps,
+              "folding a press keeps the scope the first press asked for")
+
+        pending = SwitcherPendingStarts()
+        let flickGeneration = pending.claim(shortcut: .switcherDefault, scope: .allApps, reversed: false)
+        pending.noteShortcutModifiersReleased()
+        check(pending.current?.commitWhenReady == true,
+              "letting go before the list is ready turns the start into a commit")
+        let afterFlick = pending.claim(shortcut: .switcherDefault, scope: .allApps, reversed: false)
+        check(afterFlick != nil && afterFlick != flickGeneration,
+              "a press after the flick was released starts a new session, not another step")
+        check(pending.current?.commitWhenReady == false && pending.current?.additionalNavigation == 0,
+              "the new start does not inherit the released one")
+        check(!pending.isCurrent(flickGeneration ?? 0),
+              "the released start's generation is stale and can never open a session")
+        check(pending.take(generation: flickGeneration ?? 0) == nil,
+              "a stale generation cannot take the pending start")
+        check(pending.take(generation: afterFlick ?? 0) != nil && !pending.isPending,
+              "starting a session consumes the pending press exactly once")
+
+        // A tap disabled by the window server, and the wake recovery behind
+        // it, drop the pending press: whatever was scheduled must find nothing.
+        pending = SwitcherPendingStarts()
+        let droppedGeneration = pending.claim(shortcut: .switcherDefault, scope: .allApps, reversed: false)
+        pending.clear()
+        check(!pending.isPending && !pending.isCurrent(droppedGeneration ?? 0),
+              "clearing the pending press strands the session that was scheduled for it")
+        let keptGeneration = pending.claim(shortcut: .switcherDefault, scope: .allApps, reversed: false)
+        pending.discard(generation: droppedGeneration ?? 0)
+        check(pending.isCurrent(keptGeneration ?? 0),
+              "discarding a stale generation leaves a newer press alone")
+
+        // MARK: the quick flick that never shows a panel
+
+        session = SwitcherSession()
+        let flickEffects = session.apply(.begin(start(list, commitWhenReady: true)),
+                                         environment: gridEnvironment).effects
+        check(flickEffects.contains(.commit),
+              "a shortcut released before the list was ready commits as soon as it is")
+        check(!flickEffects.contains(.schedulePanel) && !flickEffects.contains(.refreshPreviews),
+              "a quick flick never asks for a panel it would only flash")
+
+        session = SwitcherSession()
+        let replayForward = session.apply(.begin(start(list, additionalNavigation: 2)),
+                                          environment: gridEnvironment).effects
+        check(replayForward.contains(.replayNavigation(delta: 1, times: 2)),
+              "presses that landed early are replayed one step at a time")
+        session = SwitcherSession()
+        let replayBack = session.apply(.begin(start(list, additionalNavigation: -3)),
+                                       environment: gridEnvironment).effects
+        check(replayBack.contains(.replayNavigation(delta: -1, times: 3)),
+              "reversed presses that landed early are replayed backwards")
+
+        session = SwitcherSession()
+        _ = session.apply(.begin(start(list, reversed: true)), environment: gridEnvironment)
+        check(session.selectedIndex == 3, "a reversed session opens at the far end of the list")
+
+        // MARK: closing an item mid-session
+
+        session = opened(environment: gridEnvironment)
+        check(session.apply(.requestClose(cee), environment: gridEnvironment).effects
+                == [.closeWindow(cee)],
+              "closing a card asks the window to close")
+        check(session.closingItemIDs == ["w:3"], "a window on its way out is tracked")
+        check(session.apply(.requestClose(cee), environment: gridEnvironment).effects.isEmpty,
+              "a window already closing is never asked twice")
+        _ = session.apply(.closeConfirmed(itemID: "w:3", windowID: 3), environment: gridEnvironment)
+        check(session.itemCount == 3 && !session.visibleItems.contains(where: { $0.id == "w:3" })
+                && session.closingItemIDs.isEmpty,
+              "a confirmed close drops the window from the session")
+        check(session.isActive && session.selectedIndex == 1,
+              "closing a window below the selection leaves the session where it was")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.requestClose(cee), environment: gridEnvironment)
+        check(session.apply(.commit, environment: gridEnvironment).effects.isEmpty,
+              "letting go while a window is closing does not raise anything yet")
+        check(session.isActive && session.commitPendingForClose,
+              "the commit waits for the close to settle instead of being dropped")
+        let settled = session.apply(.closeConfirmed(itemID: "w:3", windowID: 3),
+                                    environment: gridEnvironment)
+        check(settled.effects.last == .activate(item: bee,
+                                                source: SwitcherSessionSource(item: front),
+                                                previousWindowID: 1),
+              "the waiting commit runs once the close settles")
+        check(!session.isActive, "the waiting commit also closes the session")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.select(index: 2), environment: gridEnvironment)
+        _ = session.apply(.requestClose(cee), environment: gridEnvironment)
+        _ = session.apply(.commit, environment: gridEnvironment)
+        let onClosed = session.apply(.closeConfirmed(itemID: "w:3", windowID: 3),
+                                     environment: gridEnvironment)
+        check(onClosed.effects.last == .activate(item: beeSecond,
+                                                 source: SwitcherSessionSource(item: front),
+                                                 previousWindowID: 1),
+              "letting go on a window that was just closed lands on what took its place")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.requestClose(cee), environment: gridEnvironment)
+        _ = session.apply(.closeAbandoned(itemID: "w:3"), environment: gridEnvironment)
+        check(session.closingItemIDs.isEmpty && session.itemCount == 4,
+              "a close that did not take leaves the window listed")
+        check(session.apply(.commit, environment: gridEnvironment).effects.last
+                == .activate(item: bee, source: SwitcherSessionSource(item: front),
+                             previousWindowID: 1),
+              "a session recovers from a close that did not take")
+
+        session = opened([front, bee], environment: gridEnvironment)
+        _ = session.apply(.requestClose(bee), environment: gridEnvironment)
+        _ = session.apply(.closeConfirmed(itemID: "w:2", windowID: 2), environment: gridEnvironment)
+        check(session.isActive && session.visibleItems.map(\.id) == ["w:1"] && session.selectedIndex == 0,
+              "closing a window leaves the session on what is left")
+
+        session = opened([front], environment: gridEnvironment)
+        _ = session.apply(.requestClose(front), environment: gridEnvironment)
+        _ = session.apply(.closeConfirmed(itemID: "w:1", windowID: 1), environment: gridEnvironment)
+        check(!session.isActive, "closing the only window ends the session")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.requestClose(front), environment: gridEnvironment)
+        _ = session.apply(.closeConfirmed(itemID: "w:1", windowID: 1), environment: gridEnvironment)
+        check(session.startWindowID == nil,
+              "a window the user just closed is not somewhere to send them back to")
+
+        // MARK: quitting an app mid-session
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.appTerminated(pid: 2), environment: gridEnvironment)
+        check(session.visibleItems.map(\.id) == ["w:1", "w:3"],
+              "quitting an app takes all of its windows out of the list")
+        check(session.selectedIndex == 1 && session.isActive,
+              "the session stays open on a window that is still there")
+        _ = session.apply(.appTerminated(pid: 1), environment: gridEnvironment)
+        check(session.selectedIndex == 0, "the selection follows the entries removed before it")
+        _ = session.apply(.appTerminated(pid: 3), environment: gridEnvironment)
+        check(!session.isActive, "quitting the last listed app ends the session")
+
+        // MARK: search
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(typed("c", keyCode: 8), environment: gridEnvironment)
+        check(session.searchQuery == "c" && session.visibleItems.map(\.id) == ["w:3"],
+              "typing narrows the list")
+        check(session.selectedIndex == 0, "the selection lands inside the narrowed list")
+        _ = session.apply(arrow(.delete), environment: gridEnvironment)
+        check(session.searchQuery.isEmpty && session.visibleItems.count == 4,
+              "deleting the query brings the list back")
+        check(session.selectedIndex == 2, "the selection stays on the window it was on")
+
+        session = opened(environment: gridEnvironment)
+        check(session.apply(typed("w", keyCode: 13), environment: gridEnvironment).effects
+                == [.closeSelectedWindow],
+              "W closes the highlighted window while the query is empty")
+        check(session.apply(typed("q", keyCode: 12), environment: gridEnvironment).effects
+                == [.quitSelectedApp],
+              "Q quits the highlighted window's app while the query is empty")
+        check(session.apply(.keyDown(SwitcherKeyEvent(kind: .other, isRepeat: true,
+                                                      keyCode: 13, typedText: "w")),
+                            environment: gridEnvironment).effects.isEmpty,
+              "holding W closes one window, not every window on the way")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(typed("b", keyCode: 11), environment: gridEnvironment)
+        _ = session.apply(typed("w", keyCode: 13), environment: gridEnvironment)
+        check(session.searchQuery == "bw",
+              "once a search is under way W is a letter of the query again")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(typed("s", keyCode: 1), environment: gridEnvironment)
+        check(session.searchQuery == "s" && !session.isSearchPinned,
+              "S is search text until the pin preference is on")
+        session = opened(environment: pinEnvironment)
+        check(session.apply(typed("s", keyCode: 1), environment: pinEnvironment).effects
+                == [.publishSession],
+              "S pins the search field open when the preference is on")
+        check(session.isSearchPinned && session.searchQuery.isEmpty,
+              "pinning the search field types nothing")
+        let pinnedRelease = session.apply(.modifiersChanged(shortcutModifiersHeld: false,
+                                                            shiftHeld: false, now: 100),
+                                          environment: pinEnvironment)
+        check(pinnedRelease.effects.isEmpty && session.isActive,
+              "a pinned search field survives the shortcut being released")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(typed(String(repeating: "b", count: 200), keyCode: 11),
+                          environment: gridEnvironment)
+        check(session.searchQuery.count == SwitcherSession.searchQueryLimit,
+              "the search query is capped")
+        _ = session.apply(typed("b", keyCode: 11), environment: gridEnvironment)
+        check(session.searchQuery.count == SwitcherSession.searchQueryLimit,
+              "typing past the cap adds nothing")
+        _ = session.apply(typed("\u{0001}", keyCode: 11), environment: gridEnvironment)
+        check(session.searchQuery.count == SwitcherSession.searchQueryLimit,
+              "control characters never reach the query")
+
+        // MARK: arrows and the window key
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.select(index: 0), environment: gridEnvironment)
+        _ = session.apply(arrow(.downArrow), environment: gridEnvironment)
+        check(session.selectedIndex == 3, "Down jumps a row of the grid")
+        _ = session.apply(arrow(.upArrow), environment: gridEnvironment)
+        check(session.selectedIndex == 0, "Up jumps back a row")
+        _ = session.apply(.select(index: 3), environment: gridEnvironment)
+        check(session.apply(arrow(.downArrow), environment: gridEnvironment).effects.isEmpty,
+              "Down on the last row leaves the selection where it is")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(arrow(.rightArrow), environment: gridEnvironment)
+        check(session.selectedIndex == 2, "Right steps forward")
+        _ = session.apply(arrow(.leftArrow), environment: gridEnvironment)
+        check(session.selectedIndex == 1, "Left steps back")
+
+        session = opened(environment: gridEnvironment)
+        _ = session.apply(.keyDown(SwitcherKeyEvent(kind: .windowShortcut(positionalMatch: true,
+                                                                          shiftIsNavigationModifier: true))),
+                          environment: gridEnvironment)
+        check(session.selectedIndex == 3,
+              "the window key hops between the selected app's own windows")
+
+        // MARK: the icon row steps app by app
+
+        session = opened(environment: iconRowEnvironment)
+        check(session.selectedIndex == 1, "the icon row opens on the next app")
+        _ = session.apply(tab(), environment: iconRowEnvironment)
+        check(session.selectedIndex == 2, "Tab in the icon row skips the app's second window")
+        _ = session.apply(arrow(.downArrow), environment: iconRowEnvironment)
+        check(session.selectedIndex == 2,
+              "Down in the icon row moves inside the app, and a lone window stays put")
+        _ = session.apply(.select(index: 1), environment: iconRowEnvironment)
+        _ = session.apply(arrow(.downArrow), environment: iconRowEnvironment)
+        check(session.selectedIndex == 3, "Down in the icon row walks the app's windows")
+
+        // MARK: a session that opened with nothing in front
+
+        session = SwitcherSession()
+        _ = session.apply(.begin(SwitcherSessionStart(windows: [bee, cee],
+                                                      frontmostPID: 9,
+                                                      shortcut: .switcherDefault)),
+                          environment: gridEnvironment)
+        check(session.isActive && session.selectedIndex == 0 && session.source == nil,
+              "a session with no window in front opens on the first entry (issue #324)")
+
+        // MARK: a window-scoped session
+
+        session = SwitcherSession()
+        _ = session.apply(.begin(SwitcherSessionStart(windows: [front, window(5, "Front", pid: 1)],
+                                                      frontmostPID: 1,
+                                                      shortcut: .switcherWindowDefault,
+                                                      scope: .frontmostApp)),
+                          environment: gridEnvironment)
+        check(session.scope == .frontmostApp && session.selectedIndex == 1,
+              "a window-scoped session opens on the front app's next window")
+        check(iconRowEnvironment.usesAppGroupsForMainShortcut(scope: .allApps)
+                && !SwitcherSessionEnvironment(iconRowMode: false, simpleMode: true,
+                                               mergeWindowsByApp: true, gridColumns: 3,
+                                               searchPinEnabled: false)
+                      .usesAppGroupsForMainShortcut(scope: .frontmostApp),
+              "the layout mode is answered from the scope the session actually has")
+        _ = session.apply(.keyDown(SwitcherKeyEvent(kind: .appsShortcutInWindowScope(
+                                                        shiftIsNavigationModifier: true))),
+                          environment: gridEnvironment)
+        check(session.scope == .frontmostApp && session.selectedIndex == 0,
+              "the Apps shortcut steps a window-scoped session instead of widening it")
+
+        // MARK: events that arrive after the session is gone
+
+        session = SwitcherSession()
+        check(session.apply(tab(), environment: gridEnvironment).swallowsEvent,
+              "a key claimed for a session that already ended stays swallowed")
+        check(session.apply(tab(), environment: gridEnvironment).effects.isEmpty,
+              "a key arriving after teardown changes nothing")
+        check(session.apply(.commit, environment: gridEnvironment).effects.isEmpty,
+              "committing with no session open does nothing")
+        check(session.apply(.select(index: 0), environment: gridEnvironment).effects.isEmpty,
+              "selecting with no session open does nothing")
+        check(session.apply(.requestClose(bee), environment: gridEnvironment).effects.isEmpty,
+              "closing with no session open does nothing")
+
+        return results
     }
 
     private static func formatSpecifiers(in format: String) -> [String] {
