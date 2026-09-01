@@ -617,8 +617,14 @@ final class SuperKeyService: ObservableObject {
             // every event (issue #1075). The flag that answers that is written
             // on the main thread while this callback runs on the tap's own
             // thread, so the question is asked where the answer lives.
+            // Accessibility is asked for the same reason: these are modifying
+            // taps, so a revoked grant has to end them rather than put them
+            // back. The re-arm never reaches `start()` and its own guard, so
+            // without this the taps stay disabled while `isRunning` still
+            // publishes true. The sync's dead-tap check then rebuilds, and
+            // `start()` clears the mapping and publishes not-running.
             DispatchQueue.main.async { [weak self] in
-                if SessionActivity.shared.isActive {
+                if SessionActivity.shared.isActive, AXIsProcessTrusted() {
                     self?.rearmDisabledTaps()
                 } else {
                     self?.syncWithPreferences()

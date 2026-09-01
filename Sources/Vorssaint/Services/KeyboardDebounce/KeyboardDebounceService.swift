@@ -44,7 +44,14 @@ final class KeyboardDebounceService: ObservableObject {
         let shouldRun = SessionActivitySupport.tapShouldRun(
             featureWanted: AppFeature.keyboardDebounce.isAvailable
                 && UserDefaults.standard.bool(forKey: DefaultsKey.keyboardDebounceEnabled),
-            accessibilityGranted: Permissions.shared.accessibility,
+            // Asked of the system and not of `Permissions.shared`, whose
+            // answer is a poll up to `PermissionPollingSupport.interval` old.
+            // The re-arm hands a revoked tap to this sync to be stopped, and a
+            // stale grant here would leave `shouldRun` true, so `start()` would
+            // see the thread still up, publish running and return — a tap that
+            // is neither back in the chain nor stopped. The mouse twin asks the
+            // same way.
+            accessibilityGranted: AXIsProcessTrusted(),
             sessionIsActive: SessionActivity.shared.isActive
         )
         let nextConfig = KeyboardDebounceConfig(

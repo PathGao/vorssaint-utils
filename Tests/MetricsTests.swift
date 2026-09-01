@@ -21765,10 +21765,13 @@ struct MetricsTests {
                 expect(code.contains("AXIsProcessTrusted()"),
                        "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
             }
-            if tapOwner.contains("KeyboardDebounce") {
+            if tapOwner.contains("KeyboardDebounce") || tapOwner.contains("SuperKey") {
                 // Its twin MouseClickDebounceService asks the same question in
                 // the same place: a modifying tap the window server disabled
-                // after Accessibility went away must end, not go back in.
+                // after Accessibility went away must end, not go back in. The
+                // Super Key taps modify too, and their re-arm never reaches
+                // start() and the guard it keeps, so asking there is the only
+                // place that catches a grant revoked mid-session.
                 expect(rearm.contains("AXIsProcessTrusted()"),
                        "\(tapOwner) does not put a modifying tap back after Accessibility is lost")
             }
@@ -21814,6 +21817,26 @@ struct MetricsTests {
                "every event tap owner invalidates its port on teardown, across "
                + "\(tapOwners) scanned owners: \(tapOwnersWithoutInvalidate)")
 
+        // The debounce re-arm hands a tap it declines to put back to the sync
+        // to be stopped, so the sync has to ask Accessibility the same way it
+        // does. `Permissions.shared.accessibility` is a poll up to
+        // PermissionPollingSupport.interval old; inside that window shouldRun
+        // stays true, start() finds the thread still up, publishes running and
+        // returns, and the tap is neither back in the chain nor stopped while
+        // isRunning says it is live. Lines are trimmed so the check is on the
+        // gate and not on indentation.
+        let keyboardDebounceCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/KeyboardDebounce/KeyboardDebounceService.swift",
+            encoding: .utf8)) ?? "")
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") }
+            .joined(separator: "\n")
+        let keyboardDebounceGate = keyboardDebounceCode
+            .components(separatedBy: "func syncWithPreferences() {").last?
+            .components(separatedBy: "let nextConfig").first ?? ""
+        expect(keyboardDebounceGate.contains("accessibilityGranted: AXIsProcessTrusted()"),
+               "the keyboard debounce gate asks the system for Accessibility, not the poll cache")
         // The recording tap is the one whose teardown is not the whole exit.
         // Whoever calls begin also calls ShortcutCapture.begin(), which switches
         // off HotkeyManager, Shelf, clipboard, sound output and the window
