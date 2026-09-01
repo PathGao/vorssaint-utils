@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "Disinstalla completamente Vorssaint",
         advancedUninstallConfirmTitle: "Disinstallare Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint cancellerà le autorizzazioni, rimuoverà le preferenze e si sposterà nel Cestino, poi si chiuderà. Questa azione non può essere annullata dall'app, ma resta nel Cestino finché non lo svuoti.",
+        advancedUninstallFailedTitle: "Disinstallazione interrotta",
+        advancedUninstallFailedBody: "Vorssaint non è riuscito a ripristinare un’impostazione di sistema che aveva cambiato: lo stop, la velocità delle ventole o l’accelerazione del mouse. Non è stato rimosso nulla. Riprova e consenti la richiesta della password, se compare.",
 
         launchAtLogin: "Apri al login",
         languageLabel: "Lingua",
@@ -207,6 +209,8 @@ extension Strings {
         switcherShortcutHintApps: "App",
         switcherShortcutHintWindows: "Finestre",
         switcherWindowShortcutCaption: "Apre un selettore per le finestre dell’app in primo piano. Con il selettore app aperto, salta tra le finestre dell’app selezionata.",
+        switcherTakeOverSystemShortcuts: "Sostituisci ⌘Tab e ⌘` di macOS",
+        switcherTakeOverSystemShortcutsCaption: "Disattiva le scorciatoie macOS corrispondenti solo mentre il selettore Vorssaint è attivo. Tutte le app aperte restano raggiungibili.",
         switcherAppearanceDelay: "Ritardo di comparsa",
         switcherAppearanceDelayCaption: "Per quanto tempo va tenuta premuta la scorciatoia prima che appaia il selettore.",
         switcherMergeTabs: "Mostra una voce per app",
