@@ -22045,7 +22045,8 @@ struct MetricsTests {
                 && rebuildCatalogCode.contains("builtLanguage != L10n.shared.language")
                 && rebuildCatalogCode.contains("emojiAccessibility != accessibility")
                 && rebuildCatalogCode.contains(
-                    "let accessibility = Permissions.shared.accessibility"),
+                    "let accessibility = Permissions.shared.accessibility")
+                && rebuildCatalogCode.contains("emojiAccessibility = accessibility"),
                "the kept emoji rows are built again when the language or Accessibility moved")
 
         if failures.isEmpty {
