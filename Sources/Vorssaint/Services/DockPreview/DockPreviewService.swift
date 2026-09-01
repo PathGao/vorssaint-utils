@@ -383,12 +383,9 @@ final class DockPreviewService: ObservableObject {
     /// switch re-confirmations read these) — everything else falls through to
     /// the full handler.
     private func discardFarMouseMove(axPoint: CGPoint) -> Bool {
-        // `tap` rather than `isRunning`: the two are the same fact — every
-        // assignment to `isRunning` sits next to the one that sets or clears
-        // `tap` — and reading the published property here costs a Combine
-        // subscript with a protocol conformance lookup on every mouse move the
-        // system produces, which is the largest slice of this callback's work.
-        guard tap != nil, !isVisible, pendingHover == nil else { return false }
+        // Nothing checks whether the tap is running: the only caller is the tap
+        // callback, which cannot run unless it is.
+        guard !isVisible, pendingHover == nil else { return false }
         let point = appKitPoint(fromAX: axPoint)
         guard !isNearDock(point) else { return false }
         lastAXMousePoint = axPoint
@@ -429,6 +426,8 @@ final class DockPreviewService: ObservableObject {
     }
 
     private func handleOnMain(type: CGEventType, axPoint: CGPoint) {
+        // Unlike discardFarMouseMove, both callers are deferred main-queue
+        // blocks, so the tap may have been torn down since one was enqueued.
         guard tap != nil else { return }
         switch type {
         case .mouseMoved:
