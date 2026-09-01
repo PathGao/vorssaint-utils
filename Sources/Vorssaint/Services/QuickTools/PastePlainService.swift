@@ -53,17 +53,39 @@ final class PastePlainService: ObservableObject {
         // is often promised: it is rendered only when asked for, so a busy
         // source app can hold the read for as long as it likes. Waiting for
         // that on the main thread is a frozen app (issue #887).
+        //
+        // Not waiting is only half of it: the lane has no time limit either,
+        // so the completion needs a deadline the way ClipboardHistoryService
+        // bounds its own capture read. A stalled provider that answers ten
+        // seconds later would otherwise paste into whatever app the user has
+        // moved to since, which trades the freeze for an unrequested paste.
+        // Both the deadline and the app the shortcut was pressed in are
+        // captured here, on the press, and checked in the completion.
+        let requestedAt = ProcessInfo.processInfo.systemUptime
+        let requestedApp = NSWorkspace.shared.frontmostApplication?.processIdentifier
         GeneralPasteboardAccess.shared.async({ Self.plainText(from: .general) }) { [weak self] plain in
-            guard let self, let plain, !plain.isEmpty else { return }
+            guard let self else { return }
+            guard QuickToolsSupport.pastePlainReadIsStillCurrent(
+                elapsed: ProcessInfo.processInfo.systemUptime - requestedAt,
+                requestedApp: requestedApp,
+                frontmostApp: NSWorkspace.shared.frontmostApplication?.processIdentifier)
+            else {
+                // Refusing silently would be the one refusal the user waited
+                // seconds for, so it reports like every other one.
+                NSSound.beep()
+                return
+            }
+            guard let plain, !plain.isEmpty else { return }
             self.pastePlain(plain)
         }
     }
 
     /// Pastes the already-read plain text, back on the main queue. The
     /// frontmost app is resolved here rather than before the read: both routes
-    /// below land in whichever app is in front when the paste happens, so an
-    /// app switch during the read has to move the target with it instead of
-    /// pressing a menu item in an app the user has left.
+    /// below land in whichever app is in front when the paste happens, so the
+    /// target has to be read at that moment and not earlier. What keeps that
+    /// from pasting into an app the user has switched to is the guard above,
+    /// which does not call this at all once the frontmost app has changed.
     private func pastePlain(_ plain: String) {
         // An app that ships its own matching-style paste does this better
         // than any synthesized ⌘V: the destination decides the typing

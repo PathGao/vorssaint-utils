@@ -219,6 +219,24 @@ enum QuickToolsSupport {
             && isEnabled
     }
 
+    /// How long a clipboard read may take before its answer is no longer
+    /// worth acting on. Short because this sits on a key press: past it the
+    /// user has already read the paste as failed.
+    static let pastePlainReadDeadline: TimeInterval = 2
+
+    /// Whether a clipboard read coming back off the serial lane may still
+    /// paste. The lane read has no time limit — promised content is rendered
+    /// by the app that owns it, which can stall for as long as it likes — so
+    /// a completion can arrive long after the shortcut was pressed, and by
+    /// then a paste is text the user did not ask for, in an app they may have
+    /// left (issue #893). Both halves have to hold: an app still frontmost
+    /// ten seconds later did not ask for this paste either.
+    static func pastePlainReadIsStillCurrent(elapsed: TimeInterval,
+                                             requestedApp: pid_t?,
+                                             frontmostApp: pid_t?) -> Bool {
+        elapsed < pastePlainReadDeadline && requestedApp == frontmostApp
+    }
+
     /// The payload as a web link for the optional open action. Limited to
     /// http and https on purpose: a scanned code must never be able to launch
     /// an arbitrary URL scheme (mailto, tel, custom app schemes and so on).

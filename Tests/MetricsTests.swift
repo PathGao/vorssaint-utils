@@ -21744,9 +21744,35 @@ struct MetricsTests {
         // "a paste is already in flight", and that one still pastes, so the
         // beep must not hang off the return value. Two beeps are left in the
         // file: the Accessibility guard, and didFail.
-        expect(pastePlainCode.components(separatedBy: "NSSound.beep()").count - 1 == 2
+        expect(pastePlainCode.components(separatedBy: "NSSound.beep()").count - 1 == 3
                 && pastePlainTransientPaste.contains("didFail: { NSSound.beep() }"),
                "a plain-text paste coalesced into one already running does not beep")
+        // The lane read has no time limit, so its completion cannot be
+        // trusted to still be wanted: it is abandoned once it is late or the
+        // user has moved to another app, and the target pid is still read
+        // inside the completion so a paste that does run lands where the
+        // press did.
+        expect(pastePlainCode.contains("QuickToolsSupport.pastePlainReadIsStillCurrent")
+                && pastePlainCode.contains("ProcessInfo.processInfo.systemUptime")
+                && pastePlainCode.contains(
+                    "NSWorkspace.shared.frontmostApplication?.processIdentifier"),
+               "a late clipboard read is abandoned instead of pasted into the app now in front")
+        expect(QuickToolsSupport.pastePlainReadIsStillCurrent(elapsed: 0.05,
+                                                             requestedApp: 501,
+                                                             frontmostApp: 501),
+               "a prompt read pastes into the app the shortcut was pressed in")
+        expect(!QuickToolsSupport.pastePlainReadIsStillCurrent(elapsed: 10,
+                                                              requestedApp: 501,
+                                                              frontmostApp: 501),
+               "a read that answers long after the press is abandoned in that app too")
+        expect(!QuickToolsSupport.pastePlainReadIsStillCurrent(elapsed: 0.05,
+                                                              requestedApp: 501,
+                                                              frontmostApp: 733),
+               "a read landing after an app switch does not paste into the new app")
+        expect(QuickToolsSupport.pastePlainReadIsStillCurrent(elapsed: 0.05,
+                                                             requestedApp: nil,
+                                                             frontmostApp: nil),
+               "no frontmost app at the press and none at the answer is not an app switch")
 
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")
