@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "Vorssaint'i tamamen kaldır",
         advancedUninstallConfirmTitle: "Vorssaint kaldırılsın mı?",
         advancedUninstallConfirmBody: "Vorssaint izinlerini temizleyecek, tercihlerini kaldıracak ve Çöp Sepeti'ne taşınıp kapanacak. Bu işlem uygulama içinden geri alınamaz, ama Çöp Sepeti'ni boşaltana kadar orada kalır.",
+        advancedUninstallFailedTitle: "Kaldırma durduruldu",
+        advancedUninstallFailedBody: "Vorssaint değiştirdiği bir sistem ayarını geri alamadı: uyku, fan hızı veya fare hızlandırması. Hiçbir şey silinmedi. Yeniden deneyin ve parola istenirse izin verin.",
 
         launchAtLogin: "Oturum açınca başlat",
         languageLabel: "Dil",
@@ -207,6 +209,8 @@ extension Strings {
         switcherShortcutHintApps: "Uygulamalar",
         switcherShortcutHintWindows: "Pencereler",
         switcherWindowShortcutCaption: "Ön plandaki uygulamanın pencereleri için bir değiştirici açar. Uygulama değiştirici açıkken seçili uygulamanın pencereleri arasında geçiş yapar.",
+        switcherTakeOverSystemShortcuts: "macOS ⌘Tab ve ⌘` kısayollarını değiştir",
+        switcherTakeOverSystemShortcutsCaption: "Eşleşen macOS uygulama ve pencere kısayollarını yalnızca Vorssaint değiştiricisi etkinken kapatır. Çalışan tüm uygulamalara erişim korunur.",
         switcherAppearanceDelay: "Görünme gecikmesi",
         switcherAppearanceDelayCaption: "Değiştirici görünmeden önce kısayolun ne kadar basılı tutulacağı.",
         switcherMergeTabs: "Uygulama başına bir giriş göster",

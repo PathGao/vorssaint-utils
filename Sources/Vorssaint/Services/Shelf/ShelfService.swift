@@ -172,8 +172,8 @@ final class ShelfService: ObservableObject {
     private var dockDwellStart: TimeInterval?
     /// The global monitor cannot see every way a drag ends (drops on our own
     /// windows, cancelled drags, mouse-ups the drag machinery consumes), so a
-    /// small timer watches the physical button while a drag holds the docked
-    /// shelf up. Alive only during a drag.
+    /// small timer watches the physical button and advances hover dwells after
+    /// pointer movement stops. Alive only during a drag.
     private var dockedWatchdog: Timer?
     /// Set when the shortcut or a menu opens an empty shelf on purpose, so it
     /// shows even with nothing in it yet. Items keep it up on their own.
@@ -432,7 +432,7 @@ final class ShelfService: ObservableObject {
                     self.handleDragForDock(event)
                 }
                 if defaults.bool(forKey: DefaultsKey.shelfEdgeDragEnabled) {
-                    self.handleDragForEdge(event)
+                    self.handleDragForEdge(at: event.timestamp)
                 }
                 // Every open gesture gets the button watchdog, not just one
                 // that engaged the drop zone: a mouse-up swallowed by the
@@ -630,9 +630,18 @@ final class ShelfService: ObservableObject {
         dockedEndWork = nil
         var changed = false
         if !dockedDragActive { dockedDragActive = true; changed = true }
+        if updateDockedProximity(at: event.timestamp) { changed = true }
 
+        startDockedWatchdog()
+        if changed { scheduleDockedSync() }
+    }
+
+    /// Advances the hover dwell from both drag events and the drag watchdog.
+    /// A user can stop moving immediately after entering the pill, so relying
+    /// on another dragged event would leave the 150 ms dwell unfinished.
+    private func updateDockedProximity(at now: TimeInterval) -> Bool {
+        var changed = false
         let mouse = NSEvent.mouseLocation
-        let now = event.timestamp
         let anchor = statusItemFrameProvider?()
         let screen = anchor.flatMap { rect in
             NSScreen.screens.first { $0.frame.intersects(rect) }
@@ -664,9 +673,7 @@ final class ShelfService: ObservableObject {
                 dockDwellStart = nil
             }
         }
-
-        startDockedWatchdog()
-        if changed { scheduleDockedSync() }
+        return changed
     }
 
     /// The drag ended. Drop the drag state; if a drop landed the shelf now has
@@ -695,35 +702,44 @@ final class ShelfService: ObservableObject {
     /// Ends the drag state even when no mouse-up ever reaches the global
     /// monitor: the drag machinery can consume it, the drop may land on one of
     /// our own windows, or the drag may be cancelled. The physical button is
-    /// the one truth that survives all of those.
+    /// the one truth that survives all of those. The same tick also completes
+    /// a dock or edge dwell after the pointer comes to rest.
     private func startDockedWatchdog() {
         guard dockedWatchdog == nil else { return }
-        dockedWatchdog = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+        dockedWatchdog = Timer.scheduledTimer(
+            withTimeInterval: min(ShelfDockDragSupport.dwell, ShelfEdgeDragSupport.dwell),
+            repeats: true
+        ) { [weak self] _ in
             guard let self else { return }
             guard self.dockedDragActive || self.sawGestureStart else {
                 self.dockedWatchdog?.invalidate()
                 self.dockedWatchdog = nil
                 return
             }
-            if !CGEventSource.buttonState(.combinedSessionState, button: .left) {
+            guard CGEventSource.buttonState(.combinedSessionState, button: .left) else {
                 self.closeDragGesture()
                 self.endDockedDrag()
                 self.endEdgePeekDrag()
+                return
             }
+            let now = ProcessInfo.processInfo.systemUptime
+            if self.dockedDragActive, self.updateDockedProximity(at: now) {
+                self.scheduleDockedSync()
+            }
+            self.handleDragForEdge(at: now)
         }
         dockedWatchdog?.tolerance = 0.05
     }
 
     /// A qualifying drag held near a screen's left or right edge for a short
     /// dwell peeks the classic panel in from that side, offset mostly off
-    /// screen. Once peeking, this same function checks retreat on every
-    /// later drag event instead of considering a new trigger, since by then
+    /// screen. Once peeking, this same function checks retreat on every drag
+    /// event or watchdog tick instead of considering a new trigger, since by then
     /// `isVisible` is already true and would otherwise block the check.
-    private func handleDragForEdge(_ event: NSEvent) {
+    private func handleDragForEdge(at now: TimeInterval) {
         guard edgeFeatureOn, automaticOpenAllowed, !isInternalDragActive, isContentDragActive()
         else { return }
         let mouse = NSEvent.mouseLocation
-        let now = event.timestamp
         if let edgePeekMatch {
             // The panel's own on-screen strip sits well within retreatDistance
             // of the edge by construction (its width is a fraction of the
@@ -1985,6 +2001,11 @@ final class ShelfService: ObservableObject {
     /// thumbnails touch the disk, and this runs at launch), merges it with
     /// anything added in the meantime, then sweeps payload files that lost
     /// their item (crash between write and save, or dropped at sanitizing).
+    /// A blob this build cannot read whole — one that will not decode at all,
+    /// and one that decoded with entries dropped — skips both the save-back
+    /// and the sweep: it is a store this build cannot read, not a shelf the
+    /// user emptied, and the entries it dropped still own payload files that
+    /// the blob it kept still points at.
     private func restoreItems() {
         let sweepCutoff = Date()
         let data = UserDefaults.standard.data(forKey: DefaultsKey.shelfItems)
@@ -1996,8 +2017,9 @@ final class ShelfService: ObservableObject {
             // NSWorkspace and SF Symbols, which are only safe on the main
             // thread, so that step waits for the hop below.
             var sanitized: [ShelfPersistedItem] = []
-            if let data,
-               let decoded = try? JSONDecoder().decode([ShelfPersistedItem].self, from: data) {
+            let store = ShelfPersistenceSupport.load(data)
+            switch store {
+            case let .items(decoded), let .partial(decoded):
                 sanitized = ShelfPersistenceSupport.sanitized(decoded, fileExists: { path in
                     if FileManager.default.fileExists(atPath: path) { return true }
                     // A file on an unmounted volume is not gone: the app can
@@ -2009,6 +2031,8 @@ final class ShelfService: ObservableObject {
                     }
                     return false
                 }, resolveBookmark: Self.resolvedBookmarkPath)
+            case .unreadable:
+                break
             }
             DispatchQueue.main.async {
                 let restored = sanitized.compactMap { self.restoredItem(from: $0) }
@@ -2024,6 +2048,14 @@ final class ShelfService: ObservableObject {
                     self.items = keptRestored + self.items
                     self.startContentThumbnails(for: keptRestored)
                 }
+                // A store this build could not read whole is not an empty
+                // shelf, and it is not the shelf either. Saving over it and
+                // sweeping the payload files it still references would turn
+                // entries this build cannot read into permanent loss — the
+                // dropped entry's file is still there and still referenced,
+                // unlike a `sanitized` drop, whose file is gone by definition.
+                // Both wait for a launch that can read the store again.
+                guard case .items = store else { return }
                 if ShelfPersistenceSupport.needsPersistAfterRestore(
                     restoredIsEmpty: restored.isEmpty,
                     liveItemCount: liveItemCount) {

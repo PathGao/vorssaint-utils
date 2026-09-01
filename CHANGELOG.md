@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Vorssaint adds quit and close protections, expands screen text recognition, capture magnifier, clipboard, Super key, Dock Preview, App Switcher, Window Layout, mouse controls and snippet controls, broadens app update and safe cleanup discovery, and hardens Command Bar shortcut capture, permission guide recovery, input session switching, Accessibility timeouts, Volume Mixer audio rendering, helper process attribution and teardown, Super key shutdown, process termination, update and uninstallation teardown, window handling, pasteboard restoration, sensor selection, Cleaning Mode unlock and favicon downloads. It also improves mouse scrolling feel, disk space and system monitor metrics, Settings, Scratchpad, Screenshot Editor, floating panels and several menu bar behaviors.
+Vorssaint adds quit and close protections, expands screen text recognition, capture magnifier, clipboard, Super key, Dock Preview, App Switcher, Window Layout, mouse controls, snippet controls and the disk image installer, broadens app update and safe cleanup discovery, and hardens shortcut capture and key caps, permission guide recovery, input session switching, Accessibility timeouts, Volume Mixer audio rendering, helper process attribution and teardown, Super key shutdown, process termination, update and uninstallation teardown, window handling and shared on-screen parsing, pasteboard restoration, the docked shelf's saved items, sensor selection, Cleaning Mode unlock, favicon downloads, the What's New showcase video download and stopping a recording. It also improves mouse scrolling feel, disk space and system monitor metrics, Command Bar and radial menu responsiveness, Settings, Scratchpad, Screenshot Editor, floating panels and several menu bar behaviors.
 
 ### Added
 - Settings now includes optional protections for Command-Q and Command-W with customizable hold duration, double press, extra modifier requirements and per-app scopes. Thanks to @RuanMD.
@@ -18,7 +18,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - Mouse button shortcuts can now switch Spaces or open Mission Control and App Exposé by holding an extra button and dragging. Thanks to @iltonandrew.
 - Window Layout now offers configurable window and screen gaps, so snapped windows can keep a preset distance from each other and from the screen edge. Thanks to @marcelharinck.
 - Eject all disks can now exclude specific drives in Settings, keeping backup drives and permanent storage mounted when ejecting other external disks.
-- Dock Preview now includes an option in Settings to quit an app from a thumbnail's × button instead of closing only that window. Thanks to @arefshal.
+- Dock Preview now includes an option in Settings to quit an app from a thumbnail's × button instead of closing only that window, and closes the preview as soon as the quit request is accepted. Thanks to @arefshal.
 - Copy Text from Screen now includes an option in Settings to remove line breaks and join recognized lines as a single paragraph with script-aware spacing. Thanks to @ywu73.
 - Clipboard history now offers retention limit options for 10,000 items and unlimited storage.
 - Clipboard history multi-selection now offers a bulk deletion button and supports Command-Delete and Option-Delete to remove selected items at once. Thanks to @ElPotara.
@@ -26,8 +26,11 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The App Switcher appearance delay can now be adjusted between 0 and 500 ms in Settings. Thanks to @yasinozmeen.
 - The App Switcher can now open on the screen under the pointer, the screen with the menu bar or the screen with the active window. Thanks to @noahjstewart.
 - Text snippets now include a visual date and time variable builder to configure formatting and timezones with live previews. Thanks to @tenbux.
+- The disk image installer now shows a progress card while it copies and verifies the app, asks whether to move the download to Trash and whether to show the installed app in Applications, and remembers both choices.
 
 ### Changed
+- Window controls, Dock clicks and mouse exceptions now share consistent on-screen window parsing while preserving their existing behavior. Thanks to @PathGao.
+- The Command Bar now stays responsive while typing, doing less work on each keystroke and reading the battery and memory levels in the background. Thanks to @PathGao.
 - System monitor process breakdowns now normalize per-app CPU usage against total active processor cores and cap grouped GPU and energy percentages at 100%. Thanks to @pergioa.
 - The docked shelf now uses a calibrated trigger area and requires a brief hover over the collapsed pill before expanding, preventing fast drags across the menu bar from opening the full card.
 - Smooth scrolling now feels consistent on standard and high-refresh displays, with adjustable speed and response and no lost wheel distance.
@@ -39,25 +42,37 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - App Updates now finds newer versions for other installed apps through a privacy-preserving public online catalog and opens those apps so their own updater remains in control.
 - The Uninstaller now finds more support files, containers, preference panes and plugins through verified app identifiers and signed ownership, searches nested vendor folders and opens every result in Finder. Name-related finds start unchecked.
 - Cleaner leftover scans now cover more preference panes and plugin folders while refusing nested app data, version folders, links and other ambiguous paths.
+- Quit on close now reads an app's windows once per switch instead of repeating the same scan for every focus change, so switching between apps with many windows costs less. Thanks to @PathGao.
+- The App Switcher and window previews now check whether an app's main and focused windows are already collected before evaluating their properties, skipping redundant Accessibility calls. Thanks to @PathGao.
+- Ending a process tree now reads the running process list once instead of looking up children process by process, so trees with many helpers close without the list stalling. Thanks to @PathGao.
+- The downloads organizer now confirms whether a file is staying on the same disk before filing it, and skips the second integrity read when the move is only a rename, so large videos are filed without being read twice. Thanks to @PathGao.
+- Cleaning now checks which apps are still installed once per run instead of once per leftover, and skips that check entirely when no leftover is selected, so a clean starts without scanning the application folders. Thanks to @PathGao.
+- GPU usage sampling no longer leaves a system resource behind on Macs with more than one graphics processor, and extra brightness now does less work on each refresh. Thanks to @PathGao.
+- The radial menu now checks only which extra mouse button opens a wheel when a side button is pressed, instead of loading every wheel and its icons on each event, so holding a side button and moving the mouse no longer risks dropped clicks. Thanks to @PathGao.
 
 ### Fixed
+- Super key now keeps modifiers active while holding non-autorepeating source keys such as Caps Lock remapped to F18. Thanks to @victoraraujo01.
+- Dock icon window cycling now rotates only across windows on the active Space instead of switching desktops unexpectedly. Thanks to @PathGao.
+- App Switcher can explicitly replace the matching macOS app and window switcher shortcuts, with crash recovery and a windowless-app fallback. Thanks to @BenjaminD2023.
+- The clipboard history and snippet search fields now yield to input method composition, allowing candidate navigation and confirmation in Chinese, Japanese and Korean. Thanks to @PathGao.
 - The Command Bar capture card now records Command Q instead of ignoring it. Thanks to @arsarsars1 and @jtprogru.
 - Volume Mixer now attributes helper audio processes whose system responsibility report is detached to their parent app, ensuring browsers and sandboxed communication apps are controllable.
 - Quit on close now captures windows created asynchronously after launch or on activation, ensuring apps that load their windows after process startup are quit when their last window is closed.
-- Shortcut fields and key display now read key caps from the active keyboard layout, so non-QWERTY layouts such as AZERTY display the keys actually pressed.
+- Shortcut fields and key displays now follow the active keyboard layout, resolve physical keycaps under input methods and support Command-specific mappings, so they show the keys actually pressed. Thanks to @PathGao.
 - The Uninstaller and Cleaner leftover scans now accept two-component bundle identifiers, allowing apps with two-part domain names to be selected and cleaned.
 - The permission guide card now offers a start-over option when an entry left by an earlier app build is stuck on in System Settings, and adds a relaunch button once Screen Recording is granted. Thanks to @andreisuslov.
 - Uninstallation now verifies that sleep was restored and asks for admin authorization if the passwordless restore fails, preventing closed-lid sleep prevention from remaining permanently disabled on the Mac. Thanks to @mugurc.
 - Screenshot quick preview no longer takes keyboard focus when presented, keeping keystrokes in the active app until the preview is clicked. Thanks to @iltonandrew.
 - Smooth Scroll and Scroll Inverter now step aside during fast user switching and resume on return, preventing background scroll stalls. Thanks to @iltonandrew.
+- Turning features on and off repeatedly no longer leaves unused keyboard and mouse listeners registered with the system for the rest of the session. Thanks to @PathGao.
 - Mouse navigation, button shortcuts and middle click now step aside outside the active login session or after Accessibility access is removed, preventing input stalls.
 - Focus follows mouse now leaves chosen apps alone and tracks the final pointer position during drags before changing focus.
 - Cleaning Mode now ends when its login session leaves the screen, preventing its input lock from affecting another active user.
-- Window capture now includes attached sheets, alerts and modal dialogs stacked on the clicked window instead of omitting them from the capture. Thanks to @iltonandrew.
+- Window capture now includes attached sheets, alerts and modal dialogs stacked on a window, including when part of it is off-screen, while preserving full-window capture when it crosses displays. Thanks to @iltonandrew.
 - Accessibility messaging now uses a single, consistent process-wide timeout floor instead of allowing separate features to overwrite the shared limit. Thanks to @PathGao.
 - App Switcher now enumerates windows on a background queue, keeping shortcuts and typing responsive even when apps delay Accessibility responses. Thanks to @MaximilianMauroner.
 - App Switcher now lists windows from apps that draw their own title bar or use borderless windows. Thanks to @PathGao.
-- Switching capture modes in the screen capture chooser now transitions smoothly without flickering or restarting the overlay session.
+- Switching capture modes in the screen capture chooser now keeps the selector stable and refreshes the capture source only when the new tool needs different screen or pointer handling.
 - Clicking long text previews in the menu panel's clipboard section now keeps the preview confined to its row instead of overflowing across neighboring items. Thanks to @andreisuslov.
 - Navigating clipboard history with arrow keys now prevents hovering pointers from fighting keyboard selection, keeps the list responsive during scrolling and renders large text previews without layout pauses. Thanks to @andreisuslov.
 - Moving a window to the next or previous display now preserves its point size and edge insets instead of scaling proportionally. Thanks to @DiogoDuart3.
@@ -72,9 +87,11 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - Text snippets now keep their trigger buffer when typed on the macOS Accessibility Keyboard. Thanks to @fermincasagrande.
 - Dock click actions and previews now stay behind fullscreen content and sample high-rate pointer movement without overloading the hover tap. Thanks to @iltonandrew.
 - Clipboard history now trims against the encoded file size before saving, preventing its store from becoming unreadable.
+- The docked shelf now keeps its saved items and the text and images it stored for them when its saved list cannot be read completely, instead of clearing the shelf and deleting those files. Thanks to @PathGao.
 - Kill Process now sorts consistently and revalidates the exact process before terminating it, preventing a recycled process identifier from targeting a different process.
 - Music launch blocking now fails open when its media-key listener is unavailable.
 - Radial Menu favicon downloads now stay on the link origin and reject cross-origin redirects, oversized payloads and unsafe image dimensions.
+- The What's New showcase video now stops downloading a response that never ends and releases the transfer as soon as the window closes. Thanks to @PathGao.
 - Feedback reports now show human-readable beta and update-channel diagnostics.
 - CPU temperature and Fan Control curves now use only mapped processor sensors, recognize M3 core readings and distinguish an unavailable helper from unsupported hardware.
 - Settings now enforces its design minimum size across window resizing, layout updates and window restore, preventing the sidebar and preferences from compressing or clipping.
@@ -91,6 +108,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The battery icon in the menu bar now preserves its rectangular aspect ratio when split into its own item instead of rendering as a square. Thanks to @Yahddyyp.
 - Cleaning Mode now uses a forgiving 6-second press window for the Escape unlock gesture and resets the count when modifier keys are pressed while wiping. Thanks to @iltonandrew.
 - Dock previews now move to the vacated screen edge when an auto-hiding Dock slides away instead of floating detached. Thanks to @iltonandrew.
+- Stopping a recording while you are still typing no longer risks a crash or a recording whose typing moments land in the wrong place. Thanks to @PathGao.
 
 ## [3.3.3-beta.3] - 2026-08-26
 
@@ -101,10 +119,6 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The Command Bar now offers a compact mode where the bar opens as a field alone and shows results once you type, with Down arrow revealing the full list. Under Command Bar, off by default. Thanks to @kobebrylant.
 - Command Bar script links can now be marked to run on their bare name without an argument, so scripts that work on the clipboard, selection, or files don't need a placeholder word typed after the name. Under Command Bar, off by default. Thanks to @rhukster.
 - Monitor alerts can now warn you when the battery stays above a temperature you choose. Under Monitor alerts, off by default. Thanks to @ywu73.
-- The capture magnifier now shows each screen pixel on a grid with the
-  pointer's position and color, zooms in further, moves one pixel at a time
-  with the arrow keys and copies the color with C without ending the capture.
-  It can also start already enabled from Settings. Thanks to @ruvelro.
 - Radial Menu now supports custom profiles with distinct wheel layouts, color themes, shortcuts, mouse triggers and starter presets, and website links can fetch their actual website icons on demand.
 
 ### Changed
@@ -153,7 +167,6 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - Sound Mixer now includes an option to hide inactive applications while keeping custom volume and output selections visible. Thanks to @ruvelro.
 - Sound Mixer now includes an option to use finer volume steps with keyboard volume keys and rollers. Thanks to @ruvelro.
 - Finder Cut & Paste now includes an option in Settings to show or hide the floating panel for staged files, and automatically hides the panel when Finder is in the background.
-- Dock Preview can now optionally quit an app from a thumbnail's × button instead of closing only that window.
 
 ### Changed
 - Command Bar settings no longer put a command key glyph in front of "Open the bar now", read as one paragraph rather than four separate cards, and name what the shortcut opens. Thanks to @PathGao.

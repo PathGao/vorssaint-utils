@@ -67,6 +67,10 @@ enum DefaultsKey {
     static let mouseButtonExceptions = "mouseButtonExceptions"
     static let middleClickExceptions = "middleClickExceptions"
     static let switcherEnabled = "switcherEnabled"
+    static let switcherTakeOverSystemShortcuts = "switcherTakeOverSystemShortcuts"
+    // Machine state, never exported: the system shortcuts this process owns,
+    // so a launch after a crash can restore them.
+    static let switcherNativeHotkeysSuppressed = "switcherNativeHotkeysSuppressed"
     static let switcherShortcut = "switcherShortcut"      // GlobalShortcut storage value
     static let switcherWindowShortcut = "switcherWindowShortcut" // GlobalShortcut storage value
     static let switcherIconRowMode = "switcherIconRowMode"
@@ -111,6 +115,8 @@ enum DefaultsKey {
     static let finderCutPasteShowHUD = "finderCutPasteShowHUD"
     static let finderRenameEnabled = "finderRenameEnabled"
     static let finderRenameShortcut = "finderRenameShortcut"
+    static let diskImageInstallerTrashesDownload = "diskImageInstallerTrashesDownload"
+    static let diskImageInstallerRevealsApp = "diskImageInstallerRevealsApp"
     static let finderPasteImageAsFile = "finderPasteImageAsFile"
     static let autoQuitEnabled = "autoQuitEnabled"
     static let autoQuitExceptions = "autoQuitExceptions"  // [bundle id] kept running
@@ -846,6 +852,7 @@ enum Defaults {
         DefaultsKey.mouseButtonExceptions: [String](),
         DefaultsKey.middleClickExceptions: [String](),
         DefaultsKey.switcherEnabled: true,
+        DefaultsKey.switcherTakeOverSystemShortcuts: false,
         DefaultsKey.switcherShortcut: "command:48",
         DefaultsKey.switcherWindowShortcut: GlobalShortcut.switcherWindowDefault.storageValue,
         DefaultsKey.switcherIconRowMode: false,
@@ -1183,6 +1190,8 @@ enum Defaults {
         DefaultsKey.pastePlainShortcut: GlobalShortcut.pastePlainDefault.storageValue,
         DefaultsKey.finderRenameEnabled: false,
         DefaultsKey.finderRenameShortcut: GlobalShortcut.finderRenameDefault.storageValue,
+        DefaultsKey.diskImageInstallerTrashesDownload: true,
+        DefaultsKey.diskImageInstallerRevealsApp: false,
         DefaultsKey.colorPickerShortcutEnabled: false,
         DefaultsKey.colorPickerShortcut: GlobalShortcut.colorPickerDefault.storageValue,
         DefaultsKey.colorPickerFormat: "hex",

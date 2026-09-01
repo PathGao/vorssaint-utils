@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "完全卸载 Vorssaint",
         advancedUninstallConfirmTitle: "卸载 Vorssaint？",
         advancedUninstallConfirmBody: "Vorssaint 将清除其权限、移除偏好设置并移到废纸篓，然后退出。此操作无法从 App 内撤销，但在你清倒废纸篓之前它仍会留在其中。",
+        advancedUninstallFailedTitle: "已停止卸载",
+        advancedUninstallFailedBody: "Vorssaint 无法还原它更改过的系统设置：睡眠、风扇转速或鼠标加速。没有移除任何内容。请重试，并在出现密码请求时允许。",
 
         launchAtLogin: "登录时启动",
         languageLabel: "语言",
@@ -207,6 +209,8 @@ extension Strings {
         switcherShortcutHintApps: "App",
         switcherShortcutHintWindows: "窗口",
         switcherWindowShortcutCaption: "打开最前 App 的窗口切换器。App 切换器打开时，在所选 App 的窗口之间跳转。",
+        switcherTakeOverSystemShortcuts: "接管 macOS 的 ⌘Tab 和 ⌘`",
+        switcherTakeOverSystemShortcutsCaption: "仅在 Vorssaint 切换器运行时停用对应的 macOS App 与窗口快捷键，并保留所有正在运行的 App 入口。",
         switcherAppearanceDelay: "显示延迟",
         switcherAppearanceDelayCaption: "按住快捷键多久后显示切换器。",
         switcherMergeTabs: "每个 App 仅显示一项",
