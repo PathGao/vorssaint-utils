@@ -287,7 +287,14 @@ final class WindowLayoutService: ObservableObject {
         guard let onScreenWindowIDs = onScreenWindowIDs() else { return nil }
         for pid in pids {
             let isFocusedOwnApp = pid == ownPID && hasFocusedResizableOwnWindow
-            guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }),
+            // One lookup by pid, not a fresh bridge of every running app on
+            // each turn of a list that can hold dozens of them. The edge-snap
+            // drag in this same file already resolves its app this way.
+            // isTerminated is explicit because runningApplications drops a dead
+            // pid on its own and NSRunningApplication(processIdentifier:) does
+            // not: it answers with a terminated instance.
+            guard let app = NSRunningApplication(processIdentifier: pid),
+                  !app.isTerminated,
                   isFocusedOwnApp
                     || (app.activationPolicy == .regular && !app.isHidden
                         && app.bundleIdentifier != ownBundleID)
