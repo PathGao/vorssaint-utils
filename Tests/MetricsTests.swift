@@ -21575,6 +21575,65 @@ struct MetricsTests {
                          "\(language.rawValue) quit protection modifier HUD format")
         }
 
+        // Loading the saved shelf keeps "nothing saved", "decoded to a list"
+        // and "will not decode" apart. Only the first two describe a shelf
+        // that may be saved over.
+        expect(ShelfPersistenceSupport.load(nil) == .items([]),
+               "no saved shelf blob restores as an empty shelf")
+        expect(ShelfPersistenceSupport.load(Data("[]".utf8)) == .items([]),
+               "a saved empty shelf restores as an empty shelf")
+        expect(ShelfPersistenceSupport.load(Data("not json".utf8)) == .unreadable,
+               "an unreadable shelf blob is not an empty shelf")
+        expect(ShelfPersistenceSupport.load(Data(#"{"items":[]}"#.utf8)) == .unreadable,
+               "a shelf blob that is not a list is not an empty shelf")
+
+        // One bad entry drops only itself: an unknown kind (written by a newer
+        // build) and a missing optional field must not cost the whole shelf.
+        let mixedShelfBlob = Data("""
+        [{"id":"8B3E1C2A-0000-4000-8000-000000000001","kind":"text","title":"keep","text":"body"},
+         {"id":"8B3E1C2A-0000-4000-8000-000000000002","kind":"telepathy","title":"unknown kind"},
+         {"kind":"link","title":"no id","url":"https://example.com"}]
+        """.utf8)
+        var mixedShelfTitles: [String] = []
+        if case let .items(loaded) = ShelfPersistenceSupport.load(mixedShelfBlob) {
+            mixedShelfTitles = loaded.map(\.title)
+        }
+        expect(mixedShelfTitles == ["keep", "no id"],
+               "an entry with an unknown kind drops itself, found \(mixedShelfTitles)")
+        expect(ShelfPersistenceSupport.load(Data(#"[{"kind":"telepathy"}]"#.utf8)) == .unreadable,
+               "a stored list where no entry survives is unreadable, not empty")
+
+        let batchShelfBlob = Data("""
+        [{"id":"8B3E1C2A-0000-4000-8000-000000000003","kind":"batch","title":"pile","children":[
+           {"id":"8B3E1C2A-0000-4000-8000-000000000004","kind":"text","title":"a","text":"a"},
+           {"id":"8B3E1C2A-0000-4000-8000-000000000005","kind":"telepathy","title":"b"},
+           {"id":"8B3E1C2A-0000-4000-8000-000000000006","kind":"text","title":"c","text":"c"}]}]
+        """.utf8)
+        var batchShelfChildTitles: [String] = []
+        if case let .items(loaded) = ShelfPersistenceSupport.load(batchShelfBlob) {
+            batchShelfChildTitles = (loaded.first?.children ?? []).map(\.title)
+        }
+        expect(batchShelfChildTitles == ["a", "c"],
+               "a bad child drops itself and its batch survives, found \(batchShelfChildTitles)")
+
+        // Guards the class, not the one instance that emptied shelves: the
+        // saved blob may only be read through `load`, which hands the caller a
+        // `.unreadable` case it has to answer for. A bare array decode brings
+        // back the all-or-nothing form, where any single bad entry restores an
+        // empty shelf that is then written back over the real one.
+        var rawShelfStoreDecoders: [String] = []
+        if let sources = FileManager.default.enumerator(atPath: "Sources") {
+            for case let path as String in sources where path.hasSuffix(".swift") {
+                let text = (try? String(contentsOfFile: "Sources/" + path, encoding: .utf8)) ?? ""
+                if text.contains("decode([ShelfPersistedItem]") {
+                    rawShelfStoreDecoders.append((path as NSString).lastPathComponent)
+                }
+            }
+        }
+        expect(rawShelfStoreDecoders.isEmpty,
+               "the saved shelf is read only through ShelfPersistenceSupport.load, "
+               + "found a bare decode in \(rawShelfStoreDecoders.sorted())")
+
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")
             exit(0)
