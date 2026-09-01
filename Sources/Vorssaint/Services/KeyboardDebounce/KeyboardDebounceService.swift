@@ -163,11 +163,8 @@ final class KeyboardDebounceService: ObservableObject {
             }
             guard !shouldStopBeforeCreatingTap else {
                 let shouldRestart = clearEventTapThread()
-                if shouldRestart {
-                    start()
-                } else {
-                    publishRunning(false, generation: generation)
-                }
+                publishRunning(false, generation: generation)
+                if shouldRestart { restartTapOnMain() }
                 return
             }
 
@@ -218,11 +215,8 @@ final class KeyboardDebounceService: ObservableObject {
                 state.reset()
             }
             let shouldRestart = clearEventTapThread()
-            if shouldRestart {
-                start()
-            } else {
-                publishRunning(false, generation: generation)
-            }
+            publishRunning(false, generation: generation)
+            if shouldRestart { restartTapOnMain() }
         }
     }
 
@@ -237,6 +231,18 @@ final class KeyboardDebounceService: ObservableObject {
             pendingStartAfterStop = false
             return shouldRestart
         }
+    }
+
+    /// Runs on the tap thread once its run loop has stopped. A restart that
+    /// `start` left pending goes back through `syncWithPreferences` instead of
+    /// straight to `start`: the session flag is written on the main thread, and
+    /// a tap rebuilt into a session that is no longer on screen stalls the
+    /// account that is (issue #1075). `isRunning` is published false first, so
+    /// the gap between the two is not a green tick over a tap that is down;
+    /// the sync publishes it true again if it starts one. Its twin
+    /// `MouseClickDebounceService.finishEventTapThread` hops the same way.
+    private func restartTapOnMain() {
+        DispatchQueue.main.async { [weak self] in self?.syncWithPreferences() }
     }
 
     /// Puts the tap back after the window server disabled it, unless a stop is

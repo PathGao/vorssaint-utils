@@ -235,7 +235,7 @@ final class SuperKeyService: ObservableObject {
             let runLoop = CFRunLoopGetCurrent()
             lifecycleLock.withLock { tapRunLoop = runLoop }
             guard !lifecycleLock.withLock({ shouldStopTapThread }) else {
-                if clearEventTapThread() { startOnMain() }
+                if clearEventTapThread() { restartTapOnMain() }
                 return
             }
 
@@ -329,7 +329,7 @@ final class SuperKeyService: ObservableObject {
                 if let mouseSource { CFRunLoopRemoveSource(runLoop, mouseSource, .commonModes) }
                 CFMachPortInvalidate(mouseTap)
             }
-            if clearEventTapThread() { startOnMain() }
+            if clearEventTapThread() { restartTapOnMain() }
         }
     }
 
@@ -349,8 +349,14 @@ final class SuperKeyService: ObservableObject {
         }
     }
 
-    private func startOnMain() {
-        DispatchQueue.main.async { [weak self] in self?.start() }
+    /// Runs on the tap thread once its run loop has stopped. A restart that
+    /// `start` left pending goes back through `syncWithPreferences` instead of
+    /// straight to `start`: the hop to the main thread was already here, but
+    /// `start` asks only `AXIsProcessTrusted()`, so a restart that crossed a
+    /// session handover rebuilt both taps into a session that is no longer on
+    /// screen (issue #1075). The sync is the only place the session gate lives.
+    private func restartTapOnMain() {
+        DispatchQueue.main.async { [weak self] in self?.syncWithPreferences() }
     }
 
     private func tapDidStart(_ startedTap: CFMachPort) {
