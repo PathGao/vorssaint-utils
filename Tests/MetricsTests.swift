@@ -21983,6 +21983,14 @@ struct MetricsTests {
         if let us = quitProtectionKeyCodes("com.apple.keylayout.US") {
             expect(us[.quit] == 12 && us[.close] == 13,
                    "US layout keeps Command-Q and Command-W on their own keys")
+            // The digit row and the numeric keypad type the same character, in
+            // both tables and on every layout installed here, so the reverse
+            // map has to choose between two key codes. It answers with the
+            // lower one rather than with whichever the dictionary hands back,
+            // which is what the resolution it replaced did by scanning upwards.
+            expect(GlobalShortcut.layoutKeyCode(for: "1", usesCommand: true) == Int64(kVK_ANSI_1)
+                    && GlobalShortcut.layoutKeyCode(for: "1", usesCommand: false) == Int64(kVK_ANSI_1),
+                   "a character two keys type resolves to the lower key code, not the keypad")
         }
         if let russian = quitProtectionKeyCodes("com.apple.keylayout.Russian") {
             expect(russian[.quit] == 12 && russian[.close] == 13,
