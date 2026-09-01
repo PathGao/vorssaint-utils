@@ -21763,8 +21763,11 @@ struct MetricsTests {
                        "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
                 // `Permissions.shared.accessibility` is polled on a timer, so a
                 // re-arm that refused on the live answer must not be undone by
-                // a sync that trusts the stale one.
-                expect(!code.contains("accessibilityGranted: Permissions.shared.accessibility"),
+                // a sync that trusts the stale one. The symbol is rejected
+                // outright rather than one call-site spelling of it, so a
+                // different argument label or a local reading it is caught too;
+                // none of the files behind this gate reads the mirror at all.
+                expect(!code.contains("Permissions.shared.accessibility"),
                        "\(tapOwner) asks Accessibility directly everywhere it decides to run a tap")
             }
             // Switching a tap off leaves the process owning it, which is what
