@@ -202,21 +202,49 @@ enum RecorderMotion {
     static let clickAnchorWindow: Double = 0.12
 
     static func anchorWeight(at time: Double, clicks: [Click]) -> Double {
+        var cursor = 0
+        return anchorWeight(at: time, clicks: clicks, cursor: &cursor)
+    }
+
+    /// Where a caller asking in time order got to in the click list, on the
+    /// same terms as the press punch below: a fresh cursor gives exactly what
+    /// a full scan gives, and carrying one is only valid when the times asked
+    /// for never go backwards. It may only step past a RELEASE, because a
+    /// press still weighs on every moment until its own release arrives.
+    /// `anchored` is the only caller that carries one, over its own frame
+    /// index, so the ordering is true by construction rather than by promise.
+    static func anchorWeight(at time: Double, clicks: [Click], cursor: inout Int) -> Double {
         var weight: Double = 0
         var pressedAt: Double?
-        for click in clicks {
+        // Where the next question may start from: everything before it is a
+        // press whose release faded out before this moment, which no later
+        // moment can reach back to either.
+        var settled = cursor
+        var index = cursor
+        while index < clicks.count {
+            let click = clicks[index]
+            // Nothing this late weighs on this moment, and with no button
+            // held there is no earlier press waiting for its release either.
+            if pressedAt == nil, click.time > time + clickAnchorWindow { break }
+            index += 1
             if click.isDown {
                 pressedAt = click.time
-            } else if let down = pressedAt {
-                if time >= down, time <= click.time { return 1 }
-                pressedAt = nil
+            } else {
+                if let down = pressedAt {
+                    if time >= down, time <= click.time { weight = 1 }
+                    pressedAt = nil
+                }
+                if click.time + clickAnchorWindow < time { settled = index }
             }
             let distance = abs(time - click.time)
             guard distance <= clickAnchorWindow else { continue }
             weight = max(weight, smoothstep(1 - distance / clickAnchorWindow))
         }
-        // A press with no matching release: the recording ended mid-drag.
-        if let down = pressedAt, time >= down { return 1 }
+        cursor = settled
+        // A press with no matching release: the recording ended mid-drag. Only
+        // the last click can be one — every release clears that state — so it
+        // is read off the list directly, whatever the scan started from.
+        if let last = clicks.last, last.isDown, time >= last.time { return 1 }
         return weight
     }
 
@@ -226,8 +254,9 @@ enum RecorderMotion {
                          frameRate: Int) -> [CGPoint] {
         guard !clicks.isEmpty, smoothed.count == raw.count else { return smoothed }
         let step = 1.0 / Double(max(1, frameRate))
+        var cursor = 0
         return smoothed.indices.map { index in
-            let weight = anchorWeight(at: Double(index) * step, clicks: clicks)
+            let weight = anchorWeight(at: Double(index) * step, clicks: clicks, cursor: &cursor)
             guard weight > 0 else { return smoothed[index] }
             return CGPoint(x: smoothed[index].x + (raw[index].x - smoothed[index].x) * weight,
                            y: smoothed[index].y + (raw[index].y - smoothed[index].y) * weight)

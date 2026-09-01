@@ -20394,8 +20394,8 @@ struct MetricsTests {
 
         // The composer's frame loop carries one cursor across every frame
         // instead of rescanning the whole click list per frame. That is only
-        // allowed to be faster, so both queries are compared bit for bit
-        // against the scans they replaced, over a list with bursts, held
+        // allowed to be faster, so every query is compared bit for bit
+        // against the scan it replaced, over a list with bursts, held
         // buttons, presses that are never released and one at the very end.
         var scanClicks: [RecorderMotion.Click] = []
         var scanSeed: UInt64 = 0x9E37_79B9_7F4A_7C15
@@ -20408,6 +20408,11 @@ struct MetricsTests {
             scanAt += Double((scanSeed >> 17) % 29) / 100 + 0.005
             scanClicks.append(RecorderMotion.Click(time: scanAt, isDown: false))
         }
+        // The recording stops mid-drag. Every query reads that off the last
+        // click rather than off the scan's own state, so a list that ends on
+        // a release leaves that branch untested.
+        scanAt += 0.5
+        scanClicks.append(RecorderMotion.Click(time: scanAt, isDown: true))
         func scannedPunchWeight(at time: Double) -> Double {
             var weight: Double = 0
             var pressedAt: Double?
@@ -20441,9 +20446,29 @@ struct MetricsTests {
             }
             return best
         }
+        func scannedAnchor(at time: Double) -> Double {
+            var weight: Double = 0
+            var pressedAt: Double?
+            for click in scanClicks {
+                if click.isDown {
+                    pressedAt = click.time
+                } else if let down = pressedAt {
+                    if time >= down, time <= click.time { return 1 }
+                    pressedAt = nil
+                }
+                let distance = abs(time - click.time)
+                guard distance <= RecorderMotion.clickAnchorWindow else { continue }
+                weight = max(weight, RecorderMotion.smoothstep(
+                    1 - distance / RecorderMotion.clickAnchorWindow))
+            }
+            if let down = pressedAt, time >= down { return 1 }
+            return weight
+        }
         var scanCursor = RecorderMotion.ClickCursor()
+        var anchorCursor = 0
         var punchMatches = true
         var ringMatches = true
+        var anchorMatches = true
         var freshMatches = true
         let scanFrames = Int((scanAt + 1) * 60)
         for frame in 0..<scanFrames {
@@ -20454,13 +20479,19 @@ struct MetricsTests {
             let carriedRing = RecorderMotion.ringProgress(at: time,
                                                           clicks: scanClicks,
                                                           cursor: &scanCursor)
+            let carriedAnchor = RecorderMotion.anchorWeight(at: time,
+                                                            clicks: scanClicks,
+                                                            cursor: &anchorCursor)
             let scannedPunch = 1 - (1 - RecorderMotion.pressPunchScale)
                 * scannedPunchWeight(at: time)
             if carriedPunch != scannedPunch { punchMatches = false }
             if carriedRing != scannedRing(at: time) { ringMatches = false }
+            if carriedAnchor != scannedAnchor(at: time) { anchorMatches = false }
             if RecorderMotion.pressScale(at: time, clicks: scanClicks) != scannedPunch
                 || RecorderMotion.ringProgress(at: time, clicks: scanClicks)
-                    != scannedRing(at: time) {
+                    != scannedRing(at: time)
+                || RecorderMotion.anchorWeight(at: time, clicks: scanClicks)
+                    != scannedAnchor(at: time) {
                 freshMatches = false
             }
         }
@@ -20468,7 +20499,36 @@ struct MetricsTests {
                "the cursor comparison covers a long recording and a busy click list")
         expect(punchMatches, "carrying the cursor gives the press punch the full scan gave")
         expect(ringMatches, "carrying the cursor gives the click ring the full scan gave")
+        expect(anchorMatches, "carrying the cursor gives the click anchor the full scan gave")
         expect(freshMatches, "a fresh cursor still answers exactly what the full scan answered")
+
+        // The anchor's only carried caller is `anchored` itself, so the blend
+        // it produces is compared against the same blend driven by the scan.
+        let anchorSmoothed = (0..<scanFrames).map {
+            CGPoint(x: Double($0 % 97) / 97, y: Double($0 % 61) / 61)
+        }
+        let anchorRaw = (0..<scanFrames).map {
+            CGPoint(x: Double($0 % 53) / 53, y: Double($0 % 89) / 89)
+        }
+        let blended = RecorderMotion.anchored(anchorSmoothed,
+                                              raw: anchorRaw,
+                                              clicks: scanClicks,
+                                              frameRate: 60)
+        // The same step `anchored` uses, to the bit: `n / 60` and
+        // `n * (1.0 / 60)` are not the same Double.
+        let anchorStep = 1.0 / 60.0
+        var blendMatches = blended.count == anchorSmoothed.count
+        for index in anchorSmoothed.indices {
+            let weight = scannedAnchor(at: Double(index) * anchorStep)
+            let expected = weight > 0
+                ? CGPoint(x: anchorSmoothed[index].x
+                            + (anchorRaw[index].x - anchorSmoothed[index].x) * weight,
+                          y: anchorSmoothed[index].y
+                            + (anchorRaw[index].y - anchorSmoothed[index].y) * weight)
+                : anchorSmoothed[index]
+            if blended[index] != expected { blendMatches = false }
+        }
+        expect(blendMatches, "the anchored path is the same one the per-frame scan produced")
 
         var carriedFocusCursor = 0
         var focusMatches = true
