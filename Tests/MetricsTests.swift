@@ -22023,6 +22023,31 @@ struct MetricsTests {
                    "\(pass) stores the whole sample before it decides whether the rows changed")
         }
 
+        // The emoji rows are the one list the catalog keeps between rebuilds,
+        // so whatever they read has to be in the test that decides to keep
+        // them. They read the language and Accessibility, and a grant that the
+        // guard did not watch would leave fifteen hundred rows warning about a
+        // permission the person just gave.
+        let emojiRowCode = commandBarCatalogLines.firstIndex {
+            isCodeLine($0) && $0.contains("static func emojiEntries(")
+        }.map {
+            commandBarCatalogLines[$0...].prefix(16).filter(isCodeLine).joined(separator: "\n")
+        } ?? ""
+        expect(emojiRowCode.contains("Permissions.shared.accessibility ? nil : .needsPermission"),
+               "an emoji row carries the Accessibility warning")
+        let rebuildCatalogParts = (commandBarCode
+            .components(separatedBy: "private func rebuildCatalog(")
+            .last ?? "").components(separatedBy: "\n    private func ")
+        let rebuildCatalogCode = rebuildCatalogParts.first ?? ""
+        expect(rebuildCatalogParts.count > 1,
+               "the Command Bar catalog rebuild finds the end of rebuildCatalog")
+        expect(rebuildCatalogCode.contains("emojiEntries = CommandBarCatalog.emojiEntries")
+                && rebuildCatalogCode.contains("builtLanguage != L10n.shared.language")
+                && rebuildCatalogCode.contains("emojiAccessibility != accessibility")
+                && rebuildCatalogCode.contains(
+                    "let accessibility = Permissions.shared.accessibility"),
+               "the kept emoji rows are built again when the language or Accessibility moved")
+
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")
             exit(0)

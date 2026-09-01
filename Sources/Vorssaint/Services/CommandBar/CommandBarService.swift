@@ -126,6 +126,11 @@ final class CommandBarService: ObservableObject {
     private var windowsLoadedAt: Date?
     private var menuEntries: [CommandBarEntry] = [] { didSet { foldedSections[.menus] = nil } }
     private var emojiEntries: [CommandBarEntry] = [] { didSet { foldedSections[.emoji] = nil } }
+    /// Whether Accessibility was granted when those rows were built, kept for
+    /// the same reason as the language below: an emoji row carries the
+    /// permission warning, and typing at the caret is what the permission is
+    /// for, so a grant has to reread them.
+    private var emojiAccessibility: Bool?
     /// The Mac's own Settings panes, scanned once per launch. The language
     /// they were built in comes with them, because the words they answer to
     /// are translated and a change of language has to reread them.
@@ -847,12 +852,16 @@ final class CommandBarService: ObservableObject {
 
     private func rebuildCatalog(index: Bool = true) {
         catalog = CommandBarCatalog.build(automationDenied: finderAutomationDenied)
-        // The emoji rows answer to translated words and to nothing else the
-        // catalog knows about, so they are only built again when the language
-        // moved: rebuilding them is fifteen hundred rows of folding.
-        if emojiEntries.isEmpty || builtLanguage != L10n.shared.language {
+        // The emoji rows answer to translated words and carry the
+        // Accessibility warning, and to nothing else the catalog knows about,
+        // so they are only built again when one of those two moved: rebuilding
+        // them is fifteen hundred rows of folding.
+        let accessibility = Permissions.shared.accessibility
+        if emojiEntries.isEmpty || builtLanguage != L10n.shared.language
+            || emojiAccessibility != accessibility {
             emojiEntries = CommandBarCatalog.emojiEntries(
                 bar: FeatureStrings.commandBar(L10n.shared.language))
+            emojiAccessibility = accessibility
         }
         builtLanguage = L10n.shared.language
         if index { indexEntries() }
