@@ -75,10 +75,14 @@ final class DockClickService {
         let minimizeEnabled = UserDefaults.standard.bool(forKey: DefaultsKey.dockClickMinimize)
         let hideEnabled = UserDefaults.standard.bool(forKey: DefaultsKey.dockClickHide)
         let cycleEnabled = UserDefaults.standard.bool(forKey: DefaultsKey.dockClickCycleWindows)
+        // Accessibility is asked of the system and not of `Permissions.shared`,
+        // whose answer is a poll up to `PermissionPollingSupport.interval` old.
+        // The re-arm hands a tap it declines to put back to this sync to be
+        // stopped, and a stale grant here would install it straight back.
         if SessionActivitySupport.tapShouldRun(
             featureWanted: AppFeature.dockClick.isAvailable
                 && (minimizeEnabled || hideEnabled || cycleEnabled),
-            accessibilityGranted: Permissions.shared.accessibility,
+            accessibilityGranted: AXIsProcessTrusted(),
             sessionIsActive: SessionActivity.shared.isActive
         ) {
             start()

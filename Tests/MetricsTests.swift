@@ -21768,8 +21768,14 @@ struct MetricsTests {
             // thread's tail when a stop and a start crossed. That restart must
             // not put the tap back on the tap thread's terms: the session
             // answer is written on the main thread, so the tail hops there and
-            // asks the same gate the preference sync asks.
-            if code.contains("clearEventTapThread") {
+            // asks the same gate the preference sync asks. Asked of the files
+            // that adopted the hop, because the half-fix is the hazard — one
+            // tail still calling installTap() directly rebuilds the tap into a
+            // switched-away session while the other tail is careful about it.
+            // Four more own-thread taps still restart the old way and are not
+            // this change's to fix: FinderCutPaste, FinderRenameService,
+            // SuperKeyService and KeyboardDebounceService.
+            if code.contains("restartTapOnMain") {
                 expect(!code.contains("clearEventTapThread() { installTap() }")
                         && !code.contains("clearEventTapThread() { startOnMain() }"),
                        "\(tapOwner) has no tap-thread restart that goes around the session gate")

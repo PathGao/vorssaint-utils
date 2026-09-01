@@ -432,6 +432,14 @@ final class AppSwitcher: ObservableObject {
         }
     }
 
+    /// Puts the tap back after the window server disabled it, unless a stop is
+    /// already on its way and the port is about to go. Main thread.
+    private func rearmDisabledTap() {
+        // Never resurrect a tap that removeTap is already tearing down.
+        let currentTap = lifecycleLock.withLock { shouldStopTapThread ? nil : tap }
+        if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
+    }
+
     /// Runs on the tap thread once its run loop has stopped. A restart that
     /// `installTap` left pending goes back through `syncWithPreferences`
     /// instead of straight to `installTap`: the session flag is written on the
@@ -488,19 +496,22 @@ final class AppSwitcher: ObservableObject {
     /// then the handful of keys typed while the panel is up.
     private func route(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            // Never resurrect a tap that removeTap is already tearing down.
-            let currentTap = lifecycleLock.withLock { shouldStopTapThread ? nil : tap }
-            if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
             routeLock.withLock { routePendingSessionStart = nil }
+            // A tap put straight back is a tap put back into whatever session
+            // is on screen now (issue #1075). The flag that answers that is
+            // written on the main thread and this callback runs on the tap's
+            // own thread, so the question is asked where the answer lives
+            // rather than read across the two, and the tap stays out of the
+            // chain until it is. Accessibility is asked in the same place and
+            // for the same reason as the sync: this tap modifies events, so a
+            // revoked grant has to end it rather than put it back.
             DispatchQueue.main.async { [weak self] in
-                // The session flag is written on the main thread, so this tap
-                // thread must not read it: the re-arm above is provisional and
-                // the answer is asked where it is written. A tap put back into
-                // a session that is no longer on screen stalls the account
-                // that is (issue #1075).
-                if !SessionActivity.shared.isActive { self?.syncWithPreferences() }
-                guard let self, self.sessionActive else { return }
-                self.cancelSession()
+                if self?.sessionActive == true { self?.cancelSession() }
+                if SessionActivity.shared.isActive, AXIsProcessTrusted() {
+                    self?.rearmDisabledTap()
+                } else {
+                    self?.syncWithPreferences()
+                }
             }
             return Unmanaged.passUnretained(event)
         }

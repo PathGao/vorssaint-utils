@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Vorssaint
 
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 import CoreGraphics
 
@@ -53,9 +54,13 @@ final class TextSnippetService {
         let hasWork = inputLock.withLock {
             !(immediateSnippets.isEmpty && delimiterSnippets.isEmpty)
         }
+        // Accessibility is asked of the system and not of `Permissions.shared`,
+        // whose answer is a poll up to `PermissionPollingSupport.interval` old.
+        // The re-arm hands a tap it declines to put back to this sync to be
+        // stopped, and a stale grant here would install it straight back.
         if SessionActivitySupport.tapShouldRun(
             featureWanted: enabled && hasWork,
-            accessibilityGranted: Permissions.shared.accessibility,
+            accessibilityGranted: AXIsProcessTrusted(),
             sessionIsActive: SessionActivity.shared.isActive
         ) {
             let libraryIsVisible = SnippetLibraryService.shared.isVisible
@@ -200,6 +205,13 @@ final class TextSnippetService {
         }
     }
 
+    /// Puts the tap back after the window server disabled it, unless a stop is
+    /// already on its way and the port is about to go. Main thread.
+    private func rearmDisabledTap() {
+        let currentTap = tapLifecycleLock.withLock { shouldStopTapThread ? nil : tap }
+        if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
+    }
+
     /// Runs on the tap thread once its run loop has stopped. A restart that
     /// `start` left pending goes back through `syncWithPreferences` instead of
     /// straight to `start`: the session flag is written on the main thread, and
@@ -240,14 +252,20 @@ final class TextSnippetService {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            let currentTap = tapLifecycleLock.withLock { shouldStopTapThread ? nil : tap }
-            if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
-            // The session flag is written on the main thread, so this callback
-            // must not read it: the re-arm above is provisional and the answer
-            // is asked where it is written. A tap put back into a session that
-            // is no longer on screen stalls the account that is (issue #1075).
+            // A tap put straight back is a tap put back into whatever session
+            // is on screen now (issue #1075). The flag that answers that is
+            // written on the main thread and this callback runs on the tap's
+            // own thread, so the question is asked where the answer lives
+            // rather than read across the two, and the tap stays out of the
+            // chain until it is. Accessibility is asked in the same place and
+            // for the same reason as the sync: this tap modifies events, so a
+            // revoked grant has to end it rather than put it back.
             DispatchQueue.main.async { [weak self] in
-                if !SessionActivity.shared.isActive { self?.syncWithPreferences() }
+                if SessionActivity.shared.isActive, AXIsProcessTrusted() {
+                    self?.rearmDisabledTap()
+                } else {
+                    self?.syncWithPreferences()
+                }
             }
             return Unmanaged.passUnretained(event)
         }
