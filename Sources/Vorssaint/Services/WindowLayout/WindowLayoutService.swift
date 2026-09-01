@@ -310,11 +310,7 @@ final class WindowLayoutService: ObservableObject {
         guard let onScreenWindowIDs = onScreenWindowIDs() else { return nil }
         for pid in pids {
             let isFocusedOwnApp = pid == ownPID && hasFocusedResizableOwnWindow
-            // One lookup by pid, not a fresh bridge of every running app on
-            // each turn of a list that can hold dozens of them. The edge-snap
-            // drag already resolves its app this way.
-            guard let app = NSRunningApplication(processIdentifier: pid),
-                  !app.isTerminated,
+            guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }),
                   isFocusedOwnApp
                     || (app.activationPolicy == .regular && !app.isHidden
                         && app.bundleIdentifier != ownBundleID)
@@ -759,16 +755,9 @@ final class WindowLayoutService: ObservableObject {
                                                       action: nil,
                                                       manualOverride: nil)
         showDirectionalIndicator(at: NSEvent.mouseLocation, action: nil)
-        // The gesture's own tap takes leftMouseDown and rightMouseDown, so a
-        // held mouse button puts the main run loop in event tracking and a
-        // default-mode timer stops firing: the indicator and the preview would
-        // freeze on the frame before the press. Common modes keep the 60 Hz
-        // feedback running for as long as the hotkey is held.
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) {
+        directionalTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) {
             [weak self] _ in self?.updateDirectionalGesture()
         }
-        directionalTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
         startDirectionalTap()
     }
 
