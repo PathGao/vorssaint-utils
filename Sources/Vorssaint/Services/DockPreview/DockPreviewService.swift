@@ -17,15 +17,7 @@ private func requestDockPreviewApplicationQuit(_ item: SwitcherItem) -> Bool {
 final class DockPreviewService: ObservableObject {
     static let shared = DockPreviewService()
 
-    @Published private(set) var isRunning = false {
-        didSet { tapIsRunning = isRunning }
-    }
-    /// The running state as a plain stored value, for the event tap to read.
-    /// The tap sees every mouse move on the system, and a `@Published` read is
-    /// a Combine subscript that runs a protocol conformance lookup each time,
-    /// which is the largest single slice of that callback's own work. The
-    /// observer above is the only writer, so the two cannot fall out of step.
-    private var tapIsRunning = false
+    @Published private(set) var isRunning = false
     @Published private(set) var blockedReason: DockPreviewBlockedReason?
     /// Whether the Dock currently uses auto-hide. Surfaced so the UI can warn
     /// that this still-beta feature is rougher in that mode (the native Dock
@@ -391,7 +383,12 @@ final class DockPreviewService: ObservableObject {
     /// switch re-confirmations read these) — everything else falls through to
     /// the full handler.
     private func discardFarMouseMove(axPoint: CGPoint) -> Bool {
-        guard tapIsRunning, !isVisible, pendingHover == nil else { return false }
+        // `tap` rather than `isRunning`: the two are the same fact — every
+        // assignment to `isRunning` sits next to the one that sets or clears
+        // `tap` — and reading the published property here costs a Combine
+        // subscript with a protocol conformance lookup on every mouse move the
+        // system produces, which is the largest slice of this callback's work.
+        guard tap != nil, !isVisible, pendingHover == nil else { return false }
         let point = appKitPoint(fromAX: axPoint)
         guard !isNearDock(point) else { return false }
         lastAXMousePoint = axPoint
@@ -432,7 +429,7 @@ final class DockPreviewService: ObservableObject {
     }
 
     private func handleOnMain(type: CGEventType, axPoint: CGPoint) {
-        guard isRunning else { return }
+        guard tap != nil else { return }
         switch type {
         case .mouseMoved:
             handleMouseMoved(axPoint)
