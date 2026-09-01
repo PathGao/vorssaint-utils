@@ -14,16 +14,14 @@ final class QuitProtectionHUD {
     /// The confirmation lines are localized and formatted with the shortcut
     /// symbol, so their rendered width is only known at show time. Widest of
     /// the shipped translations is ~300pt of text, well past what the fixed
-    /// 300pt panel left for it.
-    private static func fittingSize(title: String, detail: String) -> CGSize {
-        let text = max((title as NSString).size(withAttributes: [.font: ContentView.titleFont]).width,
-                       (detail as NSString).size(withAttributes: [.font: ContentView.detailFont]).width)
-        return CGSize(width: max(minimumSize.width, (text + textInset * 2).rounded(.up)),
-                      height: minimumSize.height)
+    /// 300pt panel left for it. The labels are asked rather than the strings
+    /// measured, so whatever inset their cells add is inside the answer.
+    private static func fittingSize(_ content: ContentView) -> CGSize {
+        CGSize(width: max(minimumSize.width, (content.textWidth + textInset * 2).rounded(.up)),
+               height: minimumSize.height)
     }
 
     func show(title: String, detail: String) {
-        size = Self.fittingSize(title: title, detail: detail)
         if panel == nil {
             let panel = NSPanel(contentRect: CGRect(origin: .zero, size: size),
                                 styleMask: [.borderless, .nonactivatingPanel],
@@ -43,8 +41,11 @@ final class QuitProtectionHUD {
         }
 
         guard let content = panel?.contentView as? ContentView else { return }
-        panel?.setContentSize(size)
+        // Fill the labels first: the width comes out of them, not out of a
+        // separate measurement of the same strings.
         content.update(title: title, detail: detail)
+        size = Self.fittingSize(content)
+        panel?.setContentSize(size)
         positionPanel()
         panel?.alphaValue = 1
         panel?.orderFrontRegardless()
@@ -69,19 +70,22 @@ final class QuitProtectionHUD {
     }
 
     private final class ContentView: NSView {
-        static let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        static let detailFont = NSFont.systemFont(ofSize: 10.5)
-
         private let title = NSTextField(labelWithString: "")
         private let detail = NSTextField(labelWithString: "")
+
+        /// Width the two labels need for what they currently hold, straight
+        /// from the cells that draw them.
+        var textWidth: CGFloat {
+            max(title.fittingSize.width, detail.fittingSize.width)
+        }
 
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
             wantsLayer = true
-            title.font = Self.titleFont
+            title.font = .systemFont(ofSize: 13, weight: .semibold)
             title.textColor = .white
             title.alignment = .center
-            detail.font = Self.detailFont
+            detail.font = .systemFont(ofSize: 10.5)
             detail.textColor = .white.withAlphaComponent(0.68)
             detail.alignment = .center
             addSubview(title)
