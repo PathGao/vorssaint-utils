@@ -21301,27 +21301,33 @@ struct MetricsTests {
         // clean compile. With -v it answers whether the certificate is trusted,
         // and a self-signed one never is: on a machine where codesign signs
         // with that identity happily, -v reports zero valid identities. Pinning
-        // that flag would send every build to the ad-hoc fallback this identity
-        // exists to prevent -- releases included, since CI imports the same
-        // self-signed certificate -- and would have setup-signing.sh delete and
-        // recreate a working identity on every run. So both scripts ask
-        // codesign, and unlock the dedicated keychain before they do: it is not
-        // the login keychain, so it is locked again after every login, and a
-        // locked one turns the probe, and then the build, into a GUI prompt for
-        // a password only setup-signing.sh knows.
+        // that flag would send every local build to the ad-hoc fallback this
+        // identity exists to prevent, and would have setup-signing.sh delete
+        // and recreate a working identity on every run. Releases are not
+        // affected: ci-setup-signing.sh imports a Developer ID certificate from
+        // a repository secret, and release.yml re-verifies the signature
+        // against that team's OU. So both scripts ask codesign, and unlock the
+        // dedicated keychain before they do: it is not the login keychain, so
+        // it is locked again after every login, and a locked one turns the
+        // probe, and then the build, into a GUI prompt for a password only
+        // setup-signing.sh knows.
         let buildScriptLines = buildScript.components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
-        let identityQueries = (buildScriptLines + signingSetupLines)
-            .filter { $0.contains("find-identity") }
-            .filter { $0.contains("$LEGACY_IDENTITY") || $0.contains("$IDENTITY") }
-        expect(!identityQueries.isEmpty,
-               "both scripts still look the stable identity up by name")
-        let trustQueries = identityQueries.filter { $0.contains("-v") }
-        expect(trustQueries.isEmpty,
-               "no lookup of the self-signed identity asks find-identity for valid "
-                + "identities only, found \(trustQueries.count) that do")
-        for (script, code) in [("build.sh", buildScriptLines.joined(separator: "\n")),
-                               ("Tools/setup-signing.sh", signingSetupCode)] {
+        // Asserted per script, not over the pair: a union is satisfied by one
+        // surviving line in either file, so deleting the lookup out of
+        // setup-signing.sh would pass on build.sh's.
+        for (script, lines) in [("build.sh", buildScriptLines),
+                                ("Tools/setup-signing.sh", signingSetupLines)] {
+            let code = lines.joined(separator: "\n")
+            let identityQueries = lines
+                .filter { $0.contains("find-identity") }
+                .filter { $0.contains("$LEGACY_IDENTITY") || $0.contains("$IDENTITY") }
+            expect(!identityQueries.isEmpty,
+                   "\(script) still looks the stable identity up by name")
+            let trustQueries = identityQueries.filter { $0.contains("-v") }
+            expect(trustQueries.isEmpty,
+                   "\(script) looks the self-signed identity up without asking find-identity "
+                    + "for valid identities only, found \(trustQueries.count) that do")
             expect(code.contains("unlock-keychain -p"),
                    "\(script) unlocks the dedicated signing keychain itself")
             expect(code.contains("codesign --force --sign"),
@@ -21329,7 +21335,7 @@ struct MetricsTests {
             // zsh keeps `status` as a second name for $?, and it is read-only:
             // `local status=1` aborts the script on the first call to the
             // function that declares it, so the probe never runs at all.
-            let readOnlyLocals = (script == "build.sh" ? buildScriptLines : signingSetupLines)
+            let readOnlyLocals = lines
                 .filter { line in
                     line.contains("local ")
                         && line.split(whereSeparator: { $0 == " " || $0 == "\t" })
@@ -21339,6 +21345,26 @@ struct MetricsTests {
                    "\(script) declares zsh's read-only `status` as a local, which aborts "
                     + "the script, found \(readOnlyLocals.count)")
         }
+
+        // Both unlocks pass a password literal of their own. If they drift the
+        // probe either fails its unlock and the build signs ad-hoc in silence,
+        // or reaches codesign against a locked keychain and raises the
+        // SecurityAgent dialog these unlocks exist to avoid. Pin the values
+        // against each other, not just the presence of the call.
+        let keychainPassword: (String, [String]) -> String? = { name, lines in
+            lines.compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("\(name)=\"") else { return nil }
+                return String(trimmed.dropFirst(name.count + 2).prefix { $0 != "\"" })
+            }.first
+        }
+        let buildKeychainPassword = keychainPassword("LEGACY_KEYCHAIN_PASSWORD", buildScriptLines)
+        let setupKeychainPassword = keychainPassword("KCPASS", signingSetupLines)
+        expect(buildKeychainPassword?.isEmpty == false
+                && buildKeychainPassword == setupKeychainPassword,
+               "build.sh and Tools/setup-signing.sh unlock the signing keychain with the same "
+                + "password, found \(buildKeychainPassword ?? "none") "
+                + "and \(setupKeychainPassword ?? "none")")
 
         // The signing probe is asked once and cached. Running the repair is the
         // only thing that changes its answer, so the cache has to be dropped

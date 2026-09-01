@@ -78,9 +78,10 @@ developer_id_identity() {
 # one failed a build with errSecInternalComponent; with -v it answers "is this
 # certificate trusted", and a self-signed one never is, so it reports zero valid
 # identities on a machine where codesign signs with that identity happily.
-# Deciding by either would send builds to the ad-hoc fallback this identity
-# exists to avoid — releases included, since CI imports the same self-signed
-# certificate. Ask codesign itself instead.
+# Deciding by either would send local builds to the ad-hoc fallback this
+# identity exists to avoid. Releases are not affected: Tools/ci-setup-signing.sh
+# imports a Developer ID certificate from a repository secret, and release.yml
+# re-verifies the signature against that team's OU. Ask codesign itself instead.
 #
 # The keychain is unlocked first: it is not the login keychain, so it is locked
 # again after every login and nothing else opens it. That is what made the first
