@@ -21725,6 +21725,24 @@ struct MetricsTests {
                          "\(language.rawValue) quit protection modifier HUD format")
         }
 
+        // MARK: A sleeping clock and a dropped identifier
+        let screenshotShareCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/QuickTools/ScreenshotShareService.swift",
+            encoding: .utf8)) ?? "").components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        expect(screenshotShareCode.contains("NSWorkspace.didWakeNotification"),
+               "share links recompute their expiry on wake, which their sleeping clock missed")
+        expect(QuickTogglesSupport.isExcluded(volumeName: "SD Card",
+                                              volumeUUID: "1234-5678-ABCD",
+                                              mountPath: "/Volumes/SD Card",
+                                              excludedVolumes: ["1234-5678-abcd"])
+                && !QuickTogglesSupport.isExcluded(volumeName: "SD Card",
+                                                   volumeUUID: nil,
+                                                   mountPath: "/Volumes/SD Card",
+                                                   excludedVolumes: ["1234-5678-abcd"]),
+               "an excluded volume UUID is honoured only when the caller hands the UUID over")
+
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")
             exit(0)
