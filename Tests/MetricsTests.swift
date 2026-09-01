@@ -7875,6 +7875,19 @@ struct MetricsTests {
             expect(false, "shelf items must encode and decode")
         }
 
+        // Every field at once, none left at its default. `CodingKeys` is written
+        // out by hand next to the stored properties, and a property missing from
+        // it is silently dropped by both the custom decoder and the synthesized
+        // encoder, so a ninth field added without a case would stop being saved
+        // and read with nothing else complaining.
+        let shelfFullItem = ShelfPersistedItem(id: UUID(), kind: .file, title: "t", text: "x",
+                                               url: "https://example.com/u", path: "/tmp/p",
+                                               bookmark: Data([1]), children: [])
+        let shelfFullRound = (try? JSONEncoder().encode(shelfFullItem))
+            .flatMap { try? JSONDecoder().decode(ShelfPersistedItem.self, from: $0) }
+        expect(shelfFullRound == shelfFullItem,
+               "every persisted shelf field survives an encode and decode round trip")
+
         expect(ShelfPersistenceSupport.sanitized([shelfFile, shelfText, shelfLink]) { _ in true }
                    == [shelfFile, shelfText, shelfLink],
                "healthy shelf items pass sanitizing untouched")
