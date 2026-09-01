@@ -104,8 +104,14 @@ private final class RecorderSession: NSObject, RecorderCaptureEngineDelegate {
             await engine.stop()
             return .streamFailed
         }
-        pointer.start()
-        typing.start()
+        // This method is nonisolated and async, so its body runs on the
+        // cooperative pool however main-actor the caller was (SE-0338). The
+        // two samplers install AppKit event monitors, which belong to the
+        // main thread's dispatch, so they are started and stopped there.
+        await MainActor.run {
+            pointer.start()
+            typing.start()
+        }
         return nil
     }
 
@@ -136,8 +142,7 @@ private final class RecorderSession: NSObject, RecorderCaptureEngineDelegate {
         } else {
             await engine.stop()
         }
-        let track = pointer.stop()
-        let typingTrack = typing.stop()
+        let (track, typingTrack) = await MainActor.run { (pointer.stop(), typing.stop()) }
         let end = CMClockGetTime(CMClockGetHostTimeClock())
         writerQueue.sync {}
         let written = await writer.finish(at: end)

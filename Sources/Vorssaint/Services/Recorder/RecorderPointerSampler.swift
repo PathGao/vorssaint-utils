@@ -10,7 +10,8 @@ import QuartzCore
 /// three reasons: it needs no permission at all, it costs about a hundred
 /// nanoseconds per sample, and a filter that runs offline wants its input on
 /// an even grid anyway. The presses come from a mouse-only global monitor,
-/// which is exact and, unlike key events, ungated.
+/// which is ungated unlike key events, and which stamps every press with the
+/// moment it happened rather than the moment it was handed over.
 ///
 /// Nothing here exists between recordings: the thread, the monitor and the
 /// buffer are all created in `start()` and gone after `stop()`.
@@ -67,8 +68,10 @@ final class RecorderPointerSampler {
             return self.generation
         }
 
-        // Mouse-only monitors need no Accessibility grant, and a press is
-        // never coalesced the way a move is, so these timestamps are exact.
+        // Mouse-only monitors need no Accessibility grant. The press carries
+        // its own moment, which is what gets recorded: the callback can be
+        // handed over late behind the main thread's own work, and a click
+        // ring that lands after the click is visible.
         clickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp]
         ) { [weak self] event in
@@ -162,7 +165,7 @@ final class RecorderPointerSampler {
     private func record(_ event: NSEvent, generation: Int) {
         lock.withLock {
             guard running, self.generation == generation else { return }
-            guard let time = pauseClock.eventTime(CACurrentMediaTime(), since: startedAt)
+            guard let time = pauseClock.eventTime(event.timestamp, since: startedAt)
             else { return }
             let isDown = event.type == .leftMouseDown || event.type == .rightMouseDown
             let click = RecorderMotion.Click(time: time, isDown: isDown)

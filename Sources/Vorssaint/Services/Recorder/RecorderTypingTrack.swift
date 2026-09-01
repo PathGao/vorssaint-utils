@@ -25,6 +25,7 @@ final class RecorderTypingSampler {
     private var startedAt: CFTimeInterval = 0
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private let lock = NSLock()
     private var times: [Double] = []
 
     init(pauseClock: RecorderPauseClock) {
@@ -48,14 +49,20 @@ final class RecorderTypingSampler {
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         globalMonitor = nil
         localMonitor = nil
-        return RecorderTypingTrack(times: times)
+        return lock.withLock {
+            let track = RecorderTypingTrack(times: times)
+            times.removeAll()
+            return track
+        }
     }
 
     private func record(_ event: NSEvent) {
         guard !event.isARepeat else { return }
-        let now = CACurrentMediaTime()
-        guard let time = pauseClock.eventTime(now, since: startedAt) else { return }
-        times.append(time)
+        // The key's own moment, not the moment the callback was scheduled:
+        // the main thread is busy redrawing the indicator while recording,
+        // and this timestamp starts an auto zoom in the finished video.
+        guard let time = pauseClock.eventTime(event.timestamp, since: startedAt) else { return }
+        lock.withLock { times.append(time) }
     }
 
     deinit {
