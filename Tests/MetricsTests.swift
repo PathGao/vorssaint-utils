@@ -20410,6 +20410,12 @@ struct MetricsTests {
                 if blockIsLocked.contains(true) { lockedOrigin += 1 } else { looseOrigin += 1 }
             }
         }
+        // The walk above is a brace counter, and it counts every `{`, including
+        // one inside a comment or a string. A single unbalanced push shifts the
+        // stack, so a `withLock` entry outlives its block and reports a loose
+        // append as a locked one - the check would go on passing while the thing
+        // it watches was gone.
+        expect(blockIsLocked.isEmpty, "\(samplerPath) parses to balanced braces")
         expect(samplerSource.contains("NSLock()") && lockedAppends > 0 && looseAppends == 0,
                "\(samplerPath) appends to its sampler buffer only under the lock")
         expect(lockedOrigin == 1 && looseOrigin == 0,
