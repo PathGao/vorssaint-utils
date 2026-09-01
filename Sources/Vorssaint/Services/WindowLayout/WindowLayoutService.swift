@@ -80,30 +80,53 @@ final class WindowLayoutService: ObservableObject {
     private let resizeGestureUpdateInterval: TimeInterval = 1.0 / 60.0
     private let edgeSnapSampleInterval: TimeInterval = 1.0 / 30.0
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain and stalls input for the account on screen. Hand every
+        // tap back on resign and build them again from the preferences on the
+        // way back in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     func syncWithPreferences() {
         let available = AppFeature.windowLayout.isAvailable
         let trusted = AXIsProcessTrusted()
+        let sessionIsActive = SessionActivity.shared.isActive
+        // Carbon hotkeys are registered per session, so the plain layout
+        // shortcuts need no session gate: they own no tap.
         let wantsShortcuts = available
             && UserDefaults.standard.bool(forKey: DefaultsKey.windowLayoutShortcutsEnabled)
             && trusted
         wantsShortcuts ? registerHotkeys() : unregisterHotkeys()
 
-        let wantsDirectional = available
-            && UserDefaults.standard.bool(forKey: DefaultsKey.windowDirectionalEnabled)
-            && trusted
+        // The directional hotkey is gated all the same, because holding it is
+        // what creates the third tap. Dropping the hotkey is how that tap stays
+        // out of a session it cannot serve.
+        let wantsDirectional = SessionActivitySupport.tapShouldRun(
+            featureWanted: available
+                && UserDefaults.standard.bool(forKey: DefaultsKey.windowDirectionalEnabled),
+            accessibilityGranted: trusted,
+            sessionIsActive: sessionIsActive
+        )
         wantsDirectional ? registerDirectionalHotkey() : unregisterDirectionalHotkey()
 
-        let wantsGesture = available
-            && UserDefaults.standard.bool(forKey: DefaultsKey.windowGestureEnabled)
-            && trusted
+        let wantsGesture = SessionActivitySupport.tapShouldRun(
+            featureWanted: available
+                && UserDefaults.standard.bool(forKey: DefaultsKey.windowGestureEnabled),
+            accessibilityGranted: trusted,
+            sessionIsActive: sessionIsActive
+        )
         wantsGesture ? startGestureTap() : stopGestureTap()
 
-        let wantsEdgeSnap = available
-            && UserDefaults.standard.bool(forKey: DefaultsKey.windowEdgeSnapEnabled)
-            && !WindowEdgeSnapSupport.isSystemTilingEnabled
-            && trusted
+        let wantsEdgeSnap = SessionActivitySupport.tapShouldRun(
+            featureWanted: available
+                && UserDefaults.standard.bool(forKey: DefaultsKey.windowEdgeSnapEnabled)
+                && !WindowEdgeSnapSupport.isSystemTilingEnabled,
+            accessibilityGranted: trusted,
+            sessionIsActive: sessionIsActive
+        )
         wantsEdgeSnap ? startEdgeSnapTap() : stopEdgeSnapTap()
     }
 
@@ -765,6 +788,30 @@ final class WindowLayoutService: ObservableObject {
     }
 
     private func observeDirectionalEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            let wanted = directionalSession != nil
+                && AppFeature.windowLayout.isAvailable
+                && UserDefaults.standard.bool(forKey: DefaultsKey.windowDirectionalEnabled)
+            let shouldRearm = SessionActivitySupport.tapShouldRun(
+                featureWanted: wanted,
+                accessibilityGranted: AXIsProcessTrusted(),
+                sessionIsActive: SessionActivity.shared.isActive
+            )
+            if shouldRearm, let directionalTap {
+                CGEvent.tapEnable(tap: directionalTap, enable: true)
+            } else {
+                // Invalidating the port from its own callback stack is unsafe;
+                // finish this callback fail-open, then drop the gesture and its
+                // tap. The sync also takes the hotkey away while the session is
+                // off screen, so no press can build the tap again.
+                DispatchQueue.main.async { [weak self] in
+                    self?.cancelDirectionalGesture()
+                    self?.syncWithPreferences()
+                }
+            }
+            return Unmanaged.passUnretained(event)
+        }
+
         guard var session = directionalSession else { return Unmanaged.passUnretained(event) }
 
         if type == .scrollWheel {
@@ -823,7 +870,10 @@ final class WindowLayoutService: ObservableObject {
                 hideEdgeSnapPreview(immediately: true)
                 return nil
             } else if keyCode == 53 { // Escape
-                cancelDirectionalGesture()
+                // Cancelling invalidates this very port, which is unsafe from
+                // the port's own callback stack. The edge-snap tap leaves its
+                // callback the same way.
+                DispatchQueue.main.async { [weak self] in self?.cancelDirectionalGesture() }
                 return nil
             }
         }
@@ -1016,8 +1066,24 @@ final class WindowLayoutService: ObservableObject {
     private func observeEdgeSnapEvent(type: CGEventType,
                                       event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let edgeSnapTap { CGEvent.tapEnable(tap: edgeSnapTap, enable: true) }
-            DispatchQueue.main.async { [weak self] in self?.cancelEdgeSnapTracking() }
+            let wanted = AppFeature.windowLayout.isAvailable
+                && UserDefaults.standard.bool(forKey: DefaultsKey.windowEdgeSnapEnabled)
+            let shouldRearm = SessionActivitySupport.tapShouldRun(
+                featureWanted: wanted,
+                accessibilityGranted: AXIsProcessTrusted(),
+                sessionIsActive: SessionActivity.shared.isActive
+            )
+            if shouldRearm, let edgeSnapTap {
+                CGEvent.tapEnable(tap: edgeSnapTap, enable: true)
+                DispatchQueue.main.async { [weak self] in self?.cancelEdgeSnapTracking() }
+            } else {
+                // Invalidating the port from its own callback stack is unsafe;
+                // finish this callback fail-open, then release the tap.
+                DispatchQueue.main.async { [weak self] in
+                    self?.stopEdgeSnapTap()
+                    self?.syncWithPreferences()
+                }
+            }
             return Unmanaged.passUnretained(event)
         }
         guard event.getIntegerValueField(.eventSourceUserData) != Self.syntheticEventMarker,
@@ -1461,8 +1527,25 @@ final class WindowLayoutService: ObservableObject {
         }
 
         let tapDisabled = type == .tapDisabledByTimeout || type == .tapDisabledByUserInput
-        if tapDisabled, let gestureTap {
-            CGEvent.tapEnable(tap: gestureTap, enable: true)
+        if tapDisabled {
+            let wanted = AppFeature.windowLayout.isAvailable
+                && UserDefaults.standard.bool(forKey: DefaultsKey.windowGestureEnabled)
+            let shouldRearm = SessionActivitySupport.tapShouldRun(
+                featureWanted: wanted,
+                accessibilityGranted: AXIsProcessTrusted(),
+                sessionIsActive: SessionActivity.shared.isActive
+            )
+            if shouldRearm, let gestureTap {
+                CGEvent.tapEnable(tap: gestureTap, enable: true)
+            } else {
+                // The decision below still hands a held press back to the app.
+                // Only after this callback returns is the port released, since
+                // invalidating it from its own callback stack is unsafe.
+                DispatchQueue.main.async { [weak self] in
+                    self?.stopGestureTap()
+                    self?.syncWithPreferences()
+                }
+            }
         }
 
         var chord: (button: WindowPointerGesture.Button, wantsResize: Bool)?

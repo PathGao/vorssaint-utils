@@ -8,7 +8,8 @@ import CoreGraphics
 
 /// Makes the green traffic-light button maximize in the current Space instead
 /// of entering macOS fullscreen. The event tap is installed only while the user
-/// has opted in and Accessibility is granted.
+/// has opted in, Accessibility is granted, and this login session is the one on
+/// screen.
 final class WindowMaximizer: ObservableObject {
     static let shared = WindowMaximizer()
 
@@ -25,12 +26,23 @@ final class WindowMaximizer: ObservableObject {
     private let frameTolerance: CGFloat = 4
     private let zoomAnimationDuration: TimeInterval = 0.22
 
-    private init() {}
+    private init() {
+        // A filter tap owned by a switched-away login session keeps its place
+        // in the chain and stalls input for the account on screen. Hand the tap
+        // back on resign and build it again from the preferences on the way in.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     func syncWithPreferences() {
         let wanted = AppFeature.windowMaximizer.isAvailable
             && UserDefaults.standard.bool(forKey: DefaultsKey.windowMaximizeEnabled)
-        if wanted, Permissions.shared.accessibility {
+        if SessionActivitySupport.tapShouldRun(
+            featureWanted: wanted,
+            accessibilityGranted: Permissions.shared.accessibility,
+            sessionIsActive: SessionActivity.shared.isActive
+        ) {
             start()
         } else {
             stop()
@@ -88,7 +100,23 @@ final class WindowMaximizer: ObservableObject {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            let wanted = AppFeature.windowMaximizer.isAvailable
+                && UserDefaults.standard.bool(forKey: DefaultsKey.windowMaximizeEnabled)
+            let shouldRearm = SessionActivitySupport.tapShouldRun(
+                featureWanted: wanted,
+                accessibilityGranted: AXIsProcessTrusted(),
+                sessionIsActive: SessionActivity.shared.isActive
+            )
+            if shouldRearm, let tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            } else {
+                // Invalidating the port from its own callback stack is unsafe;
+                // finish this callback fail-open, then release the tap.
+                DispatchQueue.main.async { [weak self] in
+                    self?.stop()
+                    self?.syncWithPreferences()
+                }
+            }
             return Unmanaged.passUnretained(event)
         }
 
