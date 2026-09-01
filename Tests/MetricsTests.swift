@@ -21747,16 +21747,25 @@ struct MetricsTests {
                 .joined(separator: "\n")
             expect(code.contains("SessionActivity.shared.onChange"),
                    "\(tapOwner) rebuilds its tap when the session comes back")
-            let rearm = code.components(separatedBy: "tapDisabledByTimeout")
-                .dropFirst().first?.components(separatedBy: "return").first ?? ""
-            expect(rearm.contains("SessionActivity.shared.isActive"),
-                   "\(tapOwner) does not re-arm a disabled tap into a switched-away session")
+            // A file can own several taps, so every re-arm is checked, not the
+            // first one the split happens to land on.
+            let rearms = code.components(separatedBy: "tapDisabledByTimeout").dropFirst()
+                .map { $0.components(separatedBy: "return").first ?? "" }
+            expect(!rearms.isEmpty
+                    && rearms.allSatisfy { $0.contains("SessionActivity.shared.isActive") },
+                   "\(tapOwner) does not re-arm any disabled tap into a switched-away session")
             if tapOwner.contains("MouseNavigation")
                 || tapOwner.contains("MouseButtonShortcut")
                 || tapOwner.contains("MiddleClick")
-                || tapOwner.contains("QuitProtection") {
+                || tapOwner.contains("QuitProtection")
+                || tapOwner.contains("Window") {
                 expect(code.contains("AXIsProcessTrusted()"),
                        "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
+                // `Permissions.shared.accessibility` is polled on a timer, so a
+                // re-arm that refused on the live answer must not be undone by
+                // a sync that trusts the stale one.
+                expect(!code.contains("accessibilityGranted: Permissions.shared.accessibility"),
+                       "\(tapOwner) asks Accessibility directly everywhere it decides to run a tap")
             }
             // Switching a tap off leaves the process owning it, which is what
             // the window server waits on; teardown must invalidate the port.

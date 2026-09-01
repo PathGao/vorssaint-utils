@@ -38,9 +38,13 @@ final class WindowMaximizer: ObservableObject {
     func syncWithPreferences() {
         let wanted = AppFeature.windowMaximizer.isAvailable
             && UserDefaults.standard.bool(forKey: DefaultsKey.windowMaximizeEnabled)
+        // `Permissions.shared.accessibility` is polled on a timer and lags a
+        // revoked grant. A timeout that refused to re-arm on
+        // `AXIsProcessTrusted()` then calls this, so reading the mirror here
+        // would start the tap straight back on the stale value.
         if SessionActivitySupport.tapShouldRun(
             featureWanted: wanted,
-            accessibilityGranted: Permissions.shared.accessibility,
+            accessibilityGranted: AXIsProcessTrusted(),
             sessionIsActive: SessionActivity.shared.isActive
         ) {
             start()
