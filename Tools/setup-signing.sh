@@ -13,7 +13,7 @@
 # requirement and drop every user's granted permissions. The name lives only in
 # the keychain and codesign output, never in anything the app shows.
 #
-# Free, offline, and idempotent (re-running is a no-op once the identity exists).
+# Free, offline, and idempotent (re-running is a no-op once a usable identity exists).
 # It does NOT replace Apple notarization: downloaded builds still show Gatekeeper's
 # "unverified developer" prompt on first launch. It only stabilizes the identity.
 #
@@ -25,7 +25,11 @@ IDENTITY="Vorssaint Utils Signing"
 KC="$HOME/Library/Keychains/vorssaint-signing.keychain-db"
 KCPASS="vorssaint-signing"
 
-if security find-identity -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
+# -v is what makes this idempotent rather than merely quiet: without it the
+# search also lists certificates that cannot sign, so a stale one left in the
+# keychain reports "already installed" and the repair build.sh just asked for
+# never happens — the build then signs ad-hoc and loses its grants anyway.
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
     echo "✓ Signing identity already installed."
     exit 0
 fi
@@ -61,7 +65,7 @@ security list-keychains -d user -s "$KC" ${=EXISTING}
 # Import succeeding is not evidence codesign can see it: read it back the same
 # way build.sh looks it up, so a broken search list fails here and not as a
 # silent ad-hoc fallback three builds later.
-security find-identity -p codesigning 2>/dev/null | grep -q "$IDENTITY" || {
+security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY" || {
     echo "✗ Identity imported but codesign cannot find it; keychain search list may be off." >&2
     exit 1
 }

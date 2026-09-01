@@ -21287,31 +21287,42 @@ struct MetricsTests {
         expect(runsSigningSetup,
                "an identity-less Developer build invokes Tools/setup-signing.sh itself")
 
+        let signingSetup = (try? String(contentsOfFile: "Tools/setup-signing.sh",
+                                         encoding: .utf8)) ?? ""
+        expect(!signingSetup.isEmpty, "the signing setup script reads back for its shape check")
+        let signingSetupLines = signingSetup.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
+        let signingSetupCode = signingSetupLines.joined(separator: "\n")
+
         // MARK: Signing identity checks only ever count identities that can sign
         // `security find-identity` without -v lists certificates that cannot
         // sign, an expired self-signed one included. Matching one of those made
-        // the script prefer an unusable identity over the ad-hoc fallback, and
+        // build.sh prefer an unusable identity over the ad-hoc fallback, and
         // codesign then failed the whole build with errSecInternalComponent --
         // on a machine whose only fault was a stale certificate left in the
-        // keychain. The flag is the contract here, so it is what is pinned.
-        let identityQueries = buildScript.components(separatedBy: "\n")
+        // keychain. setup-signing.sh asks the same question twice and both
+        // answers matter: the front-door check decides whether the repair runs
+        // at all, and the post-import read-back decides whether the new
+        // identity counts as installed. Either one reading a dead certificate
+        // as usable puts the build back on the failing path. The flag is the
+        // contract here, so it is what is pinned, in both scripts.
+        let buildScriptQueries = buildScript.components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
             .filter { $0.contains("find-identity") }
-        expect(!identityQueries.isEmpty, "build.sh still asks for a signing identity")
+        let setupScriptQueries = signingSetupLines.filter { $0.contains("find-identity") }
+        expect(!buildScriptQueries.isEmpty, "build.sh still asks for a signing identity")
+        expect(!setupScriptQueries.isEmpty,
+               "setup-signing.sh still asks for a signing identity")
+        let identityQueries = buildScriptQueries + setupScriptQueries
         let unvalidatedQueries = identityQueries.filter { !$0.contains("-v") }
         expect(unvalidatedQueries.isEmpty,
-               "every find-identity in build.sh asks for valid identities only, "
-                + "found \(unvalidatedQueries.count) without -v")
+               "every find-identity in build.sh and Tools/setup-signing.sh asks for "
+                + "valid identities only, found \(unvalidatedQueries.count) without -v")
+
         // The setup script must run against the stock /usr/bin/openssl, which
         // is LibreSSL: it rejects OpenSSL 3's -legacy flag outright, and the
         // script once died on exactly that with its stderr discarded. The
         // portable spelling names the PBE algorithms instead of the flag.
-        let signingSetup = (try? String(contentsOfFile: "Tools/setup-signing.sh",
-                                         encoding: .utf8)) ?? ""
-        expect(!signingSetup.isEmpty, "the signing setup script reads back for its shape check")
-        let signingSetupCode = signingSetup.components(separatedBy: "\n")
-            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("#") }
-            .joined(separator: "\n")
         expect(!signingSetupCode.contains("-legacy"),
                "setup-signing.sh avoids the -legacy flag the stock LibreSSL openssl rejects")
 
