@@ -15,7 +15,8 @@ import IOKit.hidsystem
 /// F18; the event tap then keeps that key to itself and adds the user's
 /// chosen modifiers to whatever is pressed while it is down. Nothing is
 /// installed while the feature is off, and the mapping is always taken back
-/// out when the feature goes off or the app quits. Requires Accessibility:
+/// out when the feature goes off, when this login session stops being the one
+/// on screen, or when the app quits. Requires Accessibility:
 /// without it the tap cannot modify events, and the mapping is not applied
 /// either, so the source is never left as a key that does nothing.
 final class SuperKeyService: ObservableObject {
@@ -109,7 +110,16 @@ final class SuperKeyService: ObservableObject {
         return min(30, max(3, firstRepeat * 2))
     }
 
-    private init() {}
+    private init() {
+        // Both halves have to go when this login session stops being the one
+        // on screen. The taps keep their place in the chain and the account
+        // switched in pays their timeout on every event (issue #1075), and the
+        // mapping is written with hidutil for the whole Mac, so leaving it
+        // behind hands that account a source key that does nothing.
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     func syncWithPreferences() {
         let defaults = UserDefaults.standard
@@ -132,6 +142,7 @@ final class SuperKeyService: ObservableObject {
         self.source = source
         let enabled = AppFeature.superKey.isAvailable
             && defaults.bool(forKey: DefaultsKey.superKeyEnabled)
+            && SessionActivity.shared.isActive
         guard enabled else {
             stop()
             return
@@ -588,14 +599,31 @@ final class SuperKeyService: ObservableObject {
 
     // MARK: - The tap
 
+    /// Puts both taps back after the window server disabled them, unless a stop
+    /// is already on its way and the ports are about to go. Main thread.
+    private func rearmDisabledTaps() {
+        let currentTaps = lifecycleLock.withLock { () -> (CFMachPort?, CFMachPort?) in
+            shouldStopTapThread ? (nil, nil) : (tap, mouseTap)
+        }
+        if let currentTap = currentTaps.0 { CGEvent.tapEnable(tap: currentTap, enable: true) }
+        if let currentMouseTap = currentTaps.1 { CGEvent.tapEnable(tap: currentMouseTap, enable: true) }
+    }
+
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            let currentTaps = lifecycleLock.withLock {
-                shouldStopTapThread ? (nil, nil) : (tap, mouseTap)
-            }
-            if let currentTap = currentTaps.0 { CGEvent.tapEnable(tap: currentTap, enable: true) }
-            if let currentMouseTap = currentTaps.1 { CGEvent.tapEnable(tap: currentMouseTap, enable: true) }
             forgetHeldKey()
+            // Putting a tap straight back puts it into whatever session is on
+            // screen now, and the account switched in then pays its timeout on
+            // every event (issue #1075). The flag that answers that is written
+            // on the main thread while this callback runs on the tap's own
+            // thread, so the question is asked where the answer lives.
+            DispatchQueue.main.async { [weak self] in
+                if SessionActivity.shared.isActive {
+                    self?.rearmDisabledTaps()
+                } else {
+                    self?.syncWithPreferences()
+                }
+            }
             return Unmanaged.passUnretained(event)
         }
         let source = stateLock.withLock { eventSource }

@@ -27,12 +27,27 @@ final class KeyboardDebounceService: ObservableObject {
                                                 globalWindowMs: Defaults.defaultKeyboardDebounceWindowMs,
                                                 keyWindows: [:])
 
-    private init() {}
+    private init() {
+        // This tap sits at the HID stage, ahead of the split into login
+        // sessions, so a session that is switched away still sees the keys of
+        // the account on screen — and this one answers them from state that was
+        // built out of another account's typing, swallowing what it reads as a
+        // bounce. Hand the tap back on resign and build it again from the
+        // preferences on the way in (issue #1075).
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     func syncWithPreferences() {
-        let nextConfig = KeyboardDebounceConfig(
-            enabled: AppFeature.keyboardDebounce.isAvailable
+        let shouldRun = SessionActivitySupport.tapShouldRun(
+            featureWanted: AppFeature.keyboardDebounce.isAvailable
                 && UserDefaults.standard.bool(forKey: DefaultsKey.keyboardDebounceEnabled),
+            accessibilityGranted: Permissions.shared.accessibility,
+            sessionIsActive: SessionActivity.shared.isActive
+        )
+        let nextConfig = KeyboardDebounceConfig(
+            enabled: shouldRun,
             globalWindowMs: Defaults.sanitizedKeyboardDebounceWindow(
                 UserDefaults.standard.integer(forKey: DefaultsKey.keyboardDebounceWindowMs)
             ),
@@ -44,7 +59,7 @@ final class KeyboardDebounceService: ObservableObject {
             config = nextConfig
         }
 
-        if nextConfig.enabled, Permissions.shared.accessibility {
+        if shouldRun {
             start()
         } else {
             stop()
@@ -109,6 +124,10 @@ final class KeyboardDebounceService: ObservableObject {
 
         if let tap = snapshot.tap {
             CGEvent.tapEnable(tap: tap, enable: false)
+            // Switching a tap off leaves this process owning the port, and the
+            // port is what the window server waits on. Handing the tap back
+            // means leaving the chain, not going quiet in it.
+            CFMachPortInvalidate(tap)
         }
         if let runLoop = snapshot.runLoop {
             CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue) {
@@ -212,6 +231,15 @@ final class KeyboardDebounceService: ObservableObject {
         }
     }
 
+    /// Puts the tap back after the window server disabled it, unless a stop is
+    /// already on its way and the port is about to go. Main thread.
+    private func rearmDisabledTap() {
+        let currentTap = lifecycleLock.withLock {
+            shouldStopTapThread ? nil : tap
+        }
+        if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
+    }
+
     private func publishRunning(_ running: Bool, generation: UInt) {
         let update = { [weak self] in
             guard let self else { return }
@@ -231,10 +259,24 @@ final class KeyboardDebounceService: ObservableObject {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            let currentTap = lifecycleLock.withLock {
-                tap
+            // Keys flowed untapped while the tap was out of the chain, so the
+            // gap must not be read as a quiet stretch and the next press as a
+            // bounce.
+            eventLock.withLock {
+                state.reset()
             }
-            if let currentTap { CGEvent.tapEnable(tap: currentTap, enable: true) }
+            // A tap put straight back is a tap put back into whatever session
+            // is on screen now (issue #1075). The flag that answers that is
+            // written on the main thread, and this callback runs on the tap's
+            // own thread, so the question is asked where the answer lives
+            // rather than read across the two.
+            DispatchQueue.main.async { [weak self] in
+                if SessionActivity.shared.isActive {
+                    self?.rearmDisabledTap()
+                } else {
+                    self?.syncWithPreferences()
+                }
+            }
             return Unmanaged.passUnretained(event)
         }
 

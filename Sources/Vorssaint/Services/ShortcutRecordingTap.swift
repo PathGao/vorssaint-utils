@@ -14,7 +14,9 @@ import Foundation
 ///
 /// The tap lives only while a field records, plus the tail of a key still
 /// held when recording ends, so its release and autorepeats cannot reach the
-/// app as a fresh press of the recorded combination. Only one field ever
+/// app as a fresh press of the recorded combination. A fast user switch ends it
+/// too: a tap left behind by a session that is no longer on screen swallows the
+/// keys of the account that is. Only one field ever
 /// records at a time (the ShortcutCapture invariant), so one static tap is
 /// enough. Main thread only. Without Accessibility, begin fails and the
 /// field falls back to plain view events, which is how it always worked.
@@ -33,6 +35,14 @@ enum ShortcutRecordingTap {
     /// super key does lets a field record the combination the way it will be
     /// pressed later, instead of asking for the chosen modifiers by hand.
     private static var superState = SuperKeySupport.State()
+    /// Registered on the first recording and kept for the process. A recorder
+    /// that is still open when this login session stops being the one on screen
+    /// would otherwise keep a tap that swallows every key in the chain the
+    /// account switched in is typing into, and the timeout re-arm below would
+    /// put it back there (issue #1075). Only the command bar's capture card
+    /// reaches that state — the shortcut fields in Settings already stop on
+    /// `didResignActive` — but the tap is shared, so the guard is here.
+    private static var observingSession = false
 
     /// Starts swallowing key events and delivering each fresh press to the
     /// handler. Returns false when the tap cannot exist (no Accessibility),
@@ -50,6 +60,13 @@ enum ShortcutRecordingTap {
         }
         if tap == nil {
             guard AXIsProcessTrusted() else { return false }
+            if !observingSession {
+                observingSession = true
+                SessionActivity.shared.onChange { isActive in
+                    guard !isActive else { return }
+                    tearDown()
+                }
+            }
             let mask = (CGEventMask(1) << CGEventType.keyDown.rawValue)
                 | (CGEventMask(1) << CGEventType.keyUp.rawValue)
             guard let created = CGEvent.tapCreate(
@@ -116,7 +133,13 @@ enum ShortcutRecordingTap {
 
     private static func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            if SessionActivity.shared.isActive, let tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            } else {
+                // Invalidating the port from its own callback stack is unsafe;
+                // finish this callback fail-open, then release the tap.
+                DispatchQueue.main.async { tearDown() }
+            }
             return Unmanaged.passUnretained(event)
         }
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
