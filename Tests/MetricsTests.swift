@@ -21698,34 +21698,96 @@ struct MetricsTests {
             encoding: .utf8)) ?? ""
         expect(mouseAccelerationSource.contains("SessionActivitySupport.isOnConsole("),
                "mouse acceleration shares the safe initial session-state fallback")
-        for tapOwner in ["Sources/Vorssaint/Services/ScrollInverter.swift",
-                         "Sources/Vorssaint/Services/SmoothScrollService.swift",
-                         "Sources/Vorssaint/Services/MouseNavigation/MouseNavigationService.swift",
-                         "Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutService.swift",
-                         "Sources/Vorssaint/Services/MiddleClick/MiddleClickService.swift",
-                         "Sources/Vorssaint/Services/QuitProtection/QuitProtectionService.swift"] {
+        // The owners are read out of the tree, not listed here. A roster kept
+        // by hand is itself a membership list nobody maintains: the six names
+        // this loop used to carry were a sixth of the taps in the app, and the
+        // ones missing from it were exactly the ones that never joined the
+        // gate. Enumerating means the next person to call CGEvent.tapCreate
+        // cannot forget to register — there is nothing to register.
+        let tapOwnerFiles: [String] = {
+            guard let walker = FileManager.default.enumerator(atPath: "Sources") else { return [] }
+            var owners: [String] = []
+            for case let entry as String in walker where entry.hasSuffix(".swift") {
+                let path = "Sources/" + entry
+                guard let source = try? String(contentsOfFile: path, encoding: .utf8),
+                      source.contains("CGEvent.tapCreate") else { continue }
+                owners.append(path)
+            }
+            return owners.sorted()
+        }()
+        // An empty sweep would pass every check below in silence.
+        expect(tapOwnerFiles.count >= 20,
+               "the CGEvent.tapCreate sweep reaches the sources from the test's working directory")
+        // These taps were already outside the gate when the sweep replaced the
+        // roster, and none of them is exempt: the list is how they get reported
+        // rather than forgiven, so the enumeration can land without a rewrite
+        // of fourteen services in one change. Each value names the harm that
+        // stands while the line does. Nothing may be added — a tap written from
+        // now on follows the gate — and every fix deletes its line.
+        let knownUngatedTaps: [String: String] = [
+            "Sources/Vorssaint/Services/Audio/PreciseVolumeRollerService.swift":
+                "volume keys stay swallowed for the account switched in",
+            "Sources/Vorssaint/Services/Display/BrightnessService.swift":
+                "brightness keys stay swallowed for the account switched in",
+            "Sources/Vorssaint/Services/DockClick/DockClickService.swift":
+                "Dock clicks stall on the timeout of a switched-away session",
+            "Sources/Vorssaint/Services/Finder/FinderCutPaste.swift":
+                "Command-X in the other account's Finder reaches a dead tap first",
+            "Sources/Vorssaint/Services/Finder/FinderRenameService.swift":
+                "as FinderCutPaste, and its teardown also skips CFMachPortInvalidate",
+            "Sources/Vorssaint/Services/KeyboardDebounce/KeyboardDebounceService.swift":
+                "every keystroke of the account switched in pays the tap timeout",
+            "Sources/Vorssaint/Services/RadialMenu/RadialMenuService.swift":
+                "the radial trigger holds the mouse chain of a session it cannot serve",
+            "Sources/Vorssaint/Services/ShortcutRecordingTap.swift":
+                "a recorder left open across a switch re-arms into the other account",
+            "Sources/Vorssaint/Services/Snippets/TextSnippetService.swift":
+                "snippet expansion watches the other account's typing",
+            "Sources/Vorssaint/Services/SuperKey/SuperKeyService.swift":
+                "the Super Key holds both a key and a mouse tap across the switch",
+            "Sources/Vorssaint/Services/Switcher/AppSwitcher.swift":
+                "the switcher keeps its Tab tap and never invalidates the port",
+            "Sources/Vorssaint/Services/WindowLayout/WindowLayoutService.swift":
+                "two window-layout taps stay in the other account's key chain",
+            "Sources/Vorssaint/Services/WindowMaximizer.swift":
+                "the maximizer keeps its tap and never invalidates the port",
+        ]
+        for tapOwner in tapOwnerFiles {
             let source = (try? String(contentsOfFile: tapOwner, encoding: .utf8)) ?? ""
             expect(!source.isEmpty, "\(tapOwner) reads back for its session-switch check")
             let code = source.components(separatedBy: "\n")
                 .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
                 .joined(separator: "\n")
+            // A listen-only tap hands every event straight back, so a session
+            // that is off screen cannot swallow the keystrokes of the account
+            // on it, and the window server does not wait on the port. That is
+            // the whole reason these are excused, and it is re-derived from the
+            // source on every run: flip one to .defaultTap and it joins the
+            // gated set the same second, with nothing to remember.
+            if code.contains(".listenOnly") && !code.contains(".defaultTap") { continue }
+            if knownUngatedTaps[tapOwner] != nil { continue }
             expect(code.contains("SessionActivity.shared.onChange"),
                    "\(tapOwner) rebuilds its tap when the session comes back")
             let rearm = code.components(separatedBy: "tapDisabledByTimeout")
                 .dropFirst().first?.components(separatedBy: "return").first ?? ""
             expect(rearm.contains("SessionActivity.shared.isActive"),
                    "\(tapOwner) does not re-arm a disabled tap into a switched-away session")
-            if tapOwner.contains("MouseNavigation")
-                || tapOwner.contains("MouseButtonShortcut")
-                || tapOwner.contains("MiddleClick")
-                || tapOwner.contains("QuitProtection") {
-                expect(code.contains("AXIsProcessTrusted()"),
-                       "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
-            }
+            // Either spelling of the permission half of the gate: the shared
+            // helper takes it as an argument, and the services that predate the
+            // helper ask the API directly.
+            expect(code.contains("SessionActivitySupport.tapShouldRun(")
+                    || code.contains("AXIsProcessTrusted()"),
+                   "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
             // Switching a tap off leaves the process owning it, which is what
             // the window server waits on; teardown must invalidate the port.
             expect(code.contains("CFMachPortInvalidate"),
                    "\(tapOwner) hands its tap back rather than only disabling it")
+        }
+        // A line that outlives its file stops naming a real gap and starts
+        // excusing whatever moves in under that path.
+        for ungated in knownUngatedTaps.keys {
+            expect(tapOwnerFiles.contains(ungated),
+                   "the ungated-tap entry for \(ungated) still names a file that creates a tap")
         }
 
         // Disabling a tap and dropping the last Swift reference does not hand
