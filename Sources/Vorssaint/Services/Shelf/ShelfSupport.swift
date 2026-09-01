@@ -494,9 +494,15 @@ private struct FailableShelfPersistedItem: Decodable {
 /// that empty list back and sweeping the payload files behind it turns one
 /// bad blob into permanent loss.
 enum ShelfStoreLoad: Equatable {
-    /// No blob yet (first launch), or a blob that decoded to a list —
-    /// possibly an empty one, which is a shelf the user emptied.
+    /// No blob yet (first launch), or a blob that decoded whole — possibly to
+    /// an empty list, which is a shelf the user emptied.
     case items([ShelfPersistedItem])
+    /// A blob that decoded, but with entries this build could not read: an
+    /// unknown kind written by a newer build, at the top level or inside a
+    /// batch. Those entries still own payload files in the shelf's own
+    /// directory, and the blob still points at them, so their files must
+    /// survive to the launch that can read the store again.
+    case partial([ShelfPersistedItem])
     /// A blob that is not a shelf list at all. Leave it, and the payload
     /// files it still references, alone until the next launch.
     case unreadable
@@ -513,7 +519,8 @@ enum ShelfPersistenceSupport {
     /// answer for, so "the blob did not decode" cannot quietly become "the
     /// shelf is empty" the way decoding the array outright does. Entries are
     /// lossy on their own: one with an unknown kind or a missing required
-    /// field drops itself instead of taking the rest with it.
+    /// field drops itself instead of taking the rest with it, and a list that
+    /// lost an entry that way comes back as `.partial`, not `.items`.
     static func load(_ data: Data?) -> ShelfStoreLoad {
         guard let data else { return .items([]) }
         guard let decoded = try? JSONDecoder().decode([FailableShelfPersistedItem].self,
@@ -522,7 +529,24 @@ enum ShelfPersistenceSupport {
         // A stored list where nothing survived is a shelf this build cannot
         // read (a downgrade past a format change), not one the user emptied.
         if !decoded.isEmpty, items.isEmpty { return .unreadable }
-        return .items(items)
+        // Counted rather than read off `decoded.count`: an entry can also drop
+        // itself inside a batch, and its payload file is as real as a top-level
+        // one's. The blob kept still points at every dropped entry's file.
+        let stored = storedEntryCount(try? JSONSerialization.jsonObject(with: data))
+        return stored == readEntryCount(items) ? .items(items) : .partial(items)
+    }
+
+    /// Entries the blob describes at every depth, readable or not.
+    private static func storedEntryCount(_ json: Any?) -> Int {
+        guard let entries = json as? [Any] else { return 0 }
+        return entries.reduce(0) { total, entry in
+            total + 1 + storedEntryCount((entry as? [String: Any])?["children"])
+        }
+    }
+
+    /// Entries this build read at every depth.
+    private static func readEntryCount(_ items: [ShelfPersistedItem]) -> Int {
+        items.reduce(0) { $0 + 1 + readEntryCount($1.children ?? []) }
     }
 
     static func boundedLiveText(_ text: String) -> String? {

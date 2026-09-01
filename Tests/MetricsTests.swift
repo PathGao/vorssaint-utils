@@ -16494,8 +16494,11 @@ struct MetricsTests {
                 if !pinned { unpinnedBorderlessMenus.append("\(file):\(index + 1)") }
             }
         }
-        expect(unpinnedBorderlessMenus.isEmpty,
-               "every borderless menu keeps its own size: \(unpinnedBorderlessMenus)")
+        // The file count is part of the rule: an enumerator that finds nothing
+        // would leave the list empty and pass while checking no menu at all.
+        expect(!uiFiles.isEmpty && unpinnedBorderlessMenus.isEmpty,
+               "every borderless menu keeps its own size, across \(uiFiles.count) "
+               + "scanned files: \(unpinnedBorderlessMenus)")
 
         // `waitUntilAllOperationsAreFinished` has no deadline, and the window
         // walk that used it runs on the main thread while its operations run on
@@ -21575,9 +21578,9 @@ struct MetricsTests {
                          "\(language.rawValue) quit protection modifier HUD format")
         }
 
-        // Loading the saved shelf keeps "nothing saved", "decoded to a list"
-        // and "will not decode" apart. Only the first two describe a shelf
-        // that may be saved over.
+        // Loading the saved shelf keeps "nothing saved", "decoded whole",
+        // "decoded with entries dropped" and "will not decode" apart. Only a
+        // store read whole may be saved over and swept behind.
         expect(ShelfPersistenceSupport.load(nil) == .items([]),
                "no saved shelf blob restores as an empty shelf")
         expect(ShelfPersistenceSupport.load(Data("[]".utf8)) == .items([]),
@@ -21589,20 +21592,40 @@ struct MetricsTests {
 
         // One bad entry drops only itself: an unknown kind (written by a newer
         // build) and a missing optional field must not cost the whole shelf.
+        // The list that comes back is `.partial`, never `.items`: the dropped
+        // entry's payload file is still on disk and the blob still points at
+        // it, so the caller must not save over the store or sweep behind it.
         let mixedShelfBlob = Data("""
         [{"id":"8B3E1C2A-0000-4000-8000-000000000001","kind":"text","title":"keep","text":"body"},
          {"id":"8B3E1C2A-0000-4000-8000-000000000002","kind":"telepathy","title":"unknown kind"},
          {"kind":"link","title":"no id","url":"https://example.com"}]
         """.utf8)
         var mixedShelfTitles: [String] = []
-        if case let .items(loaded) = ShelfPersistenceSupport.load(mixedShelfBlob) {
+        if case let .partial(loaded) = ShelfPersistenceSupport.load(mixedShelfBlob) {
             mixedShelfTitles = loaded.map(\.title)
         }
         expect(mixedShelfTitles == ["keep", "no id"],
-               "an entry with an unknown kind drops itself, found \(mixedShelfTitles)")
+               "an entry with an unknown kind drops itself and the rest load as "
+               + "partial, found \(mixedShelfTitles)")
         expect(ShelfPersistenceSupport.load(Data(#"[{"kind":"telepathy"}]"#.utf8)) == .unreadable,
                "a stored list where no entry survives is unreadable, not empty")
 
+        let wholeShelfBlob = Data("""
+        [{"id":"8B3E1C2A-0000-4000-8000-000000000007","kind":"text","title":"a","text":"a"},
+         {"id":"8B3E1C2A-0000-4000-8000-000000000008","kind":"batch","title":"pile","children":[
+           {"id":"8B3E1C2A-0000-4000-8000-000000000009","kind":"text","title":"b","text":"b"}]}]
+        """.utf8)
+        var wholeShelfTitles: [String] = []
+        if case let .items(loaded) = ShelfPersistenceSupport.load(wholeShelfBlob) {
+            wholeShelfTitles = loaded.map(\.title)
+        }
+        expect(wholeShelfTitles == ["a", "pile"],
+               "a store every entry of which decodes loads whole, found \(wholeShelfTitles)")
+
+        // A child that drops itself costs its payload file the same way a
+        // top-level entry does, so the depth it sits at must not change the
+        // answer: the batch survives with its readable children, and the load
+        // is still partial.
         let batchShelfBlob = Data("""
         [{"id":"8B3E1C2A-0000-4000-8000-000000000003","kind":"batch","title":"pile","children":[
            {"id":"8B3E1C2A-0000-4000-8000-000000000004","kind":"text","title":"a","text":"a"},
@@ -21610,29 +21633,55 @@ struct MetricsTests {
            {"id":"8B3E1C2A-0000-4000-8000-000000000006","kind":"text","title":"c","text":"c"}]}]
         """.utf8)
         var batchShelfChildTitles: [String] = []
-        if case let .items(loaded) = ShelfPersistenceSupport.load(batchShelfBlob) {
+        if case let .partial(loaded) = ShelfPersistenceSupport.load(batchShelfBlob) {
             batchShelfChildTitles = (loaded.first?.children ?? []).map(\.title)
         }
         expect(batchShelfChildTitles == ["a", "c"],
-               "a bad child drops itself and its batch survives, found \(batchShelfChildTitles)")
+               "a bad child drops itself, its batch survives and the store loads as "
+               + "partial, found \(batchShelfChildTitles)")
+
+        // The sweep decision lives in ShelfService, which `--test` does not
+        // compile, so it is pinned by shape: restore may reach the payload
+        // sweep only past the guard that a store read whole has to pass. A
+        // `.partial` store's dropped entries still own files in that
+        // directory, and the blob it kept still points at them.
+        let restoreItemsBody = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Shelf/ShelfService.swift",
+            encoding: .utf8)) ?? "")
+            .components(separatedBy: "private func restoreItems()")
+            .dropFirst().first?
+            .components(separatedBy: "\n    private func ").first ?? ""
+        let pastRestoreGuard = restoreItemsBody
+            .components(separatedBy: "guard case .items = store else { return }")
+        expect(pastRestoreGuard.count == 2
+                && !pastRestoreGuard[0].contains("sweepOwnedFiles(")
+                && pastRestoreGuard[1].contains("sweepOwnedFiles("),
+               "restore sweeps the shelf's payload files only for a store it read whole")
 
         // Guards the class, not the one instance that emptied shelves: the
         // saved blob may only be read through `load`, which hands the caller a
         // `.unreadable` case it has to answer for. A bare array decode brings
         // back the all-or-nothing form, where any single bad entry restores an
         // empty shelf that is then written back over the real one.
+        // The scan has to report how many files it read: an enumerator that
+        // finds nothing (the tests run from somewhere other than the repo
+        // root) leaves the list empty, and a rule checked against no files at
+        // all passes while guarding nothing.
         var rawShelfStoreDecoders: [String] = []
+        var scannedShelfStoreFiles = 0
         if let sources = FileManager.default.enumerator(atPath: "Sources") {
             for case let path as String in sources where path.hasSuffix(".swift") {
                 let text = (try? String(contentsOfFile: "Sources/" + path, encoding: .utf8)) ?? ""
+                scannedShelfStoreFiles += 1
                 if text.contains("decode([ShelfPersistedItem]") {
                     rawShelfStoreDecoders.append((path as NSString).lastPathComponent)
                 }
             }
         }
-        expect(rawShelfStoreDecoders.isEmpty,
+        expect(scannedShelfStoreFiles > 0 && rawShelfStoreDecoders.isEmpty,
                "the saved shelf is read only through ShelfPersistenceSupport.load, "
-               + "found a bare decode in \(rawShelfStoreDecoders.sorted())")
+               + "found a bare decode in \(rawShelfStoreDecoders.sorted()) "
+               + "across \(scannedShelfStoreFiles) scanned files")
 
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")
