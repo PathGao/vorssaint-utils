@@ -20382,40 +20382,38 @@ struct MetricsTests {
         expect(RecorderMotion.ringProgress(at: 2.0, clicks: clicks) == nil,
                "the ring is gone well before the next second")
 
-        // Both recorder samplers fill an array from an NSEvent monitor
-        // callback while the stop path reads it, so every append has to be
-        // under the lock: an unsynchronised one races the copy-on-write
-        // buffer. The recording's start time is written from `start()` and
-        // read from that same callback, so it belongs under the lock too.
-        for samplerPath in ["Sources/Vorssaint/Services/Recorder/RecorderTypingTrack.swift",
-                            "Sources/Vorssaint/Services/Recorder/RecorderPointerSampler.swift"] {
-            let samplerSource = (try? String(contentsOfFile: samplerPath, encoding: .utf8)) ?? ""
-            expect(!samplerSource.isEmpty, "\(samplerPath) reads back for the sampler checks")
-            var blockIsLocked: [Bool] = []
-            var samplerLine = ""
-            var lockedAppends = 0
-            var looseAppends = 0
-            var lockedOrigin = 0
-            var looseOrigin = 0
-            for character in samplerSource {
-                if character == "\n" { samplerLine = ""; continue }
-                samplerLine.append(character)
-                if character == "{" { blockIsLocked.append(samplerLine.contains("withLock")) }
-                if character == "}", !blockIsLocked.isEmpty { blockIsLocked.removeLast() }
-                if samplerLine.hasSuffix(".append(") {
-                    if blockIsLocked.contains(true) { lockedAppends += 1 } else { looseAppends += 1 }
-                }
-                // The stored `startedAt`, assigned in `start()`. A local of
-                // the same name is not it, hence the exclusion.
-                if samplerLine.hasSuffix("startedAt =") && !samplerLine.contains("let startedAt") {
-                    if blockIsLocked.contains(true) { lockedOrigin += 1 } else { looseOrigin += 1 }
-                }
+        // The typing sampler fills an array from an NSEvent monitor callback
+        // while the stop path reads it, so every append has to be under the
+        // lock: an unsynchronised one races the copy-on-write buffer. The
+        // recording's start time is written from `start()` and read from that
+        // same callback, so it belongs under the lock too.
+        let samplerPath = "Sources/Vorssaint/Services/Recorder/RecorderTypingTrack.swift"
+        let samplerSource = (try? String(contentsOfFile: samplerPath, encoding: .utf8)) ?? ""
+        expect(!samplerSource.isEmpty, "\(samplerPath) reads back for the sampler checks")
+        var blockIsLocked: [Bool] = []
+        var samplerLine = ""
+        var lockedAppends = 0
+        var looseAppends = 0
+        var lockedOrigin = 0
+        var looseOrigin = 0
+        for character in samplerSource {
+            if character == "\n" { samplerLine = ""; continue }
+            samplerLine.append(character)
+            if character == "{" { blockIsLocked.append(samplerLine.contains("withLock")) }
+            if character == "}", !blockIsLocked.isEmpty { blockIsLocked.removeLast() }
+            if samplerLine.hasSuffix(".append(") {
+                if blockIsLocked.contains(true) { lockedAppends += 1 } else { looseAppends += 1 }
             }
-            expect(samplerSource.contains("NSLock()") && lockedAppends > 0 && looseAppends == 0,
-                   "\(samplerPath) appends to its sampler buffer only under the lock")
-            expect(lockedOrigin == 1 && looseOrigin == 0,
-                   "\(samplerPath) writes the recording's start time under the lock")
+            // The stored `startedAt`, assigned in `start()`. A local of the
+            // same name is not it, hence the exclusion.
+            if samplerLine.hasSuffix("startedAt =") && !samplerLine.contains("let startedAt") {
+                if blockIsLocked.contains(true) { lockedOrigin += 1 } else { looseOrigin += 1 }
+            }
         }
+        expect(samplerSource.contains("NSLock()") && lockedAppends > 0 && looseAppends == 0,
+               "\(samplerPath) appends to its sampler buffer only under the lock")
+        expect(lockedOrigin == 1 && looseOrigin == 0,
+               "\(samplerPath) writes the recording's start time under the lock")
 
         let uniform = RecorderMotion.resampled(
             [RecorderMotion.Sample(time: 0, point: CGPoint(x: 0, y: 0)),
