@@ -378,7 +378,7 @@ final class AppSwitcher: ObservableObject {
 
             let shouldStopBeforeCreatingTap = lifecycleLock.withLock { shouldStopTapThread }
             guard !shouldStopBeforeCreatingTap else {
-                if clearEventTapThread() { installTap() }
+                if clearEventTapThread() { restartTapOnMain() }
                 return
             }
 
@@ -428,8 +428,17 @@ final class AppSwitcher: ObservableObject {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFRunLoopRemoveSource(runLoop, source, .commonModes)
             CFMachPortInvalidate(tap)
-            if clearEventTapThread() { installTap() }
+            if clearEventTapThread() { restartTapOnMain() }
         }
+    }
+
+    /// Runs on the tap thread once its run loop has stopped. A restart that
+    /// `installTap` left pending goes back through `syncWithPreferences`
+    /// instead of straight to `installTap`: the session flag is written on the
+    /// main thread, and a tap rebuilt into a session that is no longer on
+    /// screen stalls the account that is (issue #1075).
+    private func restartTapOnMain() {
+        DispatchQueue.main.async { [weak self] in self?.syncWithPreferences() }
     }
 
     /// Dock's ⌘Tab handler is a symbolic hotkey, not an event the session tap

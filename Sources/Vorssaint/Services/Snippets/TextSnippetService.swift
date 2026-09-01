@@ -145,7 +145,7 @@ final class TextSnippetService {
             let runLoop = CFRunLoopGetCurrent()
             tapLifecycleLock.withLock { tapRunLoop = runLoop }
             guard !tapLifecycleLock.withLock({ shouldStopTapThread }) else {
-                if clearEventTapThread() { startOnMain() }
+                if clearEventTapThread() { restartTapOnMain() }
                 return
             }
 
@@ -184,7 +184,7 @@ final class TextSnippetService {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFRunLoopRemoveSource(runLoop, source, .commonModes)
             CFMachPortInvalidate(tap)
-            if clearEventTapThread() { startOnMain() }
+            if clearEventTapThread() { restartTapOnMain() }
         }
     }
 
@@ -200,8 +200,13 @@ final class TextSnippetService {
         }
     }
 
-    private func startOnMain() {
-        DispatchQueue.main.async { [weak self] in self?.start() }
+    /// Runs on the tap thread once its run loop has stopped. A restart that
+    /// `start` left pending goes back through `syncWithPreferences` instead of
+    /// straight to `start`: the session flag is written on the main thread, and
+    /// a tap rebuilt into a session that is no longer on screen stalls the
+    /// account that is (issue #1075).
+    private func restartTapOnMain() {
+        DispatchQueue.main.async { [weak self] in self?.syncWithPreferences() }
     }
 
     private func tapDidStart(_ startedTap: CFMachPort) {

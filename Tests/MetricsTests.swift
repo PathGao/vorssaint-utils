@@ -21764,6 +21764,21 @@ struct MetricsTests {
             // the window server waits on; teardown must invalidate the port.
             expect(code.contains("CFMachPortInvalidate"),
                    "\(tapOwner) hands its tap back rather than only disabling it")
+            // Owners that run the tap on their own thread restart it from the
+            // thread's tail when a stop and a start crossed. That restart must
+            // not put the tap back on the tap thread's terms: the session
+            // answer is written on the main thread, so the tail hops there and
+            // asks the same gate the preference sync asks.
+            if code.contains("clearEventTapThread") {
+                expect(!code.contains("clearEventTapThread() { installTap() }")
+                        && !code.contains("clearEventTapThread() { startOnMain() }"),
+                       "\(tapOwner) has no tap-thread restart that goes around the session gate")
+                let restart = code.components(separatedBy: "private func restartTapOnMain")
+                    .dropFirst().first?.components(separatedBy: "\n    }").first ?? ""
+                expect(restart.contains("DispatchQueue.main.async")
+                        && restart.contains("syncWithPreferences"),
+                       "\(tapOwner) restarts its tap thread through the gate on the main thread")
+            }
         }
 
         // Disabling a tap and dropping the last Swift reference does not hand
