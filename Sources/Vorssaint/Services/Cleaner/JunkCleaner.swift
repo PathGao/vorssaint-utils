@@ -153,8 +153,9 @@ final class JunkCleaner: ObservableObject {
     /// `escalate` false keeps the pass inside what this app may do on its
     /// own: items the Trash move refuses count as failed instead of going to
     /// Finder for an administrator prompt. The scheduled pass runs unattended,
-    /// so it never asks.
-    func cleanSelected(escalate: Bool = true) {
+    /// so it never asks. No default on purpose - an automatic caller added
+    /// later has to state which one it is rather than inherit the prompt.
+    func cleanSelected(escalate: Bool) {
         let chosen = items.filter(\.include)
         guard !chosen.isEmpty else { return }
         phase = .cleaning

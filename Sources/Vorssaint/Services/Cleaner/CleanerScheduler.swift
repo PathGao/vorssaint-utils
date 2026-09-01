@@ -12,7 +12,9 @@ import Combine
 ///
 /// The pass also never asks for anything. A find this app cannot move on its
 /// own - a root owned launch daemon, say - is left for the next manual clean
-/// rather than raising an administrator prompt at an unattended Mac.
+/// rather than raising an administrator prompt at an unattended Mac, and the
+/// outcome notification says how many stayed behind so the difference between
+/// deferred and never found is visible.
 final class CleanerScheduler: ObservableObject {
     static let shared = CleanerScheduler()
 
@@ -148,10 +150,10 @@ final class CleanerScheduler: ObservableObject {
                         cleaner.cleanSelected(
                             escalate: CleanerPolicy.escalateOnAutomaticRun)
                     } else {
-                        self.finishRun(freed: 0)
+                        self.finishRun(freed: 0, failed: 0)
                     }
-                case let .done(freed, _):
-                    self.finishRun(freed: freed)
+                case let .done(freed, failed):
+                    self.finishRun(freed: freed, failed: failed)
                 case .idle:
                     // The user (or a reset) interrupted the automatic pass.
                     self.runObserver = nil
@@ -163,13 +165,13 @@ final class CleanerScheduler: ObservableObject {
         cleaner.scan()
     }
 
-    private func finishRun(freed: Int64) {
+    private func finishRun(freed: Int64, failed: Int) {
         runObserver = nil
         JunkCleaner.shared.reset()
         let defaults = UserDefaults.standard
         defaults.set(Date().timeIntervalSince1970, forKey: DefaultsKey.cleanerLastAutoRun)
         defaults.set(freed, forKey: DefaultsKey.cleanerLastAutoFreed)
-        notifyIfWanted(freed: freed)
+        notifyIfWanted(freed: freed, failed: failed)
         scheduleNext()
     }
 
@@ -177,16 +179,22 @@ final class CleanerScheduler: ObservableObject {
     /// app's regular notifier (which drops the note quietly if macOS
     /// notifications are not allowed). Even a run that found nothing posts,
     /// so a fresh schedule gives proof of life on its first pass.
-    private func notifyIfWanted(freed: Int64) {
+    private func notifyIfWanted(freed: Int64, failed: Int) {
         guard UserDefaults.standard.bool(forKey: DefaultsKey.cleanerScheduleNotify) else { return }
         let strings = L10n.shared.s
-        let body: String
+        var sentences: [String] = []
         if freed > 0 {
-            body = String(format: strings.cleanerAutoNotificationFormat,
-                          ByteCountFormatter.string(fromByteCount: freed, countStyle: .file))
-        } else {
-            body = strings.cleanerNothingFound
+            sentences.append(String(format: strings.cleanerAutoNotificationFormat,
+                                    ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)))
         }
-        Notifier.post(title: strings.cleanerScheduleTitle, body: body)
+        // What this pass would not do has to be said, or a deferred find is
+        // indistinguishable from one that was never there: an unattended run
+        // never escalates, so a root owned item stays and counts as failed.
+        if failed > 0 {
+            sentences.append(String(format: strings.cleanerAutoLeftFormat, failed))
+        }
+        // "Nothing to clean" only when nothing was moved AND nothing was left.
+        if sentences.isEmpty { sentences.append(strings.cleanerNothingFound) }
+        Notifier.post(title: strings.cleanerScheduleTitle, body: sentences.joined(separator: " "))
     }
 }

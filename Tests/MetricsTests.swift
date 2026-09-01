@@ -4871,6 +4871,25 @@ struct MetricsTests {
                && cleanerSchedulerCode.contains(
                    "cleanSelected(escalate:CleanerPolicy.escalateOnAutomaticRun)"),
                "the scheduled pass is the only automatic clean and it asks for no escalation")
+        // A pass that leaves items behind and says nothing is indistinguishable
+        // from one that found nothing, so the failed count has to reach the
+        // notification, not stop at the phase.
+        expect(cleanerSchedulerCode.contains("caselet.done(freed,failed):self.finishRun(freed:freed,failed:failed)")
+               && cleanerSchedulerCode.contains("notifyIfWanted(freed:freed,failed:failed)")
+               && cleanerSchedulerCode.contains("strings.cleanerAutoLeftFormat,failed"),
+               "an automatic pass reports how many items it left in place")
+        // The manual path keeps escalating, and there is no default to inherit:
+        // a future automatic caller has to name its own policy.
+        let junkCleanerCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Cleaner/JunkCleaner.swift",
+            encoding: .utf8)) ?? "").split(whereSeparator: \.isWhitespace).joined()
+        let cleanerViewCode = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/UI/Cleaner/CleanerView.swift",
+            encoding: .utf8)) ?? "").split(whereSeparator: \.isWhitespace).joined()
+        expect(junkCleanerCode.contains("funccleanSelected(escalate:Bool){")
+               && cleanerViewCode.components(separatedBy: "cleanSelected(").count == 2
+               && cleanerViewCode.contains("cleanSelected(escalate:true)"),
+               "cleanSelected has no default escalation and the manual path still asks")
         expect(CleanerPolicy.developerJunkPaths.contains("/Library/Developer/Xcode/iOS DeviceSupport")
                && CleanerPolicy.developerJunkPaths.contains("/Library/Developer/Xcode/watchOS DeviceSupport"),
                "stale DeviceSupport symbol caches count as developer junk")
@@ -11937,6 +11956,7 @@ struct MetricsTests {
             expect(strings.quickToolsTab == strings.launcherName,
                    "\(prefix) Quick panel keeps the same name in Settings")
             expectFormat(strings.cutMovedPluralFormat, ["d"], "\(prefix) cut plural format")
+            expectFormat(strings.cleanerAutoLeftFormat, ["d"], "\(prefix) cleaner left-in-place format")
             expectFormat(strings.uninstallerSelectedFormat, ["d", "d"], "\(prefix) uninstaller selected format")
             expectFormat(strings.uninstallerFreedFormat, ["@"], "\(prefix) uninstaller freed format")
             expectFormat(strings.shelfSelectedFormat, ["d"], "\(prefix) shelf selection format")
