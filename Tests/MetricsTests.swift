@@ -21740,6 +21740,13 @@ struct MetricsTests {
                 && pastePlainTransientPaste.contains("didFail:")
                 && pastePlainTransientPaste.contains("NSSound.beep()"),
                "a refused plain-text paste is reported instead of swallowed")
+        // TransientPaste.paste returning false on the main queue can only mean
+        // "a paste is already in flight", and that one still pastes, so the
+        // beep must not hang off the return value. Two beeps are left in the
+        // file: the Accessibility guard, and didFail.
+        expect(pastePlainCode.components(separatedBy: "NSSound.beep()").count - 1 == 2
+                && pastePlainTransientPaste.contains("didFail: { NSSound.beep() }"),
+               "a plain-text paste coalesced into one already running does not beep")
 
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")

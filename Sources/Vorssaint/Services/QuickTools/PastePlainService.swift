@@ -76,11 +76,16 @@ final class PastePlainService: ObservableObject {
         if pressNativeMatchStyleItem() { return }
 
         var releaseHotkey = false
-        // Every way the transient paste can give up is reported the same way
-        // the missing permission above is: a refused paste that says nothing
-        // reads as "the feature does nothing". The false return covers the two
-        // it rejects outright, didFail the four it discovers on its lane.
-        let started = TransientPaste.shared.paste(
+        // Every way the transient paste can end with nothing pasted is
+        // reported the same way the missing permission above is: a refused
+        // paste that says nothing reads as "the feature does nothing". All
+        // four arrive through didFail. The synchronous false is deliberately
+        // not one of them: this runs on the main queue (the lane hands its
+        // result back there), so the only rejection it can carry here is
+        // "a paste is already in flight" — and that one still ends in a
+        // paste of this same clipboard, so beeping on it would be an error
+        // sound on a press that worked.
+        TransientPaste.shared.paste(
             plain,
             willPostShortcut: { [weak self] in
                 guard let self else { return }
@@ -94,7 +99,6 @@ final class PastePlainService: ObservableObject {
             },
             didFail: { NSSound.beep() }
         )
-        if !started { NSSound.beep() }
     }
 
     /// Presses the frontmost app's own matching-style paste when its menus
