@@ -6,10 +6,24 @@ import AppKit
 /// Small, non-activating feedback panel. It is intentionally independent from
 /// Settings so showing a confirmation never changes the target application.
 final class QuitProtectionHUD {
-    private let size = CGSize(width: 300, height: 48)
+    private static let minimumSize = CGSize(width: 300, height: 48)
+    private static let textInset: CGFloat = 12
+    private var size = QuitProtectionHUD.minimumSize
     private var panel: NSPanel?
 
+    /// The confirmation lines are localized and formatted with the shortcut
+    /// symbol, so their rendered width is only known at show time. Widest of
+    /// the shipped translations is ~300pt of text, well past what the fixed
+    /// 300pt panel left for it.
+    private static func fittingSize(title: String, detail: String) -> CGSize {
+        let text = max((title as NSString).size(withAttributes: [.font: ContentView.titleFont]).width,
+                       (detail as NSString).size(withAttributes: [.font: ContentView.detailFont]).width)
+        return CGSize(width: max(minimumSize.width, (text + textInset * 2).rounded(.up)),
+                      height: minimumSize.height)
+    }
+
     func show(title: String, detail: String) {
+        size = Self.fittingSize(title: title, detail: detail)
         if panel == nil {
             let panel = NSPanel(contentRect: CGRect(origin: .zero, size: size),
                                 styleMask: [.borderless, .nonactivatingPanel],
@@ -29,6 +43,7 @@ final class QuitProtectionHUD {
         }
 
         guard let content = panel?.contentView as? ContentView else { return }
+        panel?.setContentSize(size)
         content.update(title: title, detail: detail)
         positionPanel()
         panel?.alphaValue = 1
@@ -54,16 +69,19 @@ final class QuitProtectionHUD {
     }
 
     private final class ContentView: NSView {
+        static let titleFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        static let detailFont = NSFont.systemFont(ofSize: 10.5)
+
         private let title = NSTextField(labelWithString: "")
         private let detail = NSTextField(labelWithString: "")
 
         override init(frame frameRect: NSRect) {
             super.init(frame: frameRect)
             wantsLayer = true
-            title.font = .systemFont(ofSize: 13, weight: .semibold)
+            title.font = Self.titleFont
             title.textColor = .white
             title.alignment = .center
-            detail.font = .systemFont(ofSize: 10.5)
+            detail.font = Self.detailFont
             detail.textColor = .white.withAlphaComponent(0.68)
             detail.alignment = .center
             addSubview(title)
@@ -75,8 +93,9 @@ final class QuitProtectionHUD {
 
         override func layout() {
             super.layout()
-            title.frame = CGRect(x: 12, y: 23, width: bounds.width - 24, height: 17)
-            detail.frame = CGRect(x: 12, y: 7, width: bounds.width - 24, height: 14)
+            let inset = QuitProtectionHUD.textInset
+            title.frame = CGRect(x: inset, y: 23, width: bounds.width - inset * 2, height: 17)
+            detail.frame = CGRect(x: inset, y: 7, width: bounds.width - inset * 2, height: 14)
         }
 
         func update(title: String, detail: String) {
@@ -84,6 +103,8 @@ final class QuitProtectionHUD {
             self.detail.stringValue = detail
             setAccessibilityLabel([title, detail].filter { !$0.isEmpty }.joined(separator: ". "))
             needsLayout = true
+            // The pill is drawn from bounds, so a width change has to repaint.
+            needsDisplay = true
         }
 
         override func draw(_ dirtyRect: NSRect) {
