@@ -20618,43 +20618,38 @@ struct MetricsTests {
                "the ring is gone well before the next second")
 
         // The typing sampler fills an array from an NSEvent monitor callback
-        // while the stop path reads it, so every append has to be under the
+        // while the stop path reads it, so the append has to be under the
         // lock: an unsynchronised one races the copy-on-write buffer. The
-        // recording's start time is written from `start()` and read from that
+        // recording's start time is written by `start()` and read from that
         // same callback, so it belongs under the lock too.
-        let samplerPath = "Sources/Vorssaint/Services/Recorder/RecorderTypingTrack.swift"
-        let samplerSource = (try? String(contentsOfFile: samplerPath, encoding: .utf8)) ?? ""
-        expect(!samplerSource.isEmpty, "\(samplerPath) reads back for the sampler checks")
-        var blockIsLocked: [Bool] = []
-        var samplerLine = ""
-        var lockedAppends = 0
-        var looseAppends = 0
-        var lockedOrigin = 0
-        var looseOrigin = 0
-        for character in samplerSource {
-            if character == "\n" { samplerLine = ""; continue }
-            samplerLine.append(character)
-            if character == "{" { blockIsLocked.append(samplerLine.contains("withLock")) }
-            if character == "}", !blockIsLocked.isEmpty { blockIsLocked.removeLast() }
-            if samplerLine.hasSuffix(".append(") {
-                if blockIsLocked.contains(true) { lockedAppends += 1 } else { looseAppends += 1 }
-            }
-            // The stored `startedAt`, assigned in `start()`. A local of the
-            // same name is not it, hence the exclusion.
-            if samplerLine.hasSuffix("startedAt =") && !samplerLine.contains("let startedAt") {
-                if blockIsLocked.contains(true) { lockedOrigin += 1 } else { looseOrigin += 1 }
-            }
-        }
-        // The walk above is a brace counter, and it counts every `{`, including
-        // one inside a comment or a string. A single unbalanced push shifts the
-        // stack, so a `withLock` entry outlives its block and reports a loose
-        // append as a locked one - the check would go on passing while the thing
-        // it watches was gone.
-        expect(blockIsLocked.isEmpty, "\(samplerPath) parses to balanced braces")
-        expect(samplerSource.contains("NSLock()") && lockedAppends > 0 && looseAppends == 0,
-               "\(samplerPath) appends to its sampler buffer only under the lock")
-        expect(lockedOrigin == 1 && looseOrigin == 0,
-               "\(samplerPath) writes the recording's start time under the lock")
+        let typingSampler = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Recorder/RecorderTypingTrack.swift",
+            encoding: .utf8)) ?? "")
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }.joined(separator: " ")
+        expect(typingSampler.contains("let lock = NSLock()"),
+               "the typing sampler guards its buffer the way the pointer sampler does")
+        expect(typingSampler.contains("lock.withLock { startedAt = CACurrentMediaTime() }"),
+               "the typing sampler writes the recording's start time under the lock")
+        expect(typingSampler.contains(
+            "lock.withLock { guard let time = pauseClock.eventTime(now, since: startedAt) "
+            + "else { return } times.append(time) }"
+        ), "the typing sampler appends a keystroke time only under the lock")
+        // `RecorderSession.stop()` is nonisolated and async, so its body runs
+        // off the main thread however main-actor the caller was (SE-0338).
+        // Both samplers install and remove AppKit event monitors, so they are
+        // started and stopped back on the main thread.
+        let recorderSessionShape = ((try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Recorder/ScreenRecorderService.swift",
+            encoding: .utf8)) ?? "")
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }.joined(separator: " ")
+        expect(recorderSessionShape.contains(
+            "await MainActor.run { pointer.start() typing.start() }"
+        ), "the recorder installs its event monitors on the main thread")
+        expect(recorderSessionShape.contains(
+            "await MainActor.run { (pointer.stop(), typing.stop()) }"
+        ), "the recorder removes its event monitors on the main thread")
 
         let uniform = RecorderMotion.resampled(
             [RecorderMotion.Sample(time: 0, point: CGPoint(x: 0, y: 0)),
