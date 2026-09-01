@@ -12,12 +12,9 @@ import SwiftUI
 /// shortcuts only while Finder is frontmost and no text field is being edited,
 /// so renaming and text editing keep working untouched.
 ///
-/// A keystroke is answered on the tap thread where a wrong answer would cost
-/// nothing: which app is in front is kept there, and ⌘C outside Finder — which
-/// this service never swallows anyway — is handed straight back. ⌘X and ⌘V
-/// cross to the main thread, where the marks, the pasteboard change count and a
-/// fast Accessibility role check decide; the slow parts (reading the Finder
-/// selection, moving files) run off both threads.
+/// The decision to swallow a keystroke is made synchronously (in-memory marks +
+/// the pasteboard change count + a fast Accessibility role check); the slow
+/// parts (reading the Finder selection, moving files) run off the tap thread.
 /// Requires Accessibility, and Automation consent for Finder on first use.
 final class FinderCutPaste: ObservableObject {
     static let shared = FinderCutPaste()
@@ -86,13 +83,6 @@ final class FinderCutPaste: ObservableObject {
     private var imagePasteInProgress = false
     private var appObserver: NSObjectProtocol?
 
-    /// Which app is in front, written by the activation observer on the main
-    /// thread and read by the tap callback on its own. Nil whenever the
-    /// observer is not installed, so a cached answer can never outlive the
-    /// thing that maintains it.
-    private let routeLock = NSLock()
-    private var frontmostBundleID: String?
-
     private static let finderBundleID = "com.apple.finder"
     private static let syntheticPasteMarker: Int64 = 0x564F5249
     private static let maxRawImageBytes = 64 * 1024 * 1024
@@ -128,21 +118,6 @@ final class FinderCutPaste: ObservableObject {
         showHUD = UserDefaults.standard.object(forKey: DefaultsKey.finderCutPasteShowHUD) as? Bool ?? true
         pasteImageAsFileEnabled = available
             && UserDefaults.standard.bool(forKey: DefaultsKey.finderPasteImageAsFile)
-        // The observer is what keeps the front app the tap thread reads
-        // current, so it follows either shortcut path rather than cut and paste
-        // alone, and it goes up before the tap: a live tap with nothing
-        // maintaining that answer behind it hands ⌘C back everywhere.
-        if cutPasteEnabled || pasteImageAsFileEnabled {
-            installAppObserver()
-        } else {
-            removeAppObserver()
-        }
-        // The marks belong to cut and paste, so they go on that switch alone.
-        // Sharing the observer's condition would leave a staged cut live when
-        // cut and paste is turned off while image paste keeps the observer up:
-        // the HUD stays on screen, the change count still matches, and the next
-        // ⌘V moves the files the user thought they had un-staged.
-        if !cutPasteEnabled { clearMarks() }
         let wanted = SessionActivitySupport.tapShouldRun(
             featureWanted: cutPasteEnabled || pasteImageAsFileEnabled,
             accessibilityGranted: Permissions.shared.accessibility,
@@ -152,6 +127,12 @@ final class FinderCutPaste: ObservableObject {
             installTap()
         } else {
             removeTap()
+        }
+        if cutPasteEnabled {
+            installAppObserver()
+        } else {
+            removeAppObserver()
+            clearMarks()
         }
         refreshPanel()
     }
@@ -167,8 +148,6 @@ final class FinderCutPaste: ObservableObject {
 
     private func installAppObserver() {
         guard appObserver == nil else { return }
-        // The app already in front sends no activation of its own.
-        cacheFrontmostApplication()
         appObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
@@ -183,18 +162,11 @@ final class FinderCutPaste: ObservableObject {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             appObserver = nil
         }
-        routeLock.withLock { frontmostBundleID = nil }
     }
 
     private func handleApplicationActivation() {
-        cacheFrontmostApplication()
         guard cutPasteEnabled else { return }
         refreshPanel()
-    }
-
-    private func cacheFrontmostApplication() {
-        let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        routeLock.withLock { frontmostBundleID = bundleID }
     }
 
     // MARK: - Event tap
@@ -293,10 +265,9 @@ final class FinderCutPaste: ObservableObject {
         }
     }
 
-    /// Runs on the tap thread. Every key except a plain Command-X/C/V returns
-    /// after reading only the event, and Command-C outside Finder after one
-    /// cached string as well; the rare candidate is handed to the main thread
-    /// where the service's UI and pasteboard state live.
+    /// Runs on the tap thread. Every key except plain Command-X/C/V returns
+    /// after reading only the event itself; the rare candidate is handed to
+    /// the main thread where the service's UI and pasteboard state live.
     private func route(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             // The gate the preference sync applied, asked again: a tap re-armed
@@ -320,25 +291,6 @@ final class FinderCutPaste: ObservableObject {
               !flags.contains(.maskControl), !flags.contains(.maskAlternate),
               keyCode == Key.x || keyCode == Key.c || keyCode == Key.v
         else { return Unmanaged.passUnretained(event) }
-
-        // ⌘C is one of the two most-pressed combinations on the machine, and
-        // outside Finder the answer is always no. Learning that on the main
-        // thread would make every copy anywhere wait for whatever this app is
-        // drawing, so the activation observer keeps the answer over here.
-        //
-        // Only ⌘C. The observer refreshes this on the main queue, which is the
-        // thread this reject exists because it is busy, so through that stall
-        // the cache still names the app the user just left. A stale reject is
-        // free here — the main thread passes ⌘C through in every branch, and
-        // the pending-cut marks it would have dropped are dropped again by the
-        // change-count check on the next ⌘V. It is not free for the other two:
-        // ⌘X swallows the key and cuts, ⌘V moves the marked files or writes the
-        // pasteboard image out as a file, and Finder has no native answer for
-        // either, so a stale reject makes them silently do nothing.
-        if keyCode == Key.c,
-           routeLock.withLock({ frontmostBundleID }) != Self.finderBundleID {
-            return Unmanaged.passUnretained(event)
-        }
 
         var verdict: Unmanaged<CGEvent>?
         DispatchQueue.main.sync {
