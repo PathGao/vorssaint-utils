@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Summary
-Vorssaint adds quit and close protections, expands screen text recognition, capture magnifier, the screen recording editor, clipboard, Super key, Dock Preview, App Switcher, Window Layout, mouse controls, snippet controls and the disk image installer, broadens app update and safe cleanup discovery, and hardens shortcut capture and key caps, permission guide recovery, input session switching, Accessibility timeouts, Volume Mixer audio rendering, helper process attribution and teardown, Super key shutdown, process termination, update and uninstallation teardown, window handling and shared on-screen parsing, pasteboard restoration, the radial menu's Now Playing card, the docked shelf's saved items, sensor selection, Cleaning Mode unlock, favicon downloads, the What's New showcase video download, stopping a recording, and the sound of screen recordings. It also improves mouse scrolling feel, disk space and system monitor metrics, Command Bar and radial menu responsiveness, Settings, Scratchpad, Screenshot Editor, floating panels and several menu bar behaviors.
+Vorssaint adds quit and close protections, expands screen text recognition, capture magnifier, the screen recording editor, clipboard, Super key, Dock Preview, App Switcher, Window Layout, mouse controls, snippet controls and the disk image installer, broadens app update and safe cleanup discovery, and hardens shortcut capture and key caps, permission guide recovery, input session switching, Accessibility timeouts, Volume Mixer audio rendering, helper process attribution and teardown, Super key shutdown, process termination, update and uninstallation teardown, window handling and shared on-screen parsing, pasteboard restoration, the Homebrew panel's package list, the radial menu's Now Playing card, the docked shelf's saved items, sensor selection, Cleaning Mode unlock, favicon downloads, the What's New showcase video download, stopping a recording, and the sound of screen recordings. It also improves mouse scrolling feel, disk space and system monitor metrics, Command Bar, App Switcher and radial menu responsiveness, Settings, Scratchpad, Screenshot Editor, floating panels and several menu bar behaviors.
 
 ### Added
 - Settings now includes optional protections for Command-Q and Command-W with customizable hold duration, double press, extra modifier requirements and per-app scopes. Thanks to @RuanMD and @PathGao.
@@ -30,6 +30,8 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The screen recording editor can now blur any area of the picture for as long as you choose, keeping names, emails and other private details unreadable even inside zooms.
 
 ### Changed
+- Minimizing a window right after switching to it now stops reading window state once the previous app is back, instead of repeating the same Accessibility reads throughout the minimize animation, so the keyboard stays responsive. Thanks to @PathGao.
+- Using the same Window Layout shortcut for left or right again now carries the window to the display on that side, landing on the half it came in through.
 - Window controls, Dock clicks and mouse exceptions now share consistent on-screen window parsing while preserving their existing behavior. Thanks to @PathGao.
 - The Command Bar now stays responsive while typing, doing less work on each keystroke and reading the battery and memory levels in the background. Thanks to @PathGao.
 - System monitor process breakdowns now normalize per-app CPU usage against total active processor cores and cap grouped GPU and energy percentages at 100%. Thanks to @pergioa.
@@ -52,6 +54,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The radial menu now checks only which extra mouse button opens a wheel when a side button is pressed, instead of loading every wheel and its icons on each event, so holding a side button and moving the mouse no longer risks dropped clicks. Thanks to @PathGao.
 
 ### Fixed
+- The Homebrew panel now refreshes installed packages after a run that only partly finished, so one skipped package no longer leaves the versions and pending updates showing the state from before it. Thanks to @PathGao.
 - The radial menu's Now Playing action now finds the playing track again on macOS 15.4 and later, where it had quietly shown nothing. Thanks to @PathGao.
 - Super key now keeps modifiers active while holding non-autorepeating source keys such as Caps Lock remapped to F18. Thanks to @victoraraujo01.
 - Dock icon window cycling now rotates only across windows on the active Space instead of switching desktops unexpectedly. Thanks to @PathGao.
