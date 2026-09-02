@@ -366,9 +366,6 @@ final class QuitProtectionService: ObservableObject {
 
     private func handleFlagsChanged(_ event: CGEvent) {
         guard !event.flags.contains(.maskCommand) else { return }
-        // Command coming up ends both waits: a confirmation cannot complete
-        // without it, and the keys the swallow covers cannot still be down.
-        swallowShortcut = nil
         guard pending != nil else { return }
         cancelPending()
     }
