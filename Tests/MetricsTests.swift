@@ -11648,8 +11648,8 @@ struct MetricsTests {
         expect(!managerSource.isEmpty, "HomebrewManager source is readable for the refresh checks")
         expect(managerSource.contains("self.refreshInstalled(clearingError: false)"),
                "a Homebrew operation that exits non-zero still re-reads what is installed")
-        expect(managerSource.components(separatedBy: "self.refreshInstalled(clearingError: false)").count - 1 == 2,
-               "both the cancelled and the failed operation paths re-read, "
+        expect(managerSource.components(separatedBy: "self.refreshInstalled(clearingError: false)").count - 1 == 3,
+               "the cancelled, needs-terminal and failed operation paths all re-read, "
                + "found \(managerSource.components(separatedBy: "self.refreshInstalled(clearingError: false)").count - 1)")
         expect(managerSource.components(separatedBy: "if clearingError { errorMessage = nil }").count - 1 == 2,
                "both banner clears in refreshInstalled are behind its parameter, so the reason "

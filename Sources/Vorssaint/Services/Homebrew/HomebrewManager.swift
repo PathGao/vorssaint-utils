@@ -401,11 +401,16 @@ final class HomebrewManager: ObservableObject {
                     self.markOperationComplete(result: .needsTerminal,
                                                phase: self.operationStatus?.phase ?? .finalizing,
                                                activity: HomebrewProgressParser.visibleError(from: output))
+                    // Same partly-done case: `upgrade` moves the formulae, then a
+                    // cask asks for a password and brew stops there.
+                    self.refreshInstalled(clearingError: false)
                 } else if let tap = HomebrewCommandBuilder.untrustedTapName(fromOutput: output) {
                     self.presentUntrustedTap(tap) { [weak self] in self?.perform(action, package: package) }
                     self.markOperationComplete(result: .failed,
                                                phase: self.operationStatus?.phase ?? .finalizing,
                                                activity: nil)
+                    // No refresh here: `refreshInstalled` calls `clearUntrustedTap()`,
+                    // which would drop the prompt and retry closure just installed.
                 } else {
                     let message = HomebrewProgressParser.visibleError(from: output)
                     self.errorMessage = message.isEmpty ? output.trimmingCharacters(in: .whitespacesAndNewlines) : message
