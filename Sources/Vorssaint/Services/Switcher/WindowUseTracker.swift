@@ -99,7 +99,7 @@ final class WindowUseTracker {
         }
     }
 
-    /// Arms the next activation of our own process to be ignored. Called by
+    /// Arms the next activation of our own process to go unrecorded. Called by
     /// `ActivationHandoff` immediately before it self-activates so it can yield
     /// activation onward: recording that would rank Vorssaint ahead of the app
     /// the user is switching away from, and a quick toggle back would land on
@@ -207,12 +207,19 @@ final class WindowUseTracker {
     @objc private func appActivated(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         let pid = app.processIdentifier
-        if pid == ProcessInfo.processInfo.processIdentifier, consumeSelfActivationHandoff() { return }
+        // An armed handoff suppresses only the recording: the app here, and the
+        // focused-window read the retarget would file, since a titled window of
+        // Vorssaint's would otherwise rank second and catch a quick toggle back.
+        // The observer still follows. Vorssaint really is front after
+        // self-activating, and if the yield does not take it stays there, with
+        // the observer otherwise left on the app the user came from; when it
+        // does take, the target's own notification retargets it a turn later.
+        let selfHandoff = pid == ProcessInfo.processInfo.processIdentifier && consumeSelfActivationHandoff()
         // The application half is exact and free, so it lands right away; the
         // window half needs Accessibility and happens on the watcher thread.
-        promote(app: pid)
+        if !selfHandoff { promote(app: pid) }
         lifecycleLock.withLock { requestedPID = pid }
-        performOnWatcher { [weak self] in self?.retargetObserver() }
+        performOnWatcher { [weak self] in self?.retargetObserver(filingFocusedWindow: !selfHandoff) }
     }
 
     @objc private func appTerminated(_ note: Notification) {
@@ -320,11 +327,11 @@ final class WindowUseTracker {
     /// activation being posted solely inside the application that already has
     /// the keyboard, so one observer at a time covers every case the
     /// activation notifications miss — for the cost of a single one.
-    private func retargetObserver() {
+    private func retargetObserver(filingFocusedWindow: Bool = true) {
         guard !lifecycleLock.withLock({ shouldStopWatcher }) else { return }
         guard let pid = lifecycleLock.withLock({ requestedPID }) else { return }
         guard pid != observedPID else {
-            readFocusedWindow(of: pid)
+            if filingFocusedWindow { readFocusedWindow(of: pid) }
             return
         }
         detachObserver()
@@ -346,8 +353,9 @@ final class WindowUseTracker {
 
         // Activation itself posts no focus change, so the window the app came
         // back to has to be asked for once. Any change that races this arrives
-        // through the observer, which is already installed.
-        readFocusedWindow(of: pid)
+        // through the observer, which is already installed. Not for a handoff's
+        // own self-activation: nobody came back to that window.
+        if filingFocusedWindow { readFocusedWindow(of: pid) }
     }
 
     private func detachObserver() {

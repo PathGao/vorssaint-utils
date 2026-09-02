@@ -9855,7 +9855,9 @@ struct MetricsTests {
                "the activation handoff tells the use tracker its self-activation is not a real switch")
         // Reports how many files it read: an enumerator that finds nothing (the
         // tests run from somewhere other than the repo root) would leave the
-        // list empty and pass while guarding nothing.
+        // list empty and pass while guarding nothing. Matches the method name
+        // alone: `NSApplication.shared.yieldActivation(to:)` is the same call
+        // as `NSApp.yieldActivation(to:)`, and the receiver is not the contract.
         var bareActivationYields: [String] = []
         var scannedActivationFiles = 0
         if let sources = FileManager.default.enumerator(atPath: "Sources") {
@@ -9863,7 +9865,7 @@ struct MetricsTests {
                 let text = (try? String(contentsOfFile: "Sources/" + path, encoding: .utf8)) ?? ""
                 scannedActivationFiles += 1
                 guard (path as NSString).lastPathComponent != "ActivationHandoff.swift" else { continue }
-                if text.contains("NSApp.yieldActivation") {
+                if text.contains("yieldActivation") {
                     bareActivationYields.append((path as NSString).lastPathComponent)
                 }
             }
@@ -9877,13 +9879,18 @@ struct MetricsTests {
         // own process. The tracker has to drop that one without dropping every
         // activation of Vorssaint: `appActivated` is the only place an app is
         // recorded, so an unconditional guard would also erase the Dock icon
-        // and Settings.
+        // and Settings. Only the recording is dropped: the observer still
+        // follows, or a yield that does not take would leave it on the app the
+        // user came from while Vorssaint is front.
         let useTrackerSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/Switcher/WindowUseTracker.swift",
             encoding: .utf8)) ?? ""
         expect(useTrackerSource.contains(
-                    "if pid == ProcessInfo.processInfo.processIdentifier, consumeSelfActivationHandoff() { return }"),
-               "the use tracker skips our own activation only when a handoff armed it")
+                    "let selfHandoff = pid == ProcessInfo.processInfo.processIdentifier && consumeSelfActivationHandoff()"),
+               "the use tracker skips recording our own activation only when a handoff armed it")
+        expect(useTrackerSource.contains("if !selfHandoff { promote(app: pid) }")
+                && useTrackerSource.contains("self?.retargetObserver(filingFocusedWindow: !selfHandoff)"),
+               "an armed handoff skips only the recording, the observer still follows Vorssaint")
         expect(useTrackerSource.contains("selfActivationHandoffUntil = 0"),
                "an armed handoff is consumed once, so the next activation of Vorssaint is recorded")
         expect(useTrackerSource.contains("guard ProcessInfo.processInfo.systemUptime < selfActivationHandoffUntil"),

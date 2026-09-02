@@ -16,9 +16,10 @@ import AppKit
 /// hand over; it runs in direct response to the user's own key or click, which
 /// the system accepts as a real gesture.
 ///
-/// Every yield in the app goes through here. A bare `NSApp.yieldActivation`
-/// added elsewhere would reintroduce the bug on that path alone, so
-/// `Tests/MetricsTests.swift` scans `Sources` and fails if one appears.
+/// Every yield in the app goes through here. A bare `yieldActivation(to:)`
+/// added elsewhere, whatever the receiver is spelled, would reintroduce the bug
+/// on that path alone, so `Tests/MetricsTests.swift` scans `Sources` and fails
+/// if one appears.
 enum ActivationHandoff {
     /// Call on the main thread, synchronously with the gesture that asked for
     /// the switch. The caller still activates `app` itself afterwards — this
