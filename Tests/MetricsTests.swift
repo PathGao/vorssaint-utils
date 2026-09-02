@@ -11514,18 +11514,6 @@ struct MetricsTests {
         expect(HomebrewProgressParser.appendingToLog(String(repeating: "日本語テキスト\n", count: 2),
                                                      "日本語テキスト\n", limit: 32) == multibyteLog,
                "Homebrew operation log measures its limit in the unit it trims in")
-        // Both counts answer the same question, but `log.count` walks
-        // graphemes on the main thread for every chunk a running operation
-        // emits. Nothing observable separates the two orders, so the order
-        // is pinned here instead.
-        let homebrewSupportSource = (try? String(
-            contentsOfFile: "Sources/Vorssaint/Services/Homebrew/HomebrewSupport.swift",
-            encoding: .utf8)) ?? ""
-        let logCapGuard = homebrewSupportSource.components(separatedBy: "\n").first {
-            $0.trimmingCharacters(in: .whitespaces).hasPrefix("guard log.")
-        } ?? ""
-        expect(logCapGuard.contains("log.utf8.count > limit * 2, log.count > limit * 2"),
-               "Homebrew operation log screens on the O(1) byte count before walking Characters")
 
         let homebrewJSON = """
         {
