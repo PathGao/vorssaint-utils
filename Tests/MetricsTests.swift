@@ -22038,13 +22038,15 @@ struct MetricsTests {
         }
 
         // MARK: A sleeping clock
-        let screenshotShareCode = ((try? String(
-            contentsOfFile: "Sources/Vorssaint/Services/QuickTools/ScreenshotShareService.swift",
-            encoding: .utf8)) ?? "").components(separatedBy: "\n")
-            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
-            .joined(separator: "\n")
-        expect(screenshotShareCode.contains("NSWorkspace.didWakeNotification"),
-               "share links recompute their expiry on wake, which their sleeping clock missed")
+        for shareService in ["Sources/Vorssaint/Services/QuickTools/ScreenshotShareService.swift",
+                             "Sources/Vorssaint/Services/Recorder/RecordingShareService.swift"] {
+            let shareCode = ((try? String(contentsOfFile: shareService, encoding: .utf8)) ?? "")
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+            expect(shareCode.contains("NSWorkspace.didWakeNotification"),
+                   "\(shareService) recomputes share link expiry on wake, which its sleeping clock missed")
+        }
 
         if failures.isEmpty {
             print("TESTS OK (\(checks) checks)")
