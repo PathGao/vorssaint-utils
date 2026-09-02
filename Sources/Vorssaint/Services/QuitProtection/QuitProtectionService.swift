@@ -32,12 +32,20 @@ final class QuitProtectionService: ObservableObject {
     private var frontmostProcessIdentifier: pid_t?
     private let hud = QuitProtectionHUD()
 
-    private init() {}
+    private init() {
+        SessionActivity.shared.onChange { [weak self] _ in
+            self?.syncWithPreferences()
+        }
+    }
 
     func syncWithPreferences() {
         let enabled = AppFeature.quitWindowProtection.isAvailable
-            && (configuration(for: .quit).enabled || configuration(for: .close).enabled)
-        guard enabled, Permissions.shared.accessibility else {
+            && isEnabledForAnyShortcut
+        guard SessionActivitySupport.tapShouldRun(
+            featureWanted: enabled,
+            accessibilityGranted: AXIsProcessTrusted(),
+            sessionIsActive: SessionActivity.shared.isActive
+        ) else {
             stop()
             return
         }
@@ -104,7 +112,10 @@ final class QuitProtectionService: ObservableObject {
         }
         activationObserver = nil
 
-        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+        }
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         }
@@ -145,8 +156,24 @@ final class QuitProtectionService: ObservableObject {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            // The key up that ends the swallow may be among the events missed.
+            swallowShortcut = nil
             cancelPending()
+            let enabled = AppFeature.quitWindowProtection.isAvailable
+                && isEnabledForAnyShortcut
+            let shouldRearm = SessionActivitySupport.tapShouldRun(
+                featureWanted: enabled,
+                accessibilityGranted: AXIsProcessTrusted(),
+                sessionIsActive: SessionActivity.shared.isActive
+            )
+            if shouldRearm, let tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            } else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.stop()
+                    self?.syncWithPreferences()
+                }
+            }
             return Unmanaged.passUnretained(event)
         }
         guard isRunning, !isSynthetic(event) else {
@@ -200,22 +227,24 @@ final class QuitProtectionService: ObservableObject {
             return Unmanaged.passUnretained(event)
         }
 
-        if isRepeat {
+        let flags = event.flags
+        let command = flags.contains(.maskCommand)
+        if isRepeat, command {
             return nil
         }
 
-        let flags = event.flags
-        let command = flags.contains(.maskCommand)
         let control = flags.contains(.maskControl)
         let option = flags.contains(.maskAlternate)
         let shift = flags.contains(.maskShift)
         let character = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased()
+        let commandLabel = GlobalShortcut.layoutKeyLabel(for: keyCode, usesCommand: true)
 
         switch configuration.mode {
         case .hold:
             guard QuitProtectionSupport.isBaseShortcut(
                 keyCharacter: character,
                 keyCode: keyCode,
+                commandLabel: commandLabel,
                 command: command,
                 control: control,
                 option: option,
@@ -232,6 +261,7 @@ final class QuitProtectionService: ObservableObject {
             guard QuitProtectionSupport.isBaseShortcut(
                 keyCharacter: character,
                 keyCode: keyCode,
+                commandLabel: commandLabel,
                 command: command,
                 control: control,
                 option: option,
@@ -261,6 +291,7 @@ final class QuitProtectionService: ObservableObject {
             if QuitProtectionSupport.isExtraShortcut(
                 keyCharacter: character,
                 keyCode: keyCode,
+                commandLabel: commandLabel,
                 command: command,
                 control: control,
                 option: option,
@@ -279,6 +310,7 @@ final class QuitProtectionService: ObservableObject {
             guard QuitProtectionSupport.isBaseShortcut(
                 keyCharacter: character,
                 keyCode: keyCode,
+                commandLabel: commandLabel,
                 command: command,
                 control: control,
                 option: option,
@@ -454,9 +486,13 @@ final class QuitProtectionService: ObservableObject {
     private func matchingShortcut(for event: CGEvent) -> QuitProtectionShortcut? {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let character = NSEvent(cgEvent: event)?.charactersIgnoringModifiers?.lowercased()
+        // Read from the keycap cache; this tap runs on the main run loop, so a
+        // miss derives from the layout and backfills rather than answering nil.
+        let commandLabel = GlobalShortcut.layoutKeyLabel(for: keyCode, usesCommand: true)
         return QuitProtectionShortcut.allCases.first {
             QuitProtectionSupport.matchesKey(keyCharacter: character,
                                              keyCode: keyCode,
+                                             commandLabel: commandLabel,
                                              shortcut: $0)
         }
     }
