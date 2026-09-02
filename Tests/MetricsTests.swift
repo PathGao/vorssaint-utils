@@ -21333,9 +21333,23 @@ struct MetricsTests {
                "build.sh unlocks the dedicated signing keychain itself")
         for (script, lines) in [("build.sh", buildScriptLines),
                                 ("Tools/setup-signing.sh", signingSetupLines)] {
-            let code = lines.joined(separator: "\n")
-            expect(code.contains("codesign --force --sign"),
+            let tokens = { (line: String) in
+                line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            }
+            let signingCalls = lines.filter { line in
+                let words = tokens(line)
+                return line.contains("codesign")
+                    && words.contains("--force") && words.contains("--sign")
+            }
+            expect(!signingCalls.isEmpty,
                    "\(script) asks codesign whether the identity can sign before relying on it")
+            // build.sh's header: copies pick up xattrs (com.apple.provenance etc.)
+            // that invalidate codesign. A probe that fails on one reads as "no
+            // usable identity", and that is a silent ad-hoc build.
+            let unstripped = signingCalls.filter { !tokens($0).contains("--strip-disallowed-xattrs") }
+            expect(unstripped.isEmpty,
+                   "\(script) passes --strip-disallowed-xattrs to every codesign --force --sign "
+                    + "call, found \(unstripped.count) without it")
             // zsh keeps `status` as a second name for $?, and it is read-only:
             // `local status=1` aborts the script on the first call to the
             // function that declares it, so the probe never runs at all.

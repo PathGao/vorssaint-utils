@@ -44,7 +44,7 @@ identity_can_sign() {
     local probe signed=1
     probe="$(mktemp -d)"
     cp /bin/echo "$probe/probe"
-    codesign --force --sign "$IDENTITY" "$probe/probe" >/dev/null 2>&1 && signed=0
+    codesign --force --strip-disallowed-xattrs --sign "$IDENTITY" "$probe/probe" >/dev/null 2>&1 && signed=0
     rm -rf "$probe"
     return $signed
 }

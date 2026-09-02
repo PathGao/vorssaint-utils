@@ -99,7 +99,7 @@ legacy_identity_installed() {
                     "$LEGACY_KEYCHAIN" 2>/dev/null; }; then
             PROBE_TMP="$(mktemp -d)"
             cp /bin/echo "$PROBE_TMP/probe"
-            if /usr/bin/codesign --force --sign "$LEGACY_IDENTITY" \
+            if /usr/bin/codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" \
                 "$PROBE_TMP/probe" >/dev/null 2>&1; then
                 LEGACY_IDENTITY_USABLE=yes
             fi
