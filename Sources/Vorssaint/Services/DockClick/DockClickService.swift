@@ -139,7 +139,7 @@ final class DockClickService {
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if SessionActivity.shared.isActive, let tap {
+            if AXIsProcessTrusted(), SessionActivity.shared.isActive, let tap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             } else {
                 // Invalidating the port from its own callback stack is unsafe;
