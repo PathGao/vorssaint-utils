@@ -167,11 +167,14 @@ final class WindowUseTracker {
     @objc private func appActivated(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         let pid = app.processIdentifier
+        // Our own activation is `ActivationHandoff` self-activating on the way
+        // out; ranking it would put Vorssaint ahead of the app the user left.
+        let own = pid == ProcessInfo.processInfo.processIdentifier
         // The application half is exact and free, so it lands right away; the
         // window half needs Accessibility and happens on the watcher thread.
-        promote(app: pid)
+        if !own { promote(app: pid) }
         lifecycleLock.withLock { requestedPID = pid }
-        performOnWatcher { [weak self] in self?.retargetObserver() }
+        performOnWatcher { [weak self] in self?.retargetObserver(filingFocusedWindow: !own) }
     }
 
     @objc private func appTerminated(_ note: Notification) {
@@ -279,11 +282,11 @@ final class WindowUseTracker {
     /// activation being posted solely inside the application that already has
     /// the keyboard, so one observer at a time covers every case the
     /// activation notifications miss — for the cost of a single one.
-    private func retargetObserver() {
+    private func retargetObserver(filingFocusedWindow: Bool = true) {
         guard !lifecycleLock.withLock({ shouldStopWatcher }) else { return }
         guard let pid = lifecycleLock.withLock({ requestedPID }) else { return }
         guard pid != observedPID else {
-            readFocusedWindow(of: pid)
+            if filingFocusedWindow { readFocusedWindow(of: pid) }
             return
         }
         detachObserver()
