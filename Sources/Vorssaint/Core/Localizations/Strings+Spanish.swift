@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "Desinstalar Vorssaint por completo",
         advancedUninstallConfirmTitle: "¿Desinstalar Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint borrará sus permisos, eliminará sus preferencias y se moverá a la Papelera; después se cerrará. Esto no se puede deshacer desde la app, pero permanece en la Papelera hasta que la vacíes.",
+        advancedUninstallFailedTitle: "La desinstalación se detuvo",
+        advancedUninstallFailedBody: "Vorssaint no pudo restaurar un ajuste del sistema que había cambiado: la suspensión, la velocidad de los ventiladores o la aceleración del ratón. No se eliminó nada. Inténtalo de nuevo y permite la solicitud de contraseña si aparece.",
 
         launchAtLogin: "Abrir al iniciar sesión",
         languageLabel: "Idioma",
@@ -207,6 +209,8 @@ extension Strings {
         switcherShortcutHintApps: "Apps",
         switcherShortcutHintWindows: "Ventanas",
         switcherWindowShortcutCaption: "Abre un selector de las ventanas de la app en primer plano. Con el selector de apps abierto, salta entre las ventanas de la app seleccionada.",
+        switcherTakeOverSystemShortcuts: "Reemplazar ⌘Tab y ⌘` de macOS",
+        switcherTakeOverSystemShortcutsCaption: "Desactiva los atajos correspondientes de macOS solo mientras el selector de Vorssaint está activo. Todas las apps abiertas siguen accesibles.",
         switcherAppearanceDelay: "Retardo de aparición",
         switcherAppearanceDelayCaption: "Cuánto tiempo debe mantenerse pulsado el atajo antes de que aparezca el selector.",
         switcherMergeTabs: "Mostrar una entrada por app",

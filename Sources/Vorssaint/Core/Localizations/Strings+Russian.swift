@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "Удалить Vorssaint полностью",
         advancedUninstallConfirmTitle: "Удалить Vorssaint?",
         advancedUninstallConfirmBody: "Vorssaint очистит разрешения, удалит настройки и переместится в Корзину, после чего закроется. Это нельзя отменить из приложения, но файл останется в Корзине, пока вы её не очистите.",
+        advancedUninstallFailedTitle: "Удаление остановлено",
+        advancedUninstallFailedBody: "Vorssaint не смог вернуть изменённую системную настройку: режим сна, скорость вентиляторов или ускорение мыши. Ничего не удалено. Повторите попытку и разрешите запрос пароля, если он появится.",
 
         launchAtLogin: "Запускать при входе",
         languageLabel: "Язык",
@@ -208,6 +210,8 @@ extension Strings {
         switcherShortcutHintApps: "Приложения",
         switcherShortcutHintWindows: "Окна",
         switcherWindowShortcutCaption: "Открывает переключатель окон приложения на переднем плане. Пока открыт переключатель приложений, переходит между окнами выбранного приложения.",
+        switcherTakeOverSystemShortcuts: "Заменить ⌘Tab и ⌘` macOS",
+        switcherTakeOverSystemShortcutsCaption: "Отключает соответствующие сочетания macOS только на время работы переключателя Vorssaint. Все запущенные приложения остаются доступны.",
         switcherAppearanceDelay: "Задержка появления",
         switcherAppearanceDelayCaption: "Как долго нужно удерживать сочетание клавиш, прежде чем появится переключатель.",
         switcherMergeTabs: "Показывать одну запись на приложение",
