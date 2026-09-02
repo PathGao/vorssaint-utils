@@ -888,8 +888,7 @@ final class CommandBarService: ObservableObject {
     /// Each list's folded copy, dropped by the `didSet` when that list is
     /// assigned again. The lists land from separate background passes, each
     /// calling `indexEntries()`, so one opening indexes seven to ten times.
-    private var foldedSections: [PoolSection: [(entry: CommandBarEntry,
-                                                folded: (title: String, keywords: String))]] = [:]
+    private var foldedSections: [PoolSection: [(title: String, keywords: String)]] = [:]
 
     private func indexEntries() {
         index()
@@ -912,9 +911,8 @@ final class CommandBarService: ObservableObject {
                 // the row surfaces even when its real title shares nothing with it.
                 let alias = names[entry.stableKey]
                     .map { " " + CommandBarSearch.normalized($0) } ?? ""
-                return (entry,
-                        (CommandBarSearch.normalized(entry.matchTitle ?? entry.title),
-                         CommandBarSearch.normalized(entry.keywords) + alias))
+                return (CommandBarSearch.normalized(entry.matchTitle ?? entry.title),
+                        CommandBarSearch.normalized(entry.keywords) + alias)
             }
         }
         // The three maps are built from nothing every time, so a row that left
@@ -924,10 +922,10 @@ final class CommandBarService: ObservableObject {
         normalizedByID = [:]
         entriesByStableKey = [:]
         for section in PoolSection.allCases {
-            for row in foldedSections[section] ?? [] {
-                entriesByID[row.entry.id] = row.entry
-                entriesByStableKey[row.entry.stableKey] = row.entry
-                normalizedByID[row.entry.id] = row.folded
+            for (entry, folded) in zip(entries(in: section), foldedSections[section] ?? []) {
+                entriesByID[entry.id] = entry
+                entriesByStableKey[entry.stableKey] = entry
+                normalizedByID[entry.id] = folded
             }
         }
     }
