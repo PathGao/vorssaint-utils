@@ -752,6 +752,11 @@ struct MetricsTests {
         }
         expect(laneAnswer == 887, "the queued work runs once the lane comes free")
         expect(laneAnsweredOnMain, "the pasteboard lane answers on the main queue")
+        let pastePlainSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/QuickTools/PastePlainService.swift",
+            encoding: .utf8)) ?? ""
+        expect(pastePlainSource.contains("GeneralPasteboardAccess.shared.async"),
+               "paste as plain text reads the clipboard on the lane, not on the main thread")
 
         let maxCapacityStringJSON = Data(#"{"SPPowerDataType":[{"sppower_battery_health_info":{"sppower_battery_health_maximum_capacity":"93%"}}]}"#.utf8)
         expect(MaxCapacityProbe.percent(fromSystemProfilerJSON: maxCapacityStringJSON) == 93,
@@ -5649,6 +5654,43 @@ struct MetricsTests {
                                                              frames: horizontalDisplays,
                                                              movingForward: true) == nil,
                "window layout leaves one display and invalid selections unchanged")
+        expect(WindowLayoutGeometry.horizontalNeighbourIndex(currentIndex: 0,
+                                                             frames: horizontalDisplays,
+                                                             movingRight: true) == 2
+                && WindowLayoutGeometry.horizontalNeighbourIndex(currentIndex: 0,
+                                                                 frames: horizontalDisplays,
+                                                                 movingRight: false) == 1
+                && WindowLayoutGeometry.horizontalNeighbourIndex(currentIndex: 2,
+                                                                 frames: horizontalDisplays,
+                                                                 movingRight: false) == 0,
+               "window layout finds the display starting on the asked side")
+        expect(WindowLayoutGeometry.horizontalNeighbourIndex(currentIndex: 2,
+                                                             frames: horizontalDisplays,
+                                                             movingRight: true) == nil
+                && WindowLayoutGeometry.horizontalNeighbourIndex(currentIndex: 1,
+                                                                 frames: horizontalDisplays,
+                                                                 movingRight: false) == nil,
+               "window layout stops at the outermost display instead of wrapping sideways")
+        let stackedDisplays = [
+            CGRect(x: 0, y: 0, width: 1440, height: 900),
+            CGRect(x: 0, y: 900, width: 1440, height: 900),
+        ]
+        expect(WindowLayoutGeometry.horizontalNeighbourIndex(currentIndex: 0,
+                                                             frames: stackedDisplays,
+                                                             movingRight: true) == nil
+                && WindowLayoutGeometry.horizontalNeighbourIndex(currentIndex: 1,
+                                                                 frames: stackedDisplays,
+                                                                 movingRight: false) == nil,
+               "window layout never answers a sideways push with a stacked display")
+        let towerDisplays = [
+            CGRect(x: 0, y: 0, width: 1440, height: 900),
+            CGRect(x: 1440, y: 800, width: 1000, height: 1000),
+            CGRect(x: 1440, y: -100, width: 1000, height: 1000),
+        ]
+        expect(WindowLayoutGeometry.horizontalNeighbourIndex(currentIndex: 0,
+                                                             frames: towerDisplays,
+                                                             movingRight: true) == 2,
+               "window layout picks the closest display when several share the same edge")
         let portraitFrame = CGRect(x: -1200, y: -200, width: 1200, height: 1800)
         let scaledFrame = CGRect(x: 1440, y: 100, width: 2000, height: 1000)
         let portraitWindow = CGRect(x: -900, y: 1000, width: 600, height: 400)
@@ -5764,6 +5806,23 @@ struct MetricsTests {
                                                     visibleFrame: visibleFrame,
                                                     previousAction: .bottomHalf) == .rightHalf,
                "window layout right does not become a corner after bottom")
+        expect(WindowLayoutGeometry.displayCrossing(for: .rightHalf,
+                                                    previousAction: .rightHalf)?.action == .leftHalf
+                && WindowLayoutGeometry.displayCrossing(for: .rightHalf,
+                                                        previousAction: .rightHalf)?.movingRight == true,
+               "window layout right twice enters the display on the right from its left half")
+        expect(WindowLayoutGeometry.displayCrossing(for: .leftHalf,
+                                                    previousAction: .leftHalf)?.action == .rightHalf
+                && WindowLayoutGeometry.displayCrossing(for: .leftHalf,
+                                                        previousAction: .leftHalf)?.movingRight == false,
+               "window layout left twice enters the display on the left from its right half")
+        expect(WindowLayoutGeometry.displayCrossing(for: .leftHalf, previousAction: nil) == nil
+                && WindowLayoutGeometry.displayCrossing(for: .leftHalf, previousAction: .rightHalf) == nil,
+               "window layout only crosses displays when the same side is used twice in a row")
+        expect(WindowLayoutGeometry.displayCrossing(for: .topHalf, previousAction: .topHalf) == nil
+                && WindowLayoutGeometry.displayCrossing(for: .bottomHalf, previousAction: .bottomHalf) == nil
+                && WindowLayoutGeometry.displayCrossing(for: .leftThird, previousAction: .leftThird) == nil,
+               "window layout keeps top, bottom and thirds on their own display")
         let leftTarget = WindowLayoutGeometry.rect(for: .leftHalf,
                                                    current: currentWindow,
                                                    visibleFrame: visibleFrame)
@@ -9832,10 +9891,50 @@ struct MetricsTests {
         let dockClickSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/DockClick/DockClickService.swift",
             encoding: .utf8)) ?? ""
-        expect(dockClickSource.contains("NSApp.yieldActivation(to: app)"),
+        expect(dockClickSource.contains("ActivationHandoff.yield(to: app)"),
                "a Dock click restore yields this app's activation first")
         expect(dockClickSource.contains("app.activate(from: NSRunningApplication.current, options: [])"),
                "a Dock click restore asks cooperatively before falling back")
+        // A yield only hands over activation this app holds, and it usually
+        // holds none when a switch commits, so the helper self-activates first
+        // and every yield goes through it. A bare yield added on a new path
+        // would bring the refused-handoff bug back on that path alone.
+        let activationHandoffSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/ActivationHandoff.swift",
+            encoding: .utf8)) ?? ""
+        let selfActivation = activationHandoffSource.range(of: "NSApp.activate(ignoringOtherApps: true)")
+        let yieldOnward = activationHandoffSource.range(of: "NSApp.yieldActivation(to: app)")
+        expect(selfActivation != nil && yieldOnward != nil
+                && selfActivation!.lowerBound < yieldOnward!.lowerBound,
+               "the activation handoff self-activates before it yields onward")
+        let handoffStamp = activationHandoffSource.range(of: "lastSelfActivation = CFAbsoluteTimeGetCurrent()")
+        expect(handoffStamp != nil && selfActivation != nil
+                && handoffStamp!.lowerBound < selfActivation!.lowerBound,
+               "the activation handoff stamps the self-activation before asking for it")
+        // Only the activation the handoff caused stays out of the history; the
+        // Dock icon, Settings and Vorssaint's own windows are real uses.
+        let useTrackerSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Switcher/WindowUseTracker.swift",
+            encoding: .utf8)) ?? ""
+        expect(useTrackerSource.contains(
+                   "pid == ProcessInfo.processInfo.processIdentifier && ActivationHandoff.isHandingOff"),
+               "only an activation the handoff caused is left out of the use history")
+        var bareActivationYields: [String] = []
+        var scannedActivationFiles = 0
+        if let sources = FileManager.default.enumerator(atPath: "Sources") {
+            for case let path as String in sources where path.hasSuffix(".swift") {
+                scannedActivationFiles += 1
+                guard (path as NSString).lastPathComponent != "ActivationHandoff.swift" else { continue }
+                let text = (try? String(contentsOfFile: "Sources/" + path, encoding: .utf8)) ?? ""
+                if text.contains("yieldActivation") {
+                    bareActivationYields.append((path as NSString).lastPathComponent)
+                }
+            }
+        }
+        expect(scannedActivationFiles > 0 && bareActivationYields.isEmpty,
+               "activation is yielded only through ActivationHandoff, "
+               + "found a bare yield in \(bareActivationYields.sorted()) "
+               + "across \(scannedActivationFiles) scanned files")
         expect(DockClickSupport.action(appIsFrontmost: true,
                                        hasUnminimizedWindows: false,
                                        hasMinimizedWindows: true,
@@ -10961,6 +11060,38 @@ struct MetricsTests {
                                                                              targetIsMinimized: true,
                                                                              ownPID: 99),
                "App Switcher does not restore source after minimize intent within the same app")
+        var minimizeIntentMinimizedReads = 0
+        var minimizeIntentFocusedReads = 0
+        func minimizeIntentMinimized(_ value: Bool) -> Bool {
+            minimizeIntentMinimizedReads += 1
+            return value
+        }
+        func minimizeIntentFocused(_ value: UInt32?) -> UInt32? {
+            minimizeIntentFocusedReads += 1
+            return value
+        }
+        expect(!SwitcherSupport.shouldRestoreSourceAfterTargetMinimizeIntent(
+                    targetPID: 10,
+                    sourcePID: 20,
+                    frontmostPID: 20,
+                    focusedWindowID: minimizeIntentFocused(55),
+                    targetWindowID: 44,
+                    targetIsMinimized: minimizeIntentMinimized(true),
+                    ownPID: 99),
+               "App Switcher stops a minimize restore pulse once the source is already frontmost")
+        expect(minimizeIntentMinimizedReads == 0 && minimizeIntentFocusedReads == 0,
+               "App Switcher reads no window state on a minimize pulse the frontmost check alone settles")
+        expect(SwitcherSupport.shouldRestoreSourceAfterTargetMinimizeIntent(
+                    targetPID: 10,
+                    sourcePID: 20,
+                    frontmostPID: 10,
+                    focusedWindowID: minimizeIntentFocused(55),
+                    targetWindowID: 44,
+                    targetIsMinimized: minimizeIntentMinimized(true),
+                    ownPID: 99),
+               "App Switcher restores the source once the target window reports itself minimized")
+        expect(minimizeIntentMinimizedReads == 1 && minimizeIntentFocusedReads == 0,
+               "App Switcher skips the focused-window read when the target is already minimized")
         expect(SwitcherSupport.shouldStageSourceBehindTarget(targetPID: 10,
                                                              sourcePID: 20,
                                                              sourceWindowID: 44,
@@ -11637,6 +11768,30 @@ struct MetricsTests {
         expect(HomebrewCommandBuilder.upgradeAll(brewPath: brewPath).arguments
                == ["upgrade"],
                "Homebrew update all command upgrades all outdated packages")
+
+        // brew exits non-zero when it could not do all of a run, not only when it
+        // did none of it, so the installed and outdated lists have to be re-read
+        // after a failed operation too. Read from the source: the refresh happens
+        // inside a completion closure that no unit test can drive.
+        let managerSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Homebrew/HomebrewManager.swift",
+            encoding: .utf8)) ?? ""
+        expect(!managerSource.isEmpty, "HomebrewManager source is readable for the refresh checks")
+        let managerCode = managerSource
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        let refreshCalls = managerCode
+            .components(separatedBy: "self.refreshInstalled(clearingError: false)").count - 1
+        expect(refreshCalls == 3,
+               "the cancelled, needs-terminal and failed operation paths all re-read, "
+               + "found \(refreshCalls)")
+        let guardedBannerClears = managerCode
+            .components(separatedBy: "if clearingError { errorMessage = nil }").count - 1
+        expect(guardedBannerClears == 2,
+               "both banner clears in refreshInstalled are behind its parameter, so the reason "
+               + "a failed operation gave survives the refresh that follows it, found "
+               + "\(guardedBannerClears)")
         expect(HomebrewOperation.Action.install.runningSystemImage == "arrow.down.circle.fill",
                "Homebrew install status uses a download icon")
         expect(HomebrewOperation.Action.uninstall.runningSystemImage == "trash.circle.fill",
@@ -14143,6 +14298,10 @@ struct MetricsTests {
             .joined(separator: "\n")
         expect(!brightnessWorkQueueHalf.isEmpty && !brightnessWorkQueueCode.contains("NSScreen"),
                "the brightness work queue resolves display names without touching NSScreen")
+        // Display numbers are reissued after a reconnection, so the gamma
+        // restore before a switch-off must check the monitor like the others.
+        expect(brightnessSource.contains("baseline.fingerprint == Self.displayFingerprint(display.id)"),
+               "the pre-switch-off gamma restore checks the display fingerprint")
 
         let ddcWrite = BrightnessSupport.writePacket(code: 0x10, value: 0x1234)
         let expectedDDCWrite: [UInt8] = [0x84, 0x03, 0x10, 0x12, 0x34, 0x8E]
@@ -15345,6 +15504,17 @@ struct MetricsTests {
             .components(separatedBy: "private func hotkeyPressed").first ?? ""
         expect(!radialClaimedClick.isEmpty && !radialClaimedClick.contains("passUnretained"),
                "a claimed side button keeps both halves of its click whatever the full decode says")
+
+        // The tap is the only thing that ends a button-held wheel, so handing
+        // it back on resign has to end the session too; a wheel left open
+        // across the switch would come back in hold phase with no release
+        // coming for it.
+        let radialSessionResign = radialServiceCode
+            .components(separatedBy: "SessionActivity.shared.onChange")
+            .dropFirst().first?
+            .components(separatedBy: "var sessionActive").first ?? ""
+        expect(radialSessionResign.contains("endSession()"),
+               "the radial menu ends its session when the mouse tap is handed back on resign")
         expect(RadialMenuFaviconFetcher.faviconURL(
             for: "https://example.com:8443/path?q=1#part")?.absoluteString
                 == "https://example.com:8443/favicon.ico"
@@ -22047,7 +22217,8 @@ struct MetricsTests {
                          "Sources/Vorssaint/Services/MouseNavigation/MouseNavigationService.swift",
                          "Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutService.swift",
                          "Sources/Vorssaint/Services/MiddleClick/MiddleClickService.swift",
-                         "Sources/Vorssaint/Services/QuitProtection/QuitProtectionService.swift"] {
+                         "Sources/Vorssaint/Services/QuitProtection/QuitProtectionService.swift",
+                         "Sources/Vorssaint/Services/RadialMenu/RadialMenuService.swift"] {
             let source = (try? String(contentsOfFile: tapOwner, encoding: .utf8)) ?? ""
             expect(!source.isEmpty, "\(tapOwner) reads back for its session-switch check")
             let code = source.components(separatedBy: "\n")
@@ -22062,7 +22233,8 @@ struct MetricsTests {
             if tapOwner.contains("MouseNavigation")
                 || tapOwner.contains("MouseButtonShortcut")
                 || tapOwner.contains("MiddleClick")
-                || tapOwner.contains("QuitProtection") {
+                || tapOwner.contains("QuitProtection")
+                || tapOwner.contains("RadialMenu") {
                 expect(code.contains("AXIsProcessTrusted()"),
                        "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
             }
@@ -22272,35 +22444,91 @@ struct MetricsTests {
                                                  exceptions: ["com.example.editor"]),
                "all-except scope protects an unselected bundle")
 
+        expect(QuitProtectionSupport.matchesKey(keyCharacter: "\u{439}", keyCode: 12,
+                                                commandLabel: "Q", shortcut: .quit),
+               "a Cyrillic layout is protected on the key Command-Q quits from, "
+               + "which types \u{439} rather than q")
+        expect(!QuitProtectionSupport.matchesKey(keyCharacter: "'", keyCode: 12,
+                                                 commandLabel: "'", shortcut: .quit),
+               "a Dvorak layout leaves the key Command-Q does not quit from alone")
         expect(QuitProtectionSupport.matchesKey(keyCharacter: "q", keyCode: 0,
-                                                shortcut: .quit),
-               "quit protection prefers the layout-resolved q character")
+                                                commandLabel: nil, shortcut: .quit),
+               "quit protection falls back to the typed character without a layout")
         expect(QuitProtectionSupport.matchesKey(keyCharacter: nil, keyCode: 13,
-                                                shortcut: .close),
-               "quit protection falls back to the W key code without a character")
+                                                commandLabel: nil, shortcut: .close),
+               "quit protection falls back to the W key code with neither a character nor a layout")
         expect(QuitProtectionSupport.isBaseShortcut(keyCharacter: "q", keyCode: 12,
+                                                    commandLabel: "Q",
                                                     command: true, control: false,
                                                     option: false, shift: false, shortcut: .quit),
                "plain Command-Q is recognized")
         expect(!QuitProtectionSupport.isBaseShortcut(keyCharacter: "q", keyCode: 12,
+                                                     commandLabel: "Q",
                                                      command: true, control: false,
                                                      option: false, shift: true, shortcut: .quit),
                "Shift-Command-Q is not mistaken for plain Command-Q")
         expect(QuitProtectionSupport.isExtraShortcut(keyCharacter: "q", keyCode: 12,
+                                                     commandLabel: "Q",
                                                      command: true, control: false,
                                                      option: false, shift: true,
                                                      shortcut: .quit, extraModifier: .shift),
                "Shift-Command-Q is recognized as an extra-modifier confirmation")
         expect(QuitProtectionSupport.isExtraShortcut(keyCharacter: "w", keyCode: 13,
+                                                     commandLabel: "W",
                                                      command: true, control: true,
                                                      option: false, shift: false,
                                                      shortcut: .close, extraModifier: .control),
                "Control-Command-W is recognized as an extra-modifier confirmation")
         expect(!QuitProtectionSupport.isExtraShortcut(keyCharacter: "q", keyCode: 12,
+                                                      commandLabel: "Q",
                                                       command: true, control: false,
                                                       option: true, shift: false,
                                                       shortcut: .quit, extraModifier: .shift),
                "an unrelated modifier combination is not protected")
+
+        // Feeds the matcher what the tap sees for a key on an installed layout:
+        // the bare character the event carries and the Command-table label.
+        func layoutProtects(_ layoutID: String, _ keyCode: Int64,
+                            _ shortcut: QuitProtectionShortcut) -> Bool? {
+            guard let data = testLayoutData(for: layoutID) else { return nil }
+            GlobalShortcut.refreshLayoutLabels(layoutData: data)
+            return QuitProtectionSupport.matchesKey(
+                keyCharacter: GlobalShortcut.layoutKeyLabel(for: keyCode, usesCommand: false),
+                keyCode: keyCode,
+                commandLabel: GlobalShortcut.layoutKeyLabel(for: keyCode, usesCommand: true),
+                shortcut: shortcut)
+        }
+        let usID = "com.apple.keylayout.US"
+        if let quit = layoutProtects(usID, 12, .quit), let close = layoutProtects(usID, 13, .close) {
+            expect(quit && close, "US layout keeps Command-Q and Command-W on their own keys")
+        }
+        let russianID = "com.apple.keylayout.Russian"
+        if let quit = layoutProtects(russianID, 12, .quit),
+           let close = layoutProtects(russianID, 13, .close) {
+            expect(quit && close,
+                   "a Cyrillic layout still quits and closes from the Latin Q and W keys")
+        }
+        let greekID = "com.apple.keylayout.Greek"
+        if let quit = layoutProtects(greekID, 12, .quit), let close = layoutProtects(greekID, 13, .close) {
+            expect(quit && close, "a Greek layout still quits and closes from the Latin Q and W keys")
+        }
+        let dvorakID = "com.apple.keylayout.Dvorak"
+        if let quit = layoutProtects(dvorakID, 7, .quit), let close = layoutProtects(dvorakID, 43, .close),
+           let quote = layoutProtects(dvorakID, 12, .quit) {
+            expect(quit && close && !quote,
+                   "Dvorak moves Command-Q and Command-W to the keys it types q and w on, "
+                   + "and leaves the key that types ' alone")
+        }
+        let dvorakCommandID = "com.apple.keylayout.DVORAK-QWERTYCMD"
+        if let quit = layoutProtects(dvorakCommandID, 12, .quit),
+           let close = layoutProtects(dvorakCommandID, 13, .close) {
+            expect(quit && close, "the Dvorak layout that reverts to QWERTY under Command is followed there")
+        }
+        let frenchID = "com.apple.keylayout.French"
+        if let quit = layoutProtects(frenchID, 0, .quit), let close = layoutProtects(frenchID, 6, .close) {
+            expect(quit && close, "French AZERTY moves Command-Q and Command-W to its own q and w keys")
+        }
+        GlobalShortcut.refreshLayoutLabels()
 
         let quitProtectionKeys = [
             DefaultsKey.quitProtectionQuitEnabled,
