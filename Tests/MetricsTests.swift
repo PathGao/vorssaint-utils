@@ -9902,6 +9902,18 @@ struct MetricsTests {
         expect(selfActivation != nil && yieldOnward != nil
                 && selfActivation!.lowerBound < yieldOnward!.lowerBound,
                "the activation handoff self-activates before it yields onward")
+        let handoffStamp = activationHandoffSource.range(of: "lastSelfActivation = CFAbsoluteTimeGetCurrent()")
+        expect(handoffStamp != nil && selfActivation != nil
+                && handoffStamp!.lowerBound < selfActivation!.lowerBound,
+               "the activation handoff stamps the self-activation before asking for it")
+        // Only the activation the handoff caused stays out of the history; the
+        // Dock icon, Settings and Vorssaint's own windows are real uses.
+        let useTrackerSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Switcher/WindowUseTracker.swift",
+            encoding: .utf8)) ?? ""
+        expect(useTrackerSource.contains(
+                   "pid == ProcessInfo.processInfo.processIdentifier && ActivationHandoff.isHandingOff"),
+               "only an activation the handoff caused is left out of the use history")
         var bareActivationYields: [String] = []
         var scannedActivationFiles = 0
         if let sources = FileManager.default.enumerator(atPath: "Sources") {

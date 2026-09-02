@@ -167,9 +167,11 @@ final class WindowUseTracker {
     @objc private func appActivated(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         let pid = app.processIdentifier
-        // Our own activation is `ActivationHandoff` self-activating on the way
-        // out; ranking it would put Vorssaint ahead of the app the user left.
-        let own = pid == ProcessInfo.processInfo.processIdentifier
+        // Our own activation during a handoff is `ActivationHandoff`
+        // self-activating on the way out; ranking it would put Vorssaint ahead
+        // of the app the user left. Every other activation of Vorssaint, the
+        // Dock icon and its own windows included, is a real use and is kept.
+        let own = pid == ProcessInfo.processInfo.processIdentifier && ActivationHandoff.isHandingOff
         // The application half is exact and free, so it lands right away; the
         // window half needs Accessibility and happens on the watcher thread.
         if !own { promote(app: pid) }
