@@ -295,7 +295,6 @@ enum RadialNowPlayingApplication {
 private final class MediaRemoteNowPlayingBridge {
     private let queue = DispatchQueue(label: "com.vorssaint.radial-now-playing", qos: .userInitiated)
     private static let replyTimeout: TimeInterval = 1.0
-    private static let maximumReplyBytes = 8 * 1_024 * 1_024
 
     func fetch(completion: @escaping (RadialNowPlayingSnapshot?) -> Void) {
         guard let script = Bundle.main.url(forResource: "now-playing", withExtension: "pl"),
@@ -308,7 +307,7 @@ private final class MediaRemoteNowPlayingBridge {
         queue.async {
             let result = BoundedProcessRunner.run("/usr/bin/perl", [script.path, library.path],
                                                   timeout: Self.replyTimeout,
-                                                  maxOutputBytes: Self.maximumReplyBytes)
+                                                  maxOutputBytes: RadialNowPlayingSupport.maximumAdapterReplyBytes)
             guard result.status == 0, !result.timedOut,
                   let reply = RadialNowPlayingSupport.adapterReply(from: result.output) else {
                 completion(nil)

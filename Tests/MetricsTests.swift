@@ -15112,6 +15112,15 @@ struct MetricsTests {
                 && RadialNowPlayingSupport.adapterReply(from: Data(#"{"artworkBase64":"***"}"#.utf8))?
                     .info[RadialNowPlayingSupport.artworkDataKey] == nil,
                "an adapter error, a non-object, shell noise or bad base64 never become a snapshot")
+        let adapterAfterWarning = RadialNowPlayingSupport.adapterReply(from: Data("""
+            perl: warning: Setting locale failed.
+            perl: warning: Falling back to the standard locale ("C").
+            {"kMRMediaRemoteNowPlayingInfoTitle":"Midnight City","pid":42,"isPlaying":true}
+
+            """.utf8))
+        expect(adapterAfterWarning?.info[RadialNowPlayingSupport.titleKey] as? String == "Midnight City"
+                && adapterAfterWarning?.pid == 42 && adapterAfterWarning?.isPlaying == true,
+               "a perl warning on the shared stderr pipe ahead of the adapter's JSON line still parses")
         let nowPlayingBuildScript = (try? String(contentsOfFile: "build.sh", encoding: .utf8)) ?? ""
         expect(nowPlayingBuildScript.contains("Sources/NowPlayingAdapter/NowPlayingAdapter.swift")
                 && nowPlayingBuildScript.contains("Resources/now-playing.pl")

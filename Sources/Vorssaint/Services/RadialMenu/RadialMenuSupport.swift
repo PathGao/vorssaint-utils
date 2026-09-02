@@ -498,7 +498,12 @@ enum RadialNowPlayingSupport {
     static let playbackRateKey = "kMRMediaRemoteNowPlayingInfoPlaybackRate"
 
     private static let forbiddenScalars = CharacterSet.controlCharacters.union(.newlines)
-    private static let maximumArtworkBytes = 12 * 1_024 * 1_024
+    /// The one artwork cap. The adapter (`Sources/NowPlayingAdapter`) drops
+    /// artwork above it before encoding, and the bridge's pipe cap is
+    /// `maximumAdapterReplyBytes`, sized so the base64 line (4/3 of the bytes,
+    /// so 16 MB) plus the other keys fits.
+    static let maximumArtworkBytes = 12 * 1_024 * 1_024
+    static let maximumAdapterReplyBytes = maximumArtworkBytes / 3 * 4 + 1_024 * 1_024
 
     static func playbackIsActive(remoteIsPlaying: Bool?, info: [String: Any]) -> Bool {
         if let remoteIsPlaying { return remoteIsPlaying }
@@ -515,11 +520,15 @@ enum RadialNowPlayingSupport {
         let isPlaying: Bool?
     }
 
-    /// Parses the adapter's single JSON line. Artwork arrives base64-encoded
-    /// under `artworkBase64` and is handed on as `artworkDataKey` bytes. An
-    /// `error` key, a non-object or unreadable bytes read as no reply.
+    /// Parses the adapter's JSON line, the last non-blank line of the run's
+    /// output: stderr shares the pipe, so a perl warning (a locale it cannot
+    /// set, say) can precede it. Artwork arrives base64-encoded under
+    /// `artworkBase64` and is handed on as `artworkDataKey` bytes. An `error`
+    /// key, a non-object or unreadable bytes read as no reply.
     static func adapterReply(from data: Data) -> AdapterReply? {
-        guard let object = try? JSONSerialization.jsonObject(with: data),
+        let blank: Set<UInt8> = [0x20, 0x09, 0x0D]
+        guard let line = data.split(separator: 0x0A).last(where: { $0.contains { !blank.contains($0) } }),
+              let object = try? JSONSerialization.jsonObject(with: line),
               let fields = object as? [String: Any],
               fields["error"] == nil else { return nil }
         var info: [String: Any] = [:]

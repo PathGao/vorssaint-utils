@@ -24,9 +24,11 @@ private typealias IsPlayingCallback = @convention(block) (Bool) -> Void
 private typealias IsPlayingFunction = @convention(c) (DispatchQueue, @escaping IsPlayingCallback) -> Void
 
 /// Artwork travels base64-encoded on one line; anything past this is dropped
-/// rather than pushed through the pipe.
-private let maximumArtworkBytes = 4 * 1_024 * 1_024
-private let replyTimeout: TimeInterval = 0.75
+/// rather than pushed through the pipe. Same cap as
+/// `RadialNowPlayingSupport.maximumArtworkBytes`, which the app applies to
+/// the decoded bytes; the bridge's pipe cap is sized from it (base64 is 4/3
+/// of the bytes) and has to move with it.
+private let maximumArtworkBytes = 12 * 1_024 * 1_024
 
 private func function<T>(_ handle: UnsafeMutableRawPointer?, _ name: String, as type: T.Type) -> T? {
     guard let handle, let symbol = dlsym(handle, name) else { return nil }
@@ -98,10 +100,12 @@ public func vorssaintNowPlayingGet() {
         }
     }
 
-    let timedOut = group.wait(timeout: .now() + replyTimeout) == .timedOut
+    // Blocks until every callback has fired. The only deadline is the app's:
+    // the bridge kills perl at its own timeout, and a killed run reads as
+    // nothing playing, so a second clock here would only shorten that budget.
+    group.wait()
     lock.lock()
-    var snapshot = reply
+    let snapshot = reply
     lock.unlock()
-    if timedOut { snapshot["timedOut"] = true }
     emit(snapshot)
 }
