@@ -29,6 +29,9 @@ KCPASS="vorssaint-signing"
 # excludes every self-signed one; ask codesign itself with a throwaway copy.
 identity_can_sign() {
     local probe signed=1
+    # Locked after every reboot; a locked keychain cannot sign, and a false
+    # answer here would delete it and reissue the identity.
+    security unlock-keychain -p "$KCPASS" "$KC" 2>/dev/null || true
     probe="$(mktemp)"
     cp /bin/echo "$probe"
     codesign --force --strip-disallowed-xattrs --sign "$IDENTITY" "$probe" >/dev/null 2>&1 && signed=0

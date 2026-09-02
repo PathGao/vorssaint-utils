@@ -75,6 +75,10 @@ developer_id_identity() {
 # every self-signed one; ask codesign itself with a throwaway copy of /bin/echo.
 legacy_identity_installed() {
     local probe signed=1
+    # A locked keychain still lists its identities but cannot sign with them,
+    # and this one is locked after every reboot; unlock it before asking.
+    security unlock-keychain -p vorssaint-signing \
+        "$HOME/Library/Keychains/vorssaint-signing.keychain-db" 2>/dev/null || true
     probe="$(mktemp)"
     cp /bin/echo "$probe"
     /usr/bin/codesign --force --strip-disallowed-xattrs --sign "$LEGACY_IDENTITY" "$probe" \
