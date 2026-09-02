@@ -18,11 +18,17 @@ final class TransientPaste {
     private var restoreWork: DispatchWorkItem?
     private var isPerforming = false
 
+    /// `stillWanted` is asked once more right before the ⌘V is posted. The
+    /// pasteboard snapshot above runs on the serial lane with no time limit,
+    /// so a caller whose press has a deadline or a target app hands the same
+    /// test in here; a refusal takes the didFail path and the pasteboard is
+    /// put back the way a failed post is. Nil never refuses.
     @discardableResult
     func paste(_ text: String,
                willPostShortcut: (() -> Void)? = nil,
                didPostShortcut: (() -> Void)? = nil,
-               didFail: (() -> Void)? = nil) -> Bool {
+               didFail: (() -> Void)? = nil,
+               stillWanted: (() -> Bool)? = nil) -> Bool {
         guard Thread.isMainThread else { return false }
         guard !isPerforming else { return false }
         isPerforming = true
@@ -73,7 +79,8 @@ final class TransientPaste {
                     attempt: 0,
                     willPost: willPostShortcut,
                     didPost: didPostShortcut,
-                    didFail: didFail
+                    didFail: didFail,
+                    stillWanted: stillWanted
                 ) {
                     self.isPerforming = false
                     self.scheduleRestore(snapshot: snapshot, changeCount: changeCount)
@@ -125,12 +132,13 @@ final class TransientPaste {
                                                        willPost: (() -> Void)?,
                                                        didPost: (() -> Void)?,
                                                        didFail: (() -> Void)?,
+                                                       stillWanted: (() -> Bool)?,
                                                        completion: @escaping () -> Void) {
         let held = CGEventSource.flagsState(.combinedSessionState)
             .intersection([.maskCommand, .maskAlternate, .maskShift, .maskControl])
         if held.isEmpty || attempt >= 100 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-                postPasteShortcut(willPost: willPost) { succeeded in
+                postPasteShortcut(willPost: willPost, stillWanted: stillWanted) { succeeded in
                     if succeeded {
                         didPost?()
                     } else {
@@ -146,12 +154,21 @@ final class TransientPaste {
                                            willPost: willPost,
                                            didPost: didPost,
                                            didFail: didFail,
+                                           stillWanted: stillWanted,
                                            completion: completion)
         }
     }
 
     private static func postPasteShortcut(willPost: (() -> Void)?,
+                                          stillWanted: (() -> Bool)?,
                                           completion: @escaping (Bool) -> Void) {
+        // Asked here and not on the way in: everything between the call and
+        // this point can wait, and a paste that is no longer wanted must not
+        // be posted just because it was wanted when it was queued.
+        guard stillWanted?() ?? true else {
+            completion(false)
+            return
+        }
         guard let keyDown = CGEvent(keyboardEventSource: nil,
                                     virtualKey: CGKeyCode(kVK_ANSI_V),
                                     keyDown: true),

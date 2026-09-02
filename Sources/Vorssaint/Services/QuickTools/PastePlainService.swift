@@ -63,20 +63,22 @@ final class PastePlainService: ObservableObject {
         // captured here, on the press, and checked in the completion.
         let requestedAt = ProcessInfo.processInfo.systemUptime
         let requestedApp = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        GeneralPasteboardAccess.shared.async({ Self.plainText(from: .general) }) { [weak self] plain in
-            guard let self else { return }
-            guard QuickToolsSupport.pastePlainReadIsStillCurrent(
+        let stillWanted = {
+            QuickToolsSupport.pastePlainReadIsStillCurrent(
                 elapsed: ProcessInfo.processInfo.systemUptime - requestedAt,
                 requestedApp: requestedApp,
                 frontmostApp: NSWorkspace.shared.frontmostApplication?.processIdentifier)
-            else {
+        }
+        GeneralPasteboardAccess.shared.async({ Self.plainText(from: .general) }) { [weak self] plain in
+            guard let self else { return }
+            guard stillWanted() else {
                 // Refusing silently would be the one refusal the user waited
                 // seconds for, so it reports like every other one.
                 NSSound.beep()
                 return
             }
             guard let plain, !plain.isEmpty else { return }
-            self.pastePlain(plain)
+            self.pastePlain(plain, stillWanted: stillWanted)
         }
     }
 
@@ -86,7 +88,10 @@ final class PastePlainService: ObservableObject {
     /// target has to be read at that moment and not earlier. What keeps that
     /// from pasting into an app the user has switched to is the guard above,
     /// which does not call this at all once the frontmost app has changed.
-    private func pastePlain(_ plain: String) {
+    /// The same test goes into the transient paste as `stillWanted`: its own
+    /// pasteboard snapshot runs on the lane with no time limit either, so the
+    /// question is asked once more right before the ⌘V is posted.
+    private func pastePlain(_ plain: String, stillWanted: @escaping () -> Bool) {
         // An app that ships its own matching-style paste does this better
         // than any synthesized ⌘V: the destination decides the typing
         // attributes (a stripped string pasted normally can leave the
@@ -119,7 +124,8 @@ final class PastePlainService: ObservableObject {
             didPostShortcut: { [weak self] in
                 if releaseHotkey { self?.syncWithPreferences() }
             },
-            didFail: { NSSound.beep() }
+            didFail: { NSSound.beep() },
+            stillWanted: stillWanted
         )
     }
 

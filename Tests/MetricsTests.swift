@@ -22222,6 +22222,23 @@ struct MetricsTests {
                                                              requestedApp: nil,
                                                              frontmostApp: nil),
                "no frontmost app at the press and none at the answer is not an app switch")
+        // The read guard alone does not close the late-paste window:
+        // TransientPaste snapshots the pasteboard on the same lane, and that
+        // read can stall on the same promised content, so the same check
+        // runs again inside TransientPaste right before the ⌘V is posted. A
+        // refusal there takes the existing didFail and restore path.
+        let transientPasteSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/TransientPaste.swift",
+            encoding: .utf8)) ?? ""
+        let postPasteShortcutBody = transientPasteSource
+            .components(separatedBy: "private static func postPasteShortcut(").last ?? ""
+        let stillWantedCheck = postPasteShortcutBody.range(of: "guard stillWanted?() ?? true else {")
+        let pasteKeyDown = postPasteShortcutBody.range(of: "keyDown.post(tap: .cghidEventTap)")
+        expect(stillWantedCheck != nil && pasteKeyDown != nil
+               && stillWantedCheck!.lowerBound < pasteKeyDown!.lowerBound,
+               "the transient paste asks whether it is still wanted right before posting ⌘V")
+        expect(pastePlainTransientPaste.contains("stillWanted: stillWanted"),
+               "paste as plain text hands its deadline and app check to the transient paste")
 
         // Loading the saved shelf keeps "nothing saved", "decoded whole",
         // "decoded with entries dropped" and "will not decode" apart. Only a
