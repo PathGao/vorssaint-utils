@@ -123,7 +123,7 @@ enum ShortcutRecordingTap {
 
     private static func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if SessionActivity.shared.isActive, let tap {
+            if SessionActivity.shared.isActive, AXIsProcessTrusted(), let tap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             } else {
                 DispatchQueue.main.async { tearDown(); ShortcutCapture.end() }

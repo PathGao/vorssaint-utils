@@ -22246,8 +22246,9 @@ struct MetricsTests {
                 || tapOwner.contains("MouseButtonShortcut")
                 || tapOwner.contains("MiddleClick")
                 || tapOwner.contains("QuitProtection")
-                || tapOwner.contains("RadialMenu") {
-                expect(code.contains("AXIsProcessTrusted()"),
+                || tapOwner.contains("RadialMenu")
+                || tapOwner.contains("ShortcutRecordingTap") {
+                expect(rearm.contains("AXIsProcessTrusted()"),
                        "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
             }
             // Switching a tap off leaves the process owning it, which is what
