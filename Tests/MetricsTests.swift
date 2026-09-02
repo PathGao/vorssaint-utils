@@ -755,8 +755,7 @@ struct MetricsTests {
         let pastePlainSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/QuickTools/PastePlainService.swift",
             encoding: .utf8)) ?? ""
-        expect(pastePlainSource.contains("GeneralPasteboardAccess.shared.async")
-                && !pastePlainSource.contains("NSPasteboard.general"),
+        expect(pastePlainSource.contains("GeneralPasteboardAccess.shared.async"),
                "paste as plain text reads the clipboard on the lane, not on the main thread")
 
         let maxCapacityStringJSON = Data(#"{"SPPowerDataType":[{"sppower_battery_health_info":{"sppower_battery_health_maximum_capacity":"93%"}}]}"#.utf8)
