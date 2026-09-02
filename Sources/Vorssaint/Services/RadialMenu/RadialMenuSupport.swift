@@ -505,6 +505,38 @@ enum RadialNowPlayingSupport {
         return (info[playbackRateKey] as? NSNumber)?.doubleValue ?? 0 > 0
     }
 
+    /// One reply from the Now Playing adapter (`Resources/now-playing.pl`):
+    /// the MediaRemote metadata keys it forwards, plus the owning app and the
+    /// remote's own playing flag, in the shape `snapshot(info:...)` reads.
+    struct AdapterReply {
+        let info: [String: Any]
+        let pid: Int32
+        let displayID: String?
+        let isPlaying: Bool?
+    }
+
+    /// Parses the adapter's single JSON line. Artwork arrives base64-encoded
+    /// under `artworkBase64` and is handed on as `artworkDataKey` bytes. An
+    /// `error` key, a non-object or unreadable bytes read as no reply.
+    static func adapterReply(from data: Data) -> AdapterReply? {
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              let fields = object as? [String: Any],
+              fields["error"] == nil else { return nil }
+        var info: [String: Any] = [:]
+        for key in [titleKey, artistKey, albumKey] {
+            if let value = fields[key] as? String { info[key] = value }
+        }
+        if let rate = fields[playbackRateKey] as? NSNumber { info[playbackRateKey] = rate }
+        if let artwork = fields["artworkBase64"] as? String,
+           let bytes = Data(base64Encoded: artwork), !bytes.isEmpty {
+            info[artworkDataKey] = bytes
+        }
+        return AdapterReply(info: info,
+                            pid: (fields["pid"] as? NSNumber)?.int32Value ?? 0,
+                            displayID: fields["displayID"] as? String,
+                            isPlaying: fields["isPlaying"] as? Bool)
+    }
+
     static func snapshot(info: [String: Any],
                          isPlaying: Bool,
                          appBundleIdentifier: String?,
