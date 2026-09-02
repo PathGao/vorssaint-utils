@@ -890,17 +890,15 @@ final class CommandBarService: ObservableObject {
     /// calling `indexEntries()`, so one opening indexes seven to ten times.
     private var foldedSections: [PoolSection: [(title: String, keywords: String)]] = [:]
 
-    private func indexEntries() {
-        index()
-    }
-
     private func clearIndex() {
         entriesByID = [:]
         normalizedByID = [:]
         entriesByStableKey = [:]
+        // Nothing folded outlives the panel.
+        foldedSections = [:]
     }
 
-    private func index() {
+    private func indexEntries() {
         // Folding a thousand titles on every keystroke is the one thing that
         // could make typing feel heavy. It happens here instead, once per list
         // per rebuild: a list nobody assigned again keeps the copy it has.
