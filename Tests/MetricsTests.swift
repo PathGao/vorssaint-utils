@@ -11737,7 +11737,7 @@ struct MetricsTests {
             encoding: .utf8)) ?? ""
         let homebrewRunStreaming = homebrewManagerSource.components(separatedBy: "func runStreaming(")
             .dropFirst().first?.components(separatedBy: "private func appendLog").first ?? ""
-        expect(homebrewRunStreaming.contains("brewOperationTimeout")
+        expect(homebrewRunStreaming.contains("brewSilenceTimeout")
                 && !homebrewRunStreaming.contains("waitUntilExit"),
                "Homebrew operations wait on a bounded semaphore, not waitUntilExit")
 
