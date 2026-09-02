@@ -149,12 +149,6 @@ enum QuitProtectionSupport {
         return keyCode == shortcut.fallbackKeyCode
     }
 
-    /// A held Command-Q must not restart a hold or count as a double press.
-    /// Nothing below acts without Command, so a bare key keeps its autorepeat.
-    static func dropsAutorepeat(isRepeat: Bool, command: Bool) -> Bool {
-        isRepeat && command
-    }
-
     static func modeFor(_ rawValue: String?) -> QuitProtectionMode {
         guard let rawValue, let value = QuitProtectionMode(rawValue: rawValue) else { return .hold }
         return value

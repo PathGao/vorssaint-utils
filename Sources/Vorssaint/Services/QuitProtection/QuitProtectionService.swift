@@ -229,7 +229,7 @@ final class QuitProtectionService: ObservableObject {
 
         let flags = event.flags
         let command = flags.contains(.maskCommand)
-        if QuitProtectionSupport.dropsAutorepeat(isRepeat: isRepeat, command: command) {
+        if isRepeat, command {
             return nil
         }
 
