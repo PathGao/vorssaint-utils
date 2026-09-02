@@ -22212,49 +22212,44 @@ struct MetricsTests {
             encoding: .utf8)) ?? ""
         expect(mouseAccelerationSource.contains("SessionActivitySupport.isOnConsole("),
                "mouse acceleration shares the safe initial session-state fallback")
-        for tapOwner in ["Sources/Vorssaint/Services/ScrollInverter.swift",
-                         "Sources/Vorssaint/Services/SmoothScrollService.swift",
-                         "Sources/Vorssaint/Services/MouseNavigation/MouseNavigationService.swift",
-                         "Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutService.swift",
-                         "Sources/Vorssaint/Services/MiddleClick/MiddleClickService.swift",
-                         "Sources/Vorssaint/Services/QuitProtection/QuitProtectionService.swift",
-                         "Sources/Vorssaint/Services/RadialMenu/RadialMenuService.swift",
-                         "Sources/Vorssaint/Services/WindowLayout/WindowLayoutService.swift",
-                         "Sources/Vorssaint/Services/WindowMaximizer.swift",
-                         "Sources/Vorssaint/Services/Finder/FinderCutPaste.swift",
-                         "Sources/Vorssaint/Services/Finder/FinderRenameService.swift",
-                         "Sources/Vorssaint/Services/KeyboardDebounce/KeyboardDebounceService.swift",
-                         "Sources/Vorssaint/Services/SuperKey/SuperKeyService.swift",
-                         "Sources/Vorssaint/Services/ShortcutRecordingTap.swift",
-                         "Sources/Vorssaint/Services/Switcher/AppSwitcher.swift",
-                         "Sources/Vorssaint/Services/Snippets/TextSnippetService.swift",
-                         "Sources/Vorssaint/Services/Audio/PreciseVolumeRollerService.swift",
-                         "Sources/Vorssaint/Services/DockClick/DockClickService.swift",
-                         "Sources/Vorssaint/Services/Display/BrightnessService.swift"] {
-            let source = (try? String(contentsOfFile: tapOwner, encoding: .utf8)) ?? ""
-            expect(!source.isEmpty, "\(tapOwner) reads back for its session-switch check")
-            let code = source.components(separatedBy: "\n")
-                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
-                .joined(separator: "\n")
+        // The owners are read out of the tree, not listed by hand, so a new
+        // CGEvent.tapCreate has nothing to register. One enumeration feeds
+        // both sweeps below, rooted at Sources so every target is asked.
+        let tapOwnerFiles: [(path: String, code: String)] = (FileManager.default
+            .enumerator(atPath: "Sources")?.compactMap { $0 as? String } ?? [])
+            .filter { $0.hasSuffix(".swift") && !$0.contains(" 2") }
+            .sorted()
+            .compactMap { entry in
+                let path = "Sources/\(entry)"
+                guard let source = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+                let code = source.components(separatedBy: "\n")
+                    .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                    .joined(separator: "\n")
+                return code.contains("CGEvent.tapCreate") ? (path, code) : nil
+            }
+        // An empty sweep would pass every check below in silence.
+        expect(tapOwnerFiles.count >= 20,
+               "the CGEvent.tapCreate sweep reaches the sources from the test's working directory")
+        for (tapOwner, code) in tapOwnerFiles {
+            // A listen-only tap hands every event back unchanged, so a session
+            // that is off screen cannot swallow the on-screen account's input.
+            if code.contains(".listenOnly") && !code.contains(".defaultTap") { continue }
             expect(code.contains("SessionActivity.shared.onChange"),
                    "\(tapOwner) rebuilds its tap when the session comes back")
-            let rearm = code.components(separatedBy: "tapDisabledByTimeout")
-                .dropFirst().first?.components(separatedBy: "return").first ?? ""
-            expect(rearm.contains("SessionActivity.shared.isActive"),
-                   "\(tapOwner) does not re-arm a disabled tap into a switched-away session")
-            if tapOwner.contains("MouseNavigation")
-                || tapOwner.contains("MouseButtonShortcut")
-                || tapOwner.contains("MiddleClick")
-                || tapOwner.contains("QuitProtection")
-                || tapOwner.contains("RadialMenu")
-                || tapOwner.contains("ShortcutRecordingTap") {
-                expect(rearm.contains("AXIsProcessTrusted()"),
-                       "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
+            // Every site, not the first: two owners re-arm in two callbacks.
+            // And at least one, or the walk below passes on nothing.
+            let rearmSlices = code.components(separatedBy: "tapDisabledByTimeout").dropFirst()
+            expect(!rearmSlices.isEmpty, "\(tapOwner) handles its tap being disabled")
+            for slice in rearmSlices {
+                let rearm = slice.components(separatedBy: "return").first ?? ""
+                expect(rearm.contains("SessionActivity.shared.isActive"),
+                       "\(tapOwner) does not re-arm a disabled tap into a switched-away session")
             }
-            // Switching a tap off leaves the process owning it, which is what
-            // the window server waits on; teardown must invalidate the port.
-            expect(code.contains("CFMachPortInvalidate"),
-                   "\(tapOwner) hands its tap back rather than only disabling it")
+            // Either spelling of the permission half: the shared helper takes
+            // it as an argument, older services ask the API directly.
+            expect(code.contains("SessionActivitySupport.tapShouldRun(")
+                    || code.contains("AXIsProcessTrusted()"),
+                   "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
         }
 
         // Disabling a tap and dropping the last Swift reference does not hand
@@ -22266,32 +22261,19 @@ struct MetricsTests {
         // as in the per-service check above, so prose naming the API cannot
         // answer for a missing call. A margin does not cover a tap added later:
         // MouseClickDebounceService's two invalidations are both on its one
-        // tap. The owners reached are counted too, because a file with no
-        // literal CGEvent.tapCreate is skipped, so moving the call behind a
-        // helper would otherwise leave a sweep that passes having read nothing.
+        // tap. No exemption list here: the session gate is a different
+        // question, and the port is owed whether or not the tap is gated.
         var tapOwnersWithoutInvalidate: [String] = []
-        var tapOwners = 0
-        let tapOwnerSources = FileManager.default
-            .enumerator(atPath: "Sources/Vorssaint")?
-            .compactMap { $0 as? String }
-            .filter { $0.hasSuffix(".swift") && !$0.contains(" 2") } ?? []
-        for file in tapOwnerSources.sorted() {
-            guard let source = try? String(contentsOfFile: "Sources/Vorssaint/\(file)",
-                                           encoding: .utf8) else { continue }
-            let code = source.components(separatedBy: "\n")
-                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
-                .joined(separator: "\n")
+        for (path, code) in tapOwnerFiles {
             let taps = code.components(separatedBy: "CGEvent.tapCreate").count - 1
-            guard taps > 0 else { continue }
-            tapOwners += 1
             let invalidations = code.components(separatedBy: "CFMachPortInvalidate").count - 1
             if invalidations < taps {
-                tapOwnersWithoutInvalidate.append("\(file) (\(taps) taps, \(invalidations) invalidated)")
+                tapOwnersWithoutInvalidate.append("\(path) (\(taps) taps, \(invalidations) invalidated)")
             }
         }
-        expect(tapOwners > 0 && tapOwnersWithoutInvalidate.isEmpty,
+        expect(tapOwnersWithoutInvalidate.isEmpty,
                "every event tap owner invalidates its port on teardown, across "
-               + "\(tapOwners) scanned owners: \(tapOwnersWithoutInvalidate)")
+               + "\(tapOwnerFiles.count) scanned owners: \(tapOwnersWithoutInvalidate)")
 
         let mouseTapAppDelegateSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/App/AppDelegate.swift",
