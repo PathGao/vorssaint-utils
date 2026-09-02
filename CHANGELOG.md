@@ -55,6 +55,7 @@ Vorssaint adds quit and close protections, expands screen text recognition, capt
 - The radial menu now checks only which extra mouse button opens a wheel when a side button is pressed, instead of loading every wheel and its icons on each event, so holding a side button and moving the mouse no longer risks dropped clicks. Thanks to @PathGao.
 
 ### Fixed
+- Features that handle keyboard, mouse and media keys now step aside during fast user switching, preventing input stalls in the active account. Thanks to @PathGao.
 - Restoring screen gamma before switching off a display now verifies the display's identity, preventing a dimmed curve from applying to another monitor after reconnections. Thanks to @PathGao.
 - The radial menu now releases its mouse button tap when switching macOS user accounts and closes any open wheel, preventing extra button clicks from stalling in the other account. Thanks to @PathGao.
 - Paste as plain text no longer freezes the app when the app you copied from is slow to hand over the copied content. Thanks to @PathGao.
