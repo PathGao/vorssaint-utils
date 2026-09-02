@@ -14154,6 +14154,36 @@ struct MetricsTests {
             .joined(separator: "\n")
         expect(brightnessCode.components(separatedBy: "CGSetDisplayTransferByTable").count - 1 == 1,
                "every gamma write goes through the one helper that checks the display fingerprint")
+        // Both key taps re-arm after a window-server timeout the way the gated
+        // tap owners do. The session flag is written on the main thread, so
+        // the keystroke tap's callback (its own thread) hops there before
+        // asking; a re-arm that is refused hands the tap to syncKeyTap to be
+        // stopped instead of leaving it disabled with the thread still up.
+        let brightnessRearms = brightnessCode.components(separatedBy: "tapDisabledByTimeout")
+            .dropFirst()
+            .map { $0.components(separatedBy: "return Unmanaged").first ?? "" }
+        expect(brightnessRearms.count == 2
+               && brightnessRearms.allSatisfy {
+                   $0.contains("SessionActivity.shared.isActive") && $0.contains("AXIsProcessTrusted()")
+                       && $0.contains("DispatchQueue.main.async") && $0.contains("syncKeyTap()")
+               },
+               "both brightness key taps ask the session and Accessibility on the main thread "
+               + "before re-arming, and hand a refused tap to the sync")
+        let functionKeyRearm = brightnessCode.components(separatedBy: "private func routeFunctionKey(").last?
+            .components(separatedBy: "return Unmanaged").first ?? ""
+        let functionKeyHop = functionKeyRearm.range(of: "DispatchQueue.main.async")
+        let functionKeyAsk = functionKeyRearm.range(of: "SessionActivity.shared.isActive")
+        expect(functionKeyHop != nil && functionKeyAsk != nil
+               && functionKeyHop!.lowerBound < functionKeyAsk!.lowerBound,
+               "the keystroke tap's re-arm asks the session flag on the main thread, not on its own")
+        // A restart pending at the tap thread's tail goes through the same
+        // gate instead of straight back to install.
+        let functionKeyRestart = brightnessCode.components(separatedBy: "private func restartFunctionKeyTapOnMain")
+            .dropFirst().first?.components(separatedBy: "\n    }").first ?? ""
+        expect(!brightnessCode.contains("clearFunctionKeyThread() { installFunctionKeyTap() }")
+               && functionKeyRestart.contains("DispatchQueue.main.async")
+               && functionKeyRestart.contains("syncKeyTap"),
+               "a pending keystroke-tap restart goes back through syncKeyTap on the main thread")
 
         let ddcWrite = BrightnessSupport.writePacket(code: 0x10, value: 0x1234)
         let expectedDDCWrite: [UInt8] = [0x84, 0x03, 0x10, 0x12, 0x34, 0x8E]

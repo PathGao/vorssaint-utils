@@ -754,7 +754,7 @@ final class BrightnessService: ObservableObject {
             keyThreadLock.withLock { functionKeyRunLoop = runLoop }
             let stopBeforeCreating = keyThreadLock.withLock { shouldStopFunctionKeyThread }
             guard !stopBeforeCreating else {
-                if clearFunctionKeyThread() { installFunctionKeyTap() }
+                if clearFunctionKeyThread() { restartFunctionKeyTapOnMain() }
                 return
             }
             let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
@@ -787,8 +787,25 @@ final class BrightnessService: ObservableObject {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFRunLoopRemoveSource(runLoop, source, .commonModes)
             CFMachPortInvalidate(tap)
-            if clearFunctionKeyThread() { installFunctionKeyTap() }
+            if clearFunctionKeyThread() { restartFunctionKeyTapOnMain() }
         }
+    }
+
+    /// Runs on the tap thread once its run loop has stopped. A restart that
+    /// `installFunctionKeyTap` left pending goes back through `syncKeyTap`
+    /// instead of straight to `installFunctionKeyTap`: the session flag is
+    /// written on the main thread, and a tap rebuilt into a session that is no
+    /// longer on screen stalls the account that is (issue #1153). Same shape as
+    /// `KeyboardDebounceService.restartTapOnMain`.
+    private func restartFunctionKeyTapOnMain() {
+        DispatchQueue.main.async { [weak self] in self?.syncKeyTap() }
+    }
+
+    /// Puts the keystroke tap back after the window server disabled it, unless
+    /// a stop is already on its way and the port is about to go. Main thread.
+    private func rearmDisabledFunctionKeyTap() {
+        let tap = keyThreadLock.withLock { shouldStopFunctionKeyThread ? nil : functionKeyTap }
+        if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
     }
 
     private func clearFunctionKeyThread() -> Bool {
@@ -813,11 +830,19 @@ final class BrightnessService: ObservableObject {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             // Re-arming into a session that is no longer on screen puts the
             // stall the tap was handed back to avoid straight back on the
-            // account that is (issue #1075), so the re-arm asks the same
-            // question the preference sync asks.
-            let tap = keyThreadLock.withLock { shouldStopFunctionKeyThread ? nil : functionKeyTap }
-            if SessionActivity.shared.isActive, AXIsProcessTrusted(), let tap {
-                CGEvent.tapEnable(tap: tap, enable: true)
+            // account that is (issue #1075). The flag that answers that is
+            // written on the main thread while this callback runs on the tap's
+            // own thread, so the question is asked where the answer lives.
+            // Accessibility is asked there for the same reason as in the sync:
+            // this tap modifies events, so a revoked grant has to end it rather
+            // than put it back. A refused re-arm goes to the sync to be
+            // stopped, so the tap is not left disabled with its thread still up.
+            DispatchQueue.main.async { [weak self] in
+                if SessionActivity.shared.isActive, AXIsProcessTrusted() {
+                    self?.rearmDisabledFunctionKeyTap()
+                } else {
+                    self?.syncKeyTap()
+                }
             }
             return Unmanaged.passUnretained(event)
         }
@@ -984,9 +1009,14 @@ final class BrightnessService: ObservableObject {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             // Re-arming a tap handed back for a user switch puts the stall
             // straight back on the account on screen, so the re-arm asks the
-            // same question the preference sync asks (issue #1075).
-            if SessionActivity.shared.isActive, let keyTap {
+            // same question the preference sync asks (issue #1075). This tap
+            // swallows events, so a revoked Accessibility grant ends it too.
+            if SessionActivity.shared.isActive, AXIsProcessTrusted(), let keyTap {
                 CGEvent.tapEnable(tap: keyTap, enable: true)
+            } else {
+                // Invalidating the port from its own callback stack is unsafe;
+                // finish this callback fail-open, then release the tap.
+                DispatchQueue.main.async { [weak self] in self?.syncKeyTap() }
             }
             return Unmanaged.passUnretained(event)
         }
