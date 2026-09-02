@@ -14143,6 +14143,10 @@ struct MetricsTests {
             .joined(separator: "\n")
         expect(!brightnessWorkQueueHalf.isEmpty && !brightnessWorkQueueCode.contains("NSScreen"),
                "the brightness work queue resolves display names without touching NSScreen")
+        // Display numbers are reissued after a reconnection, so the gamma
+        // restore before a switch-off must check the monitor like the others.
+        expect(brightnessSource.contains("baseline.fingerprint == Self.displayFingerprint(display.id)"),
+               "the pre-switch-off gamma restore checks the display fingerprint")
 
         let ddcWrite = BrightnessSupport.writePacket(code: 0x10, value: 0x1234)
         let expectedDDCWrite: [UInt8] = [0x84, 0x03, 0x10, 0x12, 0x34, 0x8E]
