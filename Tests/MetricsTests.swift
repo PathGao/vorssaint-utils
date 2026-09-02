@@ -9832,10 +9832,62 @@ struct MetricsTests {
         let dockClickSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/DockClick/DockClickService.swift",
             encoding: .utf8)) ?? ""
-        expect(dockClickSource.contains("NSApp.yieldActivation(to: app)"),
+        expect(dockClickSource.contains("ActivationHandoff.yield(to: app)"),
                "a Dock click restore yields this app's activation first")
         expect(dockClickSource.contains("app.activate(from: NSRunningApplication.current, options: [])"),
                "a Dock click restore asks cooperatively before falling back")
+
+        // Yielding activation only hands over activation this app currently
+        // holds, and every surface that yields is non-activating, so the yield
+        // has to be preceded by a self-activation or it gives away nothing and
+        // the target never comes forward. That ordering lives in exactly one
+        // place; the scan below is what keeps it that way, because the bug is
+        // reintroduced by adding a call site, not by editing an existing one.
+        let activationHandoffSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/ActivationHandoff.swift",
+            encoding: .utf8)) ?? ""
+        let selfActivation = activationHandoffSource.range(of: "\n        NSApp.activate(ignoringOtherApps: true)")
+        let yieldOnward = activationHandoffSource.range(of: "\n        NSApp.yieldActivation(to: app)")
+        expect(selfActivation != nil && yieldOnward != nil
+                && selfActivation!.lowerBound < yieldOnward!.lowerBound,
+               "the activation handoff self-activates before it yields onward")
+        expect(activationHandoffSource.contains("WindowUseTracker.shared.expectSelfActivationHandoff()"),
+               "the activation handoff tells the use tracker its self-activation is not a real switch")
+        // Reports how many files it read: an enumerator that finds nothing (the
+        // tests run from somewhere other than the repo root) would leave the
+        // list empty and pass while guarding nothing.
+        var bareActivationYields: [String] = []
+        var scannedActivationFiles = 0
+        if let sources = FileManager.default.enumerator(atPath: "Sources") {
+            for case let path as String in sources where path.hasSuffix(".swift") {
+                let text = (try? String(contentsOfFile: "Sources/" + path, encoding: .utf8)) ?? ""
+                scannedActivationFiles += 1
+                guard (path as NSString).lastPathComponent != "ActivationHandoff.swift" else { continue }
+                if text.contains("NSApp.yieldActivation") {
+                    bareActivationYields.append((path as NSString).lastPathComponent)
+                }
+            }
+        }
+        expect(scannedActivationFiles > 0 && bareActivationYields.isEmpty,
+               "activation is yielded only through ActivationHandoff, "
+               + "found a bare yield in \(bareActivationYields.sorted()) "
+               + "across \(scannedActivationFiles) scanned files")
+
+        // The self-activation above posts an activation notification for our
+        // own process. The tracker has to drop that one without dropping every
+        // activation of Vorssaint: `appActivated` is the only place an app is
+        // recorded, so an unconditional guard would also erase the Dock icon
+        // and Settings.
+        let useTrackerSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Switcher/WindowUseTracker.swift",
+            encoding: .utf8)) ?? ""
+        expect(useTrackerSource.contains(
+                    "if pid == ProcessInfo.processInfo.processIdentifier, consumeSelfActivationHandoff() { return }"),
+               "the use tracker skips our own activation only when a handoff armed it")
+        expect(useTrackerSource.contains("selfActivationHandoffUntil = 0"),
+               "an armed handoff is consumed once, so the next activation of Vorssaint is recorded")
+        expect(useTrackerSource.contains("guard ProcessInfo.processInfo.systemUptime < selfActivationHandoffUntil"),
+               "an armed handoff expires, so a yield that posts no activation cannot swallow a later one")
         expect(DockClickSupport.action(appIsFrontmost: true,
                                        hasUnminimizedWindows: false,
                                        hasMinimizedWindows: true,

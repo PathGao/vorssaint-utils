@@ -364,7 +364,7 @@ enum WindowActivator {
     }
 
     private static func activateApp(_ app: NSRunningApplication, allWindows: Bool = true) {
-        NSApp.yieldActivation(to: app)
+        ActivationHandoff.yield(to: app)
         if allWindows {
             if !app.activate(from: NSRunningApplication.current, options: [.activateAllWindows]) {
                 app.activate(options: [.activateAllWindows])
@@ -593,7 +593,7 @@ enum WindowActivator {
         if let windowID {
             prepareWindowForActivation(windowID: windowID, pid: windowOwnerPID ?? pid)
         }
-        NSApp.yieldActivation(to: sourceApp)
+        ActivationHandoff.yield(to: sourceApp)
         if !sourceApp.activate(from: NSRunningApplication.current, options: []) {
             sourceApp.activate(options: [])
         }

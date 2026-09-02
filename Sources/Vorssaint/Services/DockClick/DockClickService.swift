@@ -695,9 +695,9 @@ final class DockClickService {
     /// the click precisely so the Dock would not act — so nobody else is going
     /// to. The restore then half-lands: unminimizing needs no activation
     /// rights, so the windows come back and are immediately stacked under
-    /// whichever app is still active. Yielding this app's activation first is
-    /// what makes the request cooperative, the same sequence the Switcher,
-    /// Space hop and process list already use.
+    /// whichever app is still active. `ActivationHandoff` is what makes the
+    /// request cooperative, the same sequence the Switcher, Space hop and
+    /// process list use.
     ///
     /// Options stay empty on purpose: `restoreBackToFront` earns the batch's
     /// stacking one window at a time, and `.activateAllWindows` would re-raise
@@ -705,7 +705,7 @@ final class DockClickService {
     private static func activate(pid: pid_t) {
         DispatchQueue.main.async {
             guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else { return }
-            NSApp.yieldActivation(to: app)
+            ActivationHandoff.yield(to: app)
             if !app.activate(from: NSRunningApplication.current, options: []) {
                 app.activate(options: [])
             }

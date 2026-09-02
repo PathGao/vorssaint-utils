@@ -42,6 +42,19 @@ final class WindowUseTracker {
     /// just cleared.
     private var recording = false
 
+    /// Uptime until which one activation of Vorssaint's own process is read as
+    /// the self-activation `ActivationHandoff` performs on its way to another
+    /// app, rather than as the user coming to Vorssaint.
+    ///
+    /// A deadline instead of a plain flag: macOS posts no activation when
+    /// Vorssaint already held it, and a flag left armed would then swallow the
+    /// next real activation instead. The window only has to cover the trip from
+    /// `NSApp.activate` to the notification arriving on the next main run loop
+    /// turn; a second is far more than that and expires long before a person
+    /// could reach the Dock icon.
+    private var selfActivationHandoffUntil: TimeInterval = 0
+    private static let selfActivationHandoffWindow: TimeInterval = 1
+
     private let lifecycleLock = NSLock()
     private var started = false
     private var watcherThread: Thread?
@@ -83,6 +96,33 @@ final class WindowUseTracker {
             windowHistory = WindowUseOrder.promoting(target: windowID,
                                                      previous: previous,
                                                      in: windowHistory)
+        }
+    }
+
+    /// Arms the next activation of our own process to be ignored. Called by
+    /// `ActivationHandoff` immediately before it self-activates so it can yield
+    /// activation onward: recording that would rank Vorssaint ahead of the app
+    /// the user is switching away from, and a quick toggle back would land on
+    /// Vorssaint's own window instead of the previous app.
+    ///
+    /// Narrow on purpose. `appActivated` is the only place an application is
+    /// recorded as used at all — `recordSwitch` files windows, not apps — so
+    /// ignoring our process unconditionally would also erase clicking
+    /// Vorssaint's Dock icon, opening Settings and switching onto one of its
+    /// windows, none of which are handoffs.
+    func expectSelfActivationHandoff() {
+        stateLock.withLock {
+            selfActivationHandoffUntil = ProcessInfo.processInfo.systemUptime
+                + Self.selfActivationHandoffWindow
+        }
+    }
+
+    /// True once per armed handoff, and only while it is fresh.
+    private func consumeSelfActivationHandoff() -> Bool {
+        stateLock.withLock {
+            guard ProcessInfo.processInfo.systemUptime < selfActivationHandoffUntil else { return false }
+            selfActivationHandoffUntil = 0
+            return true
         }
     }
 
@@ -167,6 +207,7 @@ final class WindowUseTracker {
     @objc private func appActivated(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         let pid = app.processIdentifier
+        if pid == ProcessInfo.processInfo.processIdentifier, consumeSelfActivationHandoff() { return }
         // The application half is exact and free, so it lands right away; the
         // window half needs Accessibility and happens on the watcher thread.
         promote(app: pid)
