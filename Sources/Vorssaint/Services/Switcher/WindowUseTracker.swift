@@ -309,7 +309,7 @@ final class WindowUseTracker {
         // Activation itself posts no focus change, so the window the app came
         // back to has to be asked for once. Any change that races this arrives
         // through the observer, which is already installed.
-        readFocusedWindow(of: pid)
+        if filingFocusedWindow { readFocusedWindow(of: pid) }
     }
 
     private func detachObserver() {
