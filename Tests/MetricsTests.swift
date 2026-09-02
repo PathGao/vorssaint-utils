@@ -22191,9 +22191,10 @@ struct MetricsTests {
                "a refused plain-text paste is reported instead of swallowed")
         // TransientPaste.paste returning false on the main queue can only mean
         // "a paste is already in flight", and that one still pastes, so the
-        // beep must not hang off the return value. Two beeps are left in the
-        // file: the Accessibility guard, and didFail.
-        expect(pastePlainCode.components(separatedBy: "NSSound.beep()").count - 1 == 3
+        // beep must not hang off the return value. Four beeps are in the
+        // file: the Accessibility guard, the late read, the native menu
+        // route's late check, and didFail.
+        expect(pastePlainCode.components(separatedBy: "NSSound.beep()").count - 1 == 4
                 && pastePlainTransientPaste.contains("didFail: { NSSound.beep() }"),
                "a plain-text paste coalesced into one already running does not beep")
         // The lane read has no time limit, so its completion cannot be
@@ -22239,6 +22240,16 @@ struct MetricsTests {
                "the transient paste asks whether it is still wanted right before posting ⌘V")
         expect(pastePlainTransientPaste.contains("stillWanted: stillWanted"),
                "paste as plain text hands its deadline and app check to the transient paste")
+        // The native route runs first and never reaches TransientPaste, and
+        // its menu walk can take as long as the lane read, so it asks the
+        // same question right before pressing the item it found.
+        let nativeRouteBody = pastePlainCode
+            .components(separatedBy: "private func pressNativeMatchStyleItem(").last ?? ""
+        let nativeStillWanted = nativeRouteBody.range(of: "guard stillWanted() else {")
+        let nativePress = nativeRouteBody.range(of: "kAXPressAction")
+        expect(nativeStillWanted != nil && nativePress != nil
+               && nativeStillWanted!.lowerBound < nativePress!.lowerBound,
+               "the native match-style route asks whether it is still wanted right before pressing")
         // The post-point check has its own limit. The read's 2 s spans only
         // the read; by the post the read may have used all of it and the
         // user may still be holding the shortcut's modifiers, which

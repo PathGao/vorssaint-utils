@@ -105,7 +105,7 @@ final class PastePlainService: ObservableObject {
         // later pastes, and held modifier keys don't matter to a menu
         // press. The strip-and-restore dance below stays as the fallback
         // for every app without that command.
-        if pressNativeMatchStyleItem() { return }
+        if pressNativeMatchStyleItem(stillWanted: stillWanted) { return }
 
         var releaseHotkey = false
         // Every way the transient paste can end with nothing pasted is
@@ -145,7 +145,7 @@ final class PastePlainService: ObservableObject {
     /// the synthesized fallback covers it if they do.
     private var noMatchStyleItem: [pid_t: Bool] = [:]
 
-    private func pressNativeMatchStyleItem() -> Bool {
+    private func pressNativeMatchStyleItem(stillWanted: () -> Bool) -> Bool {
         guard let app = NSWorkspace.shared.frontmostApplication else { return false }
         let pid = app.processIdentifier
         if noMatchStyleItem[pid] == true { return false }
@@ -161,6 +161,16 @@ final class PastePlainService: ObservableObject {
             noMatchStyleItem[pid] = true
             if noMatchStyleItem.count > 64 { noMatchStyleItem.removeAll() }
             return false
+        }
+        // The walk above can take as long as the lane read did (up to 600
+        // elements at 0.35 s each on a cold pid), and the item was found on
+        // the pid captured before it. Ask once more before pressing, on the
+        // same limit the ⌘V leg uses; a refusal is a paste that did not
+        // happen and reports like the others. True, not false: the fallback
+        // would only paste the same late clipboard into the same wrong app.
+        guard stillWanted() else {
+            NSSound.beep()
+            return true
         }
         return AXUIElementPerformAction(item, kAXPressAction as CFString) == .success
     }
