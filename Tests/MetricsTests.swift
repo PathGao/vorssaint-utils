@@ -22167,35 +22167,99 @@ struct MetricsTests {
                                                  exceptions: ["com.example.editor"]),
                "all-except scope protects an unselected bundle")
 
+        expect(QuitProtectionSupport.matchesKey(keyCharacter: "\u{439}", keyCode: 12,
+                                                commandLabel: "Q", shortcut: .quit),
+               "a Cyrillic layout is protected on the key Command-Q quits from, "
+               + "which types \u{439} rather than q")
+        expect(!QuitProtectionSupport.matchesKey(keyCharacter: "'", keyCode: 12,
+                                                 commandLabel: "'", shortcut: .quit),
+               "a Dvorak layout leaves the key Command-Q does not quit from alone")
         expect(QuitProtectionSupport.matchesKey(keyCharacter: "q", keyCode: 0,
-                                                shortcut: .quit),
-               "quit protection prefers the layout-resolved q character")
+                                                commandLabel: nil, shortcut: .quit),
+               "quit protection falls back to the typed character without a layout")
         expect(QuitProtectionSupport.matchesKey(keyCharacter: nil, keyCode: 13,
-                                                shortcut: .close),
-               "quit protection falls back to the W key code without a character")
+                                                commandLabel: nil, shortcut: .close),
+               "quit protection falls back to the W key code with neither a character nor a layout")
         expect(QuitProtectionSupport.isBaseShortcut(keyCharacter: "q", keyCode: 12,
+                                                    commandLabel: "Q",
                                                     command: true, control: false,
                                                     option: false, shift: false, shortcut: .quit),
                "plain Command-Q is recognized")
         expect(!QuitProtectionSupport.isBaseShortcut(keyCharacter: "q", keyCode: 12,
+                                                     commandLabel: "Q",
                                                      command: true, control: false,
                                                      option: false, shift: true, shortcut: .quit),
                "Shift-Command-Q is not mistaken for plain Command-Q")
         expect(QuitProtectionSupport.isExtraShortcut(keyCharacter: "q", keyCode: 12,
+                                                     commandLabel: "Q",
                                                      command: true, control: false,
                                                      option: false, shift: true,
                                                      shortcut: .quit, extraModifier: .shift),
                "Shift-Command-Q is recognized as an extra-modifier confirmation")
         expect(QuitProtectionSupport.isExtraShortcut(keyCharacter: "w", keyCode: 13,
+                                                     commandLabel: "W",
                                                      command: true, control: true,
                                                      option: false, shift: false,
                                                      shortcut: .close, extraModifier: .control),
                "Control-Command-W is recognized as an extra-modifier confirmation")
         expect(!QuitProtectionSupport.isExtraShortcut(keyCharacter: "q", keyCode: 12,
+                                                      commandLabel: "Q",
                                                       command: true, control: false,
                                                       option: true, shift: false,
                                                       shortcut: .quit, extraModifier: .shift),
                "an unrelated modifier combination is not protected")
+
+        // Feeds the matcher what the tap sees for a key on an installed layout:
+        // the bare character the event carries and the Command-table label.
+        func layoutProtects(_ layoutID: String, _ keyCode: Int64,
+                            _ shortcut: QuitProtectionShortcut) -> Bool? {
+            guard let data = testLayoutData(for: layoutID) else { return nil }
+            GlobalShortcut.refreshLayoutLabels(layoutData: data)
+            return QuitProtectionSupport.matchesKey(
+                keyCharacter: GlobalShortcut.layoutKeyLabel(for: keyCode, usesCommand: false),
+                keyCode: keyCode,
+                commandLabel: GlobalShortcut.layoutKeyLabel(for: keyCode, usesCommand: true),
+                shortcut: shortcut)
+        }
+        let usID = "com.apple.keylayout.US"
+        if let quit = layoutProtects(usID, 12, .quit), let close = layoutProtects(usID, 13, .close) {
+            expect(quit && close, "US layout keeps Command-Q and Command-W on their own keys")
+        }
+        let russianID = "com.apple.keylayout.Russian"
+        if let quit = layoutProtects(russianID, 12, .quit),
+           let close = layoutProtects(russianID, 13, .close) {
+            expect(quit && close,
+                   "a Cyrillic layout still quits and closes from the Latin Q and W keys")
+        }
+        let greekID = "com.apple.keylayout.Greek"
+        if let quit = layoutProtects(greekID, 12, .quit), let close = layoutProtects(greekID, 13, .close) {
+            expect(quit && close, "a Greek layout still quits and closes from the Latin Q and W keys")
+        }
+        let dvorakID = "com.apple.keylayout.Dvorak"
+        if let quit = layoutProtects(dvorakID, 7, .quit), let close = layoutProtects(dvorakID, 43, .close),
+           let quote = layoutProtects(dvorakID, 12, .quit) {
+            expect(quit && close && !quote,
+                   "Dvorak moves Command-Q and Command-W to the keys it types q and w on, "
+                   + "and leaves the key that types ' alone")
+        }
+        let dvorakCommandID = "com.apple.keylayout.DVORAK-QWERTYCMD"
+        if let quit = layoutProtects(dvorakCommandID, 12, .quit),
+           let close = layoutProtects(dvorakCommandID, 13, .close) {
+            expect(quit && close, "the Dvorak layout that reverts to QWERTY under Command is followed there")
+        }
+        let frenchID = "com.apple.keylayout.French"
+        if let quit = layoutProtects(frenchID, 0, .quit), let close = layoutProtects(frenchID, 6, .close) {
+            expect(quit && close, "French AZERTY moves Command-Q and Command-W to its own q and w keys")
+        }
+        GlobalShortcut.refreshLayoutLabels()
+
+        expect(QuitProtectionSupport.dropsAutorepeat(isRepeat: true, command: true),
+               "a held Command-Q does not repeat into the app it is protecting")
+        expect(!QuitProtectionSupport.dropsAutorepeat(isRepeat: true, command: false),
+               "holding the Q or W key without Command still repeats with protection on, "
+               + "including the keys that type \u{439} and ; on layouts protection follows")
+        expect(!QuitProtectionSupport.dropsAutorepeat(isRepeat: false, command: true),
+               "the first Command-Q press is not dropped as a repeat")
 
         let quitProtectionKeys = [
             DefaultsKey.quitProtectionQuitEnabled,
