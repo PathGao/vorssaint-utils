@@ -15299,6 +15299,17 @@ struct MetricsTests {
             .components(separatedBy: "private func hotkeyPressed").first ?? ""
         expect(!radialClaimedClick.isEmpty && !radialClaimedClick.contains("passUnretained"),
                "a claimed side button keeps both halves of its click whatever the full decode says")
+
+        // The tap is the only thing that ends a button-held wheel, so handing
+        // it back on resign has to end the session too; a wheel left open
+        // across the switch would come back in hold phase with no release
+        // coming for it.
+        let radialSessionResign = radialServiceCode
+            .components(separatedBy: "SessionActivity.shared.onChange")
+            .dropFirst().first?
+            .components(separatedBy: "var sessionActive").first ?? ""
+        expect(radialSessionResign.contains("endSession()"),
+               "the radial menu ends its session when the mouse tap is handed back on resign")
         expect(RadialMenuFaviconFetcher.faviconURL(
             for: "https://example.com:8443/path?q=1#part")?.absoluteString
                 == "https://example.com:8443/favicon.ico"
@@ -21880,7 +21891,8 @@ struct MetricsTests {
                          "Sources/Vorssaint/Services/MouseNavigation/MouseNavigationService.swift",
                          "Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutService.swift",
                          "Sources/Vorssaint/Services/MiddleClick/MiddleClickService.swift",
-                         "Sources/Vorssaint/Services/QuitProtection/QuitProtectionService.swift"] {
+                         "Sources/Vorssaint/Services/QuitProtection/QuitProtectionService.swift",
+                         "Sources/Vorssaint/Services/RadialMenu/RadialMenuService.swift"] {
             let source = (try? String(contentsOfFile: tapOwner, encoding: .utf8)) ?? ""
             expect(!source.isEmpty, "\(tapOwner) reads back for its session-switch check")
             let code = source.components(separatedBy: "\n")
@@ -21895,7 +21907,8 @@ struct MetricsTests {
             if tapOwner.contains("MouseNavigation")
                 || tapOwner.contains("MouseButtonShortcut")
                 || tapOwner.contains("MiddleClick")
-                || tapOwner.contains("QuitProtection") {
+                || tapOwner.contains("QuitProtection")
+                || tapOwner.contains("RadialMenu") {
                 expect(code.contains("AXIsProcessTrusted()"),
                        "\(tapOwner) does not keep a modifying tap alive after Accessibility is lost")
             }
