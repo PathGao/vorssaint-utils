@@ -20538,11 +20538,13 @@ struct MetricsTests {
             var scanned = cluster.first?.center ?? CGPoint(x: 0.5, y: 0.5)
             for entry in cluster where entry.time <= time { scanned = entry.center }
             if RecorderMotion.focus(at: time, clusters: cluster, cursor: &carriedFocusCursor)
-                != scanned {
+                != scanned
+                || RecorderMotion.focus(at: time, clusters: cluster) != scanned {
                 focusMatches = false
             }
         }
-        expect(focusMatches, "carrying the cursor gives the focus the full scan gave")
+        expect(focusMatches,
+               "carrying the cursor, or starting a fresh one, gives the focus the full scan gave")
 
         // "A fresh cursor is a full scan" is a claim about a list in time
         // order and only that. All four queries stop at the first entry too
