@@ -22239,6 +22239,58 @@ struct MetricsTests {
                "the transient paste asks whether it is still wanted right before posting ⌘V")
         expect(pastePlainTransientPaste.contains("stillWanted: stillWanted"),
                "paste as plain text hands its deadline and app check to the transient paste")
+        // The post-point check has its own limit. The read's 2 s spans only
+        // the read; by the post the read may have used all of it and the
+        // user may still be holding the shortcut's modifiers, which
+        // TransientPaste waits out. Both waits are legitimate, so the same
+        // elapsed time is refused by the read leg and accepted by the paste
+        // leg, while the paste leg keeps its own bound and the app check.
+        let readDeadline = QuickToolsSupport.pastePlainReadDeadline
+        let postDeadline = QuickToolsSupport.pastePlainPostDeadline
+        let heldABeat = (readDeadline + postDeadline) / 2
+        expect(postDeadline > readDeadline
+                && !QuickToolsSupport.pastePlainReadIsStillCurrent(elapsed: heldABeat,
+                                                                   requestedApp: 501,
+                                                                   frontmostApp: 501)
+                && QuickToolsSupport.pastePlainReadIsStillCurrent(elapsed: heldABeat,
+                                                                  limit: postDeadline,
+                                                                  requestedApp: 501,
+                                                                  frontmostApp: 501),
+               "a paste whose modifiers were held past the read deadline still posts")
+        expect(!QuickToolsSupport.pastePlainReadIsStillCurrent(elapsed: postDeadline + 1,
+                                                              limit: postDeadline,
+                                                              requestedApp: 501,
+                                                              frontmostApp: 501)
+                && !QuickToolsSupport.pastePlainReadIsStillCurrent(elapsed: 0.05,
+                                                                   limit: postDeadline,
+                                                                   requestedApp: 501,
+                                                                   frontmostApp: 733),
+               "the post-point check still refuses a stalled snapshot and an app switch")
+        expect(pastePlainCode.contains("isStillCurrent(QuickToolsSupport.pastePlainReadDeadline)")
+                && pastePlainCode.contains("isStillCurrent(QuickToolsSupport.pastePlainPostDeadline)"),
+               "the read leg and the paste leg are checked against their own limits")
+        // The paste leg's limit repeats TransientPaste's modifier wait
+        // because that file is outside the list `./build.sh --test`
+        // compiles; the numbers are read back from it so they cannot drift
+        // apart.
+        func transientPasteLiteral(_ name: String) -> Double? {
+            guard let declaration = transientPasteSource.range(of: "static let \(name)"),
+                  let equals = transientPasteSource[declaration.upperBound...].range(of: "= ")
+            else { return nil }
+            let digits = transientPasteSource[equals.upperBound...]
+                .prefix { $0.isNumber || $0 == "." }
+            return Double(digits)
+        }
+        let modifierPollAttempts = transientPasteLiteral("modifierPollAttempts")
+        let modifierPollInterval = transientPasteLiteral("modifierPollInterval")
+        let postDelay = transientPasteLiteral("postDelay")
+        expect(modifierPollAttempts != nil && modifierPollInterval != nil && postDelay != nil
+                && transientPasteSource.contains("attempt >= modifierPollAttempts")
+                && transientPasteSource.contains(".now() + modifierPollInterval")
+                && transientPasteSource.contains(".now() + postDelay")
+                && abs(modifierPollAttempts! * modifierPollInterval! + postDelay!
+                       - QuickToolsSupport.pastePlainModifierReleaseBound) < 0.0001,
+               "the paste leg's allowance for held modifiers matches the wait TransientPaste actually makes")
 
         // Loading the saved shelf keeps "nothing saved", "decoded whole",
         // "decoded with entries dropped" and "will not decode" apart. Only a

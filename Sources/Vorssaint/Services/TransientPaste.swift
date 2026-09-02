@@ -13,6 +13,12 @@ final class TransientPaste {
     static let shared = TransientPaste()
 
     private static let restoreDelay: TimeInterval = 0.5
+    /// The wait for the shortcut's own modifiers to come up before ⌘V is
+    /// posted anyway, then the settle before the post. Their sum is the
+    /// bound `QuickToolsSupport.pastePlainModifierReleaseBound` repeats.
+    private static let modifierPollAttempts = 100
+    private static let modifierPollInterval: TimeInterval = 0.015
+    private static let postDelay: TimeInterval = 0.06
 
     private var pendingRestore: (snapshot: [NSPasteboardItem], changeCount: Int)?
     private var restoreWork: DispatchWorkItem?
@@ -136,8 +142,8 @@ final class TransientPaste {
                                                        completion: @escaping () -> Void) {
         let held = CGEventSource.flagsState(.combinedSessionState)
             .intersection([.maskCommand, .maskAlternate, .maskShift, .maskControl])
-        if held.isEmpty || attempt >= 100 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+        if held.isEmpty || attempt >= modifierPollAttempts {
+            DispatchQueue.main.asyncAfter(deadline: .now() + postDelay) {
                 postPasteShortcut(willPost: willPost, stillWanted: stillWanted) { succeeded in
                     if succeeded {
                         didPost?()
@@ -149,7 +155,7 @@ final class TransientPaste {
             }
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.015) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + modifierPollInterval) {
             postPasteWhenModifiersReleased(attempt: attempt + 1,
                                            willPost: willPost,
                                            didPost: didPost,

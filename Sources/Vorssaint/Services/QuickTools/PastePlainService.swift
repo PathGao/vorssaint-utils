@@ -60,25 +60,29 @@ final class PastePlainService: ObservableObject {
         // seconds later would otherwise paste into whatever app the user has
         // moved to since, which trades the freeze for an unrequested paste.
         // Both the deadline and the app the shortcut was pressed in are
-        // captured here, on the press, and checked in the completion.
+        // captured here, on the press, and checked in the completion. The
+        // paste asks the same question once more before posting ⌘V, against
+        // its own, longer limit: by then the read may have used its whole
+        // deadline and the user may still be holding the shortcut's keys.
         let requestedAt = ProcessInfo.processInfo.systemUptime
         let requestedApp = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        let stillWanted = {
+        let isStillCurrent = { (limit: TimeInterval) in
             QuickToolsSupport.pastePlainReadIsStillCurrent(
                 elapsed: ProcessInfo.processInfo.systemUptime - requestedAt,
+                limit: limit,
                 requestedApp: requestedApp,
                 frontmostApp: NSWorkspace.shared.frontmostApplication?.processIdentifier)
         }
         GeneralPasteboardAccess.shared.async({ Self.plainText(from: .general) }) { [weak self] plain in
             guard let self else { return }
-            guard stillWanted() else {
+            guard isStillCurrent(QuickToolsSupport.pastePlainReadDeadline) else {
                 // Refusing silently would be the one refusal the user waited
                 // seconds for, so it reports like every other one.
                 NSSound.beep()
                 return
             }
             guard let plain, !plain.isEmpty else { return }
-            self.pastePlain(plain, stillWanted: stillWanted)
+            self.pastePlain(plain) { isStillCurrent(QuickToolsSupport.pastePlainPostDeadline) }
         }
     }
 
@@ -90,7 +94,8 @@ final class PastePlainService: ObservableObject {
     /// which does not call this at all once the frontmost app has changed.
     /// The same test goes into the transient paste as `stillWanted`: its own
     /// pasteboard snapshot runs on the lane with no time limit either, so the
-    /// question is asked once more right before the ⌘V is posted.
+    /// question is asked once more right before the ⌘V is posted, against
+    /// the paste's own limit rather than the read's.
     private func pastePlain(_ plain: String, stillWanted: @escaping () -> Bool) {
         // An app that ships its own matching-style paste does this better
         // than any synthesized ⌘V: the destination decides the typing

@@ -224,17 +224,39 @@ enum QuickToolsSupport {
     /// user has already read the paste as failed.
     static let pastePlainReadDeadline: TimeInterval = 2
 
+    /// How long TransientPaste waits, at most, for the shortcut's own
+    /// modifiers to be released before it posts ⌘V anyway: 100 polls of
+    /// 0.015 s, then a 0.06 s settle. That wait is the user holding the keys,
+    /// not a stall, so it cannot count against the press. Repeated here
+    /// because TransientPaste.swift is outside the list `./build.sh --test`
+    /// compiles; the assertion that reads that file keeps the two in step.
+    static let pastePlainModifierReleaseBound: TimeInterval = 100 * 0.015 + 0.06
+
+    /// The limit asked right before ⌘V is posted, for the same press that
+    /// passed `pastePlainReadDeadline`. Everything between the two checks is
+    /// the paste's own work: the read may have used its whole deadline, the
+    /// modifiers may be held for their whole bound, and the first press in an
+    /// app walks its menu bar once. The last second is for that walk in a
+    /// responsive app; its own worst case (600 elements × 0.35 s AX timeout)
+    /// is bounded by its element cap and messaging timeout, not by this
+    /// limit, and a walk that slow is a stalled target this leg should refuse.
+    static let pastePlainPostDeadline: TimeInterval =
+        pastePlainReadDeadline + pastePlainModifierReleaseBound + 1
+
     /// Whether a clipboard read coming back off the serial lane may still
     /// paste. The lane read has no time limit — promised content is rendered
     /// by the app that owns it, which can stall for as long as it likes — so
     /// a completion can arrive long after the shortcut was pressed, and by
     /// then a paste is text the user did not ask for, in an app they may have
     /// left (issue #893). Both halves have to hold: an app still frontmost
-    /// ten seconds later did not ask for this paste either.
+    /// ten seconds later did not ask for this paste either. The same test
+    /// runs once more before ⌘V is posted, with `pastePlainPostDeadline` as
+    /// its limit; `elapsed` is measured from the press in both.
     static func pastePlainReadIsStillCurrent(elapsed: TimeInterval,
+                                             limit: TimeInterval = pastePlainReadDeadline,
                                              requestedApp: pid_t?,
                                              frontmostApp: pid_t?) -> Bool {
-        elapsed < pastePlainReadDeadline && requestedApp == frontmostApp
+        elapsed < limit && requestedApp == frontmostApp
     }
 
     /// The payload as a web link for the optional open action. Limited to
