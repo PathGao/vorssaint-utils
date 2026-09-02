@@ -431,9 +431,7 @@ final class DockPreviewService: ObservableObject {
     }
 
     private func handleOnMain(type: CGEventType, axPoint: CGPoint) {
-        // Unlike discardFarMouseMove, both callers are deferred main-queue
-        // blocks, so the tap may have been torn down since one was enqueued.
-        guard tap != nil else { return }
+        guard isRunning else { return }
         switch type {
         case .mouseMoved:
             handleMouseMoved(axPoint)
