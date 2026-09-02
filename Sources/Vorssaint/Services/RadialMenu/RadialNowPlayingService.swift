@@ -294,7 +294,13 @@ enum RadialNowPlayingApplication {
 /// all read as an empty playback session.
 private final class MediaRemoteNowPlayingBridge {
     private let queue = DispatchQueue(label: "com.vorssaint.radial-now-playing", qos: .userInitiated)
-    private static let replyTimeout: TimeInterval = 1.0
+    /// 2 s: a cold perl load measured 500 ms with no session playing, and a
+    /// real reply adds the MediaRemote round trip plus up to 16 MB of base64
+    /// artwork through the pipe. A kill reads as nothing playing, so a deadline
+    /// that is too tight empties the first wheel after login (#1280). The wheel
+    /// shows `.loading` and holds the card anchor while it waits, so the extra
+    /// second costs nothing on screen.
+    private static let replyTimeout: TimeInterval = 2.0
 
     func fetch(completion: @escaping (RadialNowPlayingSnapshot?) -> Void) {
         guard let script = Bundle.main.url(forResource: "now-playing", withExtension: "pl"),
