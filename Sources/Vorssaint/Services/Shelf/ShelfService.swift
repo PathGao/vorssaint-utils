@@ -429,15 +429,16 @@ final class ShelfService: ObservableObject {
                 self.endDockedDrag()
                 self.endEdgePeekDrag()
             default:
+                // Where the gesture started is settled at `beginDragGesture`,
+                // which asks the Dock question once for this event; re-asking
+                // costs a window-list copy plus a running-app lookup on every
+                // dragged event. A Dock stack whose mouse-down never reached
+                // the monitor can still surface its window number a few events
+                // late, so keep asking for a short while, starting from the
+                // next event rather than asking this one twice.
                 if !self.sawGestureStart {
                     self.beginDragGesture(with: event)
-                }
-                // Where the gesture started is settled at `beginDragGesture`;
-                // re-asking costs a window-list copy plus a running-app lookup
-                // on every dragged event. A Dock stack whose mouse-down never
-                // reached the monitor can still surface its window number a
-                // few events late, so keep asking for a short while.
-                if !self.dragBeganInDock, self.dockOriginProbes < Self.dockOriginProbeLimit {
+                } else if !self.dragBeganInDock, self.dockOriginProbes < Self.dockOriginProbeLimit {
                     self.dockOriginProbes += 1
                     self.dragBeganInDock = self.eventBelongsToDock(event)
                 }
