@@ -11646,15 +11646,21 @@ struct MetricsTests {
             contentsOfFile: "Sources/Vorssaint/Services/Homebrew/HomebrewManager.swift",
             encoding: .utf8)) ?? ""
         expect(!managerSource.isEmpty, "HomebrewManager source is readable for the refresh checks")
-        expect(managerSource.contains("self.refreshInstalled(clearingError: false)"),
-               "a Homebrew operation that exits non-zero still re-reads what is installed")
-        expect(managerSource.components(separatedBy: "self.refreshInstalled(clearingError: false)").count - 1 == 3,
+        let managerCode = managerSource
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        let refreshCalls = managerCode
+            .components(separatedBy: "self.refreshInstalled(clearingError: false)").count - 1
+        expect(refreshCalls == 3,
                "the cancelled, needs-terminal and failed operation paths all re-read, "
-               + "found \(managerSource.components(separatedBy: "self.refreshInstalled(clearingError: false)").count - 1)")
-        expect(managerSource.components(separatedBy: "if clearingError { errorMessage = nil }").count - 1 == 2,
+               + "found \(refreshCalls)")
+        let guardedBannerClears = managerCode
+            .components(separatedBy: "if clearingError { errorMessage = nil }").count - 1
+        expect(guardedBannerClears == 2,
                "both banner clears in refreshInstalled are behind its parameter, so the reason "
                + "a failed operation gave survives the refresh that follows it, found "
-               + "\(managerSource.components(separatedBy: "if clearingError { errorMessage = nil }").count - 1)")
+               + "\(guardedBannerClears)")
         expect(HomebrewOperation.Action.install.runningSystemImage == "arrow.down.circle.fill",
                "Homebrew install status uses a download icon")
         expect(HomebrewOperation.Action.uninstall.runningSystemImage == "trash.circle.fill",
