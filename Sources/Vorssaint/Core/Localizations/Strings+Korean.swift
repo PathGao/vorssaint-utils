@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "Vorssaint 완전히 제거",
         advancedUninstallConfirmTitle: "Vorssaint를 제거할까요?",
         advancedUninstallConfirmBody: "Vorssaint가 권한과 설정을 지우고 휴지통으로 이동한 뒤 종료됩니다. 이 작업은 앱에서 되돌릴 수 없지만 휴지통을 비우기 전까지는 복원할 수 있습니다.",
+        advancedUninstallFailedTitle: "제거를 중단했습니다",
+        advancedUninstallFailedBody: "Vorssaint가 변경한 시스템 설정을 되돌리지 못했습니다. 잠자기, 팬 속도 또는 마우스 가속입니다. 아무것도 삭제되지 않았습니다. 다시 시도하고 암호를 요청하면 허용하세요.",
 
         launchAtLogin: "로그인 시 실행",
         languageLabel: "언어",
@@ -208,6 +210,8 @@ extension Strings {
         switcherShortcutHintApps: "앱",
         switcherShortcutHintWindows: "윈도우",
         switcherWindowShortcutCaption: "맨 앞 앱의 윈도우 전환기를 엽니다. 앱 전환기가 열려 있으면 선택한 앱의 윈도우를 차례로 전환합니다.",
+        switcherTakeOverSystemShortcuts: "macOS ⌘Tab 및 ⌘` 대체",
+        switcherTakeOverSystemShortcutsCaption: "Vorssaint 전환기가 활성화된 동안에만 해당 macOS 앱 및 윈도우 단축키를 끕니다. 실행 중인 모든 앱에 계속 접근할 수 있습니다.",
         switcherAppearanceDelay: "표시 지연",
         switcherAppearanceDelayCaption: "전환기가 나타나기 전에 단축키를 누르고 있어야 하는 시간입니다.",
         switcherMergeTabs: "앱별로 하나로 묶어 표시",

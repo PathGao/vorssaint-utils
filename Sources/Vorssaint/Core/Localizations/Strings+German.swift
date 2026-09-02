@@ -125,6 +125,8 @@ extension Strings {
         advancedUninstallButton: "Vorssaint vollständig deinstallieren",
         advancedUninstallConfirmTitle: "Vorssaint deinstallieren?",
         advancedUninstallConfirmBody: "Vorssaint setzt seine Berechtigungen zurück, entfernt seine Einstellungen und wandert in den Papierkorb, dann beendet es sich. Das lässt sich aus der App nicht rückgängig machen, doch sie bleibt im Papierkorb, bis du ihn leerst.",
+        advancedUninstallFailedTitle: "Deinstallation gestoppt",
+        advancedUninstallFailedBody: "Vorssaint konnte eine geänderte Systemeinstellung nicht wiederherstellen: Ruhezustand, Lüfterdrehzahl oder Mausbeschleunigung. Es wurde nichts entfernt. Versuche es erneut und erlaube die Kennwortabfrage, falls sie erscheint.",
 
         launchAtLogin: "Beim Anmelden öffnen",
         languageLabel: "Sprache",
@@ -207,6 +209,8 @@ extension Strings {
         switcherShortcutHintApps: "Apps",
         switcherShortcutHintWindows: "Fenster",
         switcherWindowShortcutCaption: "Öffnet einen Umschalter für die Fenster der vordersten App. Bei geöffnetem App-Umschalter springt er zwischen den Fenstern der ausgewählten App.",
+        switcherTakeOverSystemShortcuts: "macOS-⌘Tab und ⌘` ersetzen",
+        switcherTakeOverSystemShortcutsCaption: "Deaktiviert die passenden macOS-App- und Fensterkurzbefehle nur, solange Vorssaints Umschalter aktiv ist. Alle laufenden Apps bleiben erreichbar.",
         switcherAppearanceDelay: "Einblendverzögerung",
         switcherAppearanceDelayCaption: "Wie lange das Tastenkürzel gehalten werden muss, bevor der Umschalter erscheint.",
         switcherMergeTabs: "Einen Eintrag pro App anzeigen",
