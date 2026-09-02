@@ -22042,6 +22042,7 @@ struct MetricsTests {
         expect(rebuildCatalogParts.count > 1,
                "the Command Bar catalog rebuild finds the end of rebuildCatalog")
         expect(rebuildCatalogCode.contains("emojiEntries = CommandBarCatalog.emojiEntries")
+                && rebuildCatalogCode.contains("emojiEntries.isEmpty")
                 && rebuildCatalogCode.contains("builtLanguage != L10n.shared.language")
                 && rebuildCatalogCode.contains("emojiAccessibility != accessibility")
                 && rebuildCatalogCode.contains(
