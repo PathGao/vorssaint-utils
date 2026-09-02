@@ -5,9 +5,9 @@ import AppKit
 import Foundation
 import SwiftUI
 
-/// A session-scoped view of macOS Now Playing. MediaRemote is private, so the
-/// bridge resolves every entry point dynamically and treats missing symbols,
-/// timeouts and malformed metadata exactly like an empty playback session.
+/// A session-scoped view of macOS Now Playing. The read itself lives in the
+/// bridge below, out of process; a failed run, a timeout and malformed
+/// metadata all arrive here as an empty playback session.
 /// Nothing here is required for the radial menu itself to work.
 final class RadialNowPlayingService {
     static let shared = RadialNowPlayingService()
