@@ -107,7 +107,7 @@ final class WindowLayoutService: ObservableObject {
         let wantsDirectional = SessionActivitySupport.tapShouldRun(
             featureWanted: available
                 && UserDefaults.standard.bool(forKey: DefaultsKey.windowDirectionalEnabled),
-            accessibilityGranted: trusted,
+            accessibilityGranted: AXIsProcessTrusted(),
             sessionIsActive: sessionIsActive
         )
         wantsDirectional ? registerDirectionalHotkey() : unregisterDirectionalHotkey()
@@ -115,7 +115,7 @@ final class WindowLayoutService: ObservableObject {
         let wantsGesture = SessionActivitySupport.tapShouldRun(
             featureWanted: available
                 && UserDefaults.standard.bool(forKey: DefaultsKey.windowGestureEnabled),
-            accessibilityGranted: trusted,
+            accessibilityGranted: AXIsProcessTrusted(),
             sessionIsActive: sessionIsActive
         )
         wantsGesture ? startGestureTap() : stopGestureTap()
@@ -124,7 +124,7 @@ final class WindowLayoutService: ObservableObject {
             featureWanted: available
                 && UserDefaults.standard.bool(forKey: DefaultsKey.windowEdgeSnapEnabled)
                 && !WindowEdgeSnapSupport.isSystemTilingEnabled,
-            accessibilityGranted: trusted,
+            accessibilityGranted: AXIsProcessTrusted(),
             sessionIsActive: sessionIsActive
         )
         wantsEdgeSnap ? startEdgeSnapTap() : stopEdgeSnapTap()

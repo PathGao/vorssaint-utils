@@ -21777,8 +21777,8 @@ struct MetricsTests {
                     .components(separatedBy: "SessionActivitySupport.tapShouldRun(")
                     .dropFirst()
                     .map { $0.components(separatedBy: "sessionIsActive:").first ?? "" }
-                expect(gateArguments.allSatisfy { !$0.contains("Permissions.shared.accessibility") },
-                       "\(tapOwner) asks Accessibility directly wherever it decides to run a tap")
+                expect(gateArguments.allSatisfy { $0.contains("AXIsProcessTrusted()") },
+                       "\(tapOwner) asks Accessibility live wherever it decides to run a tap")
             }
             // Switching a tap off leaves the process owning it, which is what
             // the window server waits on; teardown must invalidate the port.
