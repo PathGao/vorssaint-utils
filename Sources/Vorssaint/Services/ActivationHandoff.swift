@@ -27,8 +27,9 @@ enum ActivationHandoff {
     static func yield(to app: NSRunningApplication) {
         // The self-activation below posts a real activation notification for
         // our own process; tell the use tracker it is ours so it does not rank
-        // Vorssaint ahead of the app the user is switching away from.
-        WindowUseTracker.shared.expectSelfActivationHandoff()
+        // Vorssaint ahead of the app the user is switching away from. Keyed to
+        // the target so only that app's activation, or ours, can clear it.
+        WindowUseTracker.shared.expectSelfActivationHandoff(clearedBy: app.processIdentifier)
         NSApp.activate(ignoringOtherApps: true)
         NSApp.yieldActivation(to: app)
     }

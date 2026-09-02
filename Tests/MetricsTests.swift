@@ -9851,8 +9851,10 @@ struct MetricsTests {
         expect(selfActivation != nil && yieldOnward != nil
                 && selfActivation!.lowerBound < yieldOnward!.lowerBound,
                "the activation handoff self-activates before it yields onward")
-        expect(activationHandoffSource.contains("WindowUseTracker.shared.expectSelfActivationHandoff()"),
-               "the activation handoff tells the use tracker its self-activation is not a real switch")
+        expect(activationHandoffSource.contains(
+                "WindowUseTracker.shared.expectSelfActivationHandoff(clearedBy: app.processIdentifier)"),
+               "the activation handoff tells the use tracker its self-activation is not a real switch, "
+               + "keyed to the app it is handing over to")
         // Reports how many files it read: an enumerator that finds nothing (the
         // tests run from somewhere other than the repo root) would leave the
         // list empty and pass while guarding nothing. Matches the method name
@@ -9885,14 +9887,20 @@ struct MetricsTests {
         let useTrackerSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/Switcher/WindowUseTracker.swift",
             encoding: .utf8)) ?? ""
-        // Whichever activation arrives first clears the arm: when Vorssaint
-        // already held activation its own self-activation posts nothing, the
-        // first arrival is the target's, and an arm cleared only by our pid
-        // would stay live and swallow the next real activation of Vorssaint.
-        expect(useTrackerSource.contains("let handoffArmed = consumeSelfActivationHandoff()")
+        // Our own activation or the target's clears the arm, nothing else does:
+        // when Vorssaint already held activation its own self-activation posts
+        // nothing and the first arrival is the target's, so an arm cleared only
+        // by our pid would stay live and swallow the next real activation of
+        // Vorssaint; an arm cleared by any pid would be eaten by an activation
+        // already queued when the handoff ran, and the self-activation behind
+        // it would then be recorded.
+        expect(useTrackerSource.contains("let handoffArmed = consumeSelfActivationHandoff(activating: pid)")
                 && useTrackerSource.contains(
                     "let selfHandoff = handoffArmed && pid == ProcessInfo.processInfo.processIdentifier"),
-               "any activation clears an armed handoff, and only our own is then left unrecorded")
+               "our own or the target's activation clears an armed handoff, and only our own is then left unrecorded")
+        expect(useTrackerSource.contains(
+                "pid == ProcessInfo.processInfo.processIdentifier || pid == selfActivationHandoffTarget"),
+               "an activation of some other app leaves an armed handoff in place")
         expect(useTrackerSource.contains("if !selfHandoff { promote(app: pid) }")
                 && useTrackerSource.contains("self?.retargetObserver(filingFocusedWindow: !selfHandoff)"),
                "an armed handoff skips only the recording, the observer still follows Vorssaint")

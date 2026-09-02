@@ -47,16 +47,20 @@ final class WindowUseTracker {
     /// which is not the user coming to Vorssaint, or the target's, by which
     /// point the self-activation has either been posted or never will be.
     ///
-    /// Whichever arrives first clears it. macOS posts no activation when
-    /// Vorssaint already held it, so an arm cleared only by our own pid would
-    /// stay live past the target's notification and swallow the next real
-    /// activation of Vorssaint — and the quick one is `activateOwnWindow`,
-    /// the switcher landing on one of our own windows right after a handoff.
-    /// The deadline is the backstop for when neither notification arrives,
-    /// which takes both the self-activation and the target's activate being
-    /// refused; a second covers the trip to the next main run loop turn many
-    /// times over.
+    /// Whichever of those two arrives first clears it. macOS posts no
+    /// activation when Vorssaint already held it, so an arm cleared only by our
+    /// own pid would stay live past the target's notification and swallow the
+    /// next real activation of Vorssaint — and the quick one is
+    /// `activateOwnWindow`, the switcher landing on one of our own windows
+    /// right after a handoff. Any other pid leaves it alone: an activation
+    /// already queued when the handoff ran (a Space hop's travel posts some)
+    /// drains before our own, and letting it consume the arm would record the
+    /// self-activation it was meant to hide. The deadline is the backstop for
+    /// when neither notification arrives, which takes both the self-activation
+    /// and the target's activate being refused; a second covers the trip to
+    /// the next main run loop turn many times over.
     private var selfActivationHandoffUntil: TimeInterval = 0
+    private var selfActivationHandoffTarget: pid_t = 0
     private static let selfActivationHandoffWindow: TimeInterval = 1
 
     private let lifecycleLock = NSLock()
@@ -114,19 +118,23 @@ final class WindowUseTracker {
     /// ignoring our process unconditionally would also erase clicking
     /// Vorssaint's Dock icon, opening Settings and switching onto one of its
     /// windows, none of which are handoffs.
-    func expectSelfActivationHandoff() {
+    func expectSelfActivationHandoff(clearedBy target: pid_t) {
         stateLock.withLock {
             selfActivationHandoffUntil = ProcessInfo.processInfo.systemUptime
                 + Self.selfActivationHandoffWindow
+            selfActivationHandoffTarget = target
         }
     }
 
-    /// True once per armed handoff, and only while it is fresh. Every
-    /// activation calls this, so the first one after arming clears it whatever
-    /// its pid.
-    private func consumeSelfActivationHandoff() -> Bool {
+    /// True once per armed handoff, and only while it is fresh, for an
+    /// activation of our own process or of the app the handoff is yielding to.
+    /// Every activation calls this; one of any other app passes through with
+    /// the arm untouched.
+    private func consumeSelfActivationHandoff(activating pid: pid_t) -> Bool {
         stateLock.withLock {
-            guard ProcessInfo.processInfo.systemUptime < selfActivationHandoffUntil else { return false }
+            guard ProcessInfo.processInfo.systemUptime < selfActivationHandoffUntil,
+                  pid == ProcessInfo.processInfo.processIdentifier || pid == selfActivationHandoffTarget
+            else { return false }
             selfActivationHandoffUntil = 0
             return true
         }
@@ -213,12 +221,13 @@ final class WindowUseTracker {
     @objc private func appActivated(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         let pid = app.processIdentifier
-        // Any activation clears an armed handoff, not just our own: when
+        // Our own activation or the target's clears an armed handoff: when
         // Vorssaint already held activation the self-activation posts nothing,
         // the first notification to arrive is the target's, and an arm still
         // live after it would swallow the next real activation of Vorssaint.
-        // Consumed before the pid check so the target's arrival clears it too.
-        let handoffArmed = consumeSelfActivationHandoff()
+        // Consumed before the pid check so the target's arrival clears it too;
+        // any other app's activation leaves it for the self-activation behind.
+        let handoffArmed = consumeSelfActivationHandoff(activating: pid)
         // An armed handoff suppresses only the recording: the app here, and the
         // focused-window read the retarget would file, since a titled window of
         // Vorssaint's would otherwise rank second and catch a quick toggle back.
