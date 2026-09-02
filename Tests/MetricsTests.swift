@@ -4748,7 +4748,7 @@ struct MetricsTests {
         let junkCleanerSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/Cleaner/JunkCleaner.swift",
             encoding: .utf8)) ?? ""
-        let cleanSelectedBody = sourceBody(of: junkCleanerSource, from: "func cleanSelected()",
+        let cleanSelectedBody = sourceBody(of: junkCleanerSource, from: "func cleanSelected(",
                                            to: "private static func mayRemove")
         expect(cleanSelectedBody.contains("chosen.contains { $0.category == .leftovers }")
                && cleanSelectedBody.contains("? Self.installedBundleIDs() : []")
