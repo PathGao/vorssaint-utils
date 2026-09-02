@@ -666,6 +666,9 @@ final class HomebrewManager: ObservableObject {
     /// These are normally fast, but a hung NFS share or locked database can
     /// make them stall indefinitely.
     private static let brewReadTimeout: TimeInterval = 30
+    /// Install/upgrade/uninstall run on the same serial queue as every read, so a
+    /// hung one must end eventually; a large cask on a slow line takes minutes, not hours.
+    private static let brewOperationTimeout: TimeInterval = 30 * 60
     private static let processTerminationGrace: TimeInterval = 2
 
     /// SIGTERM is cooperative. Escalate only when a command ignores it so a
@@ -758,6 +761,8 @@ final class HomebrewManager: ObservableObject {
                     DispatchQueue.main.async { onOutput(chunk) }
                 }
             }
+            let finished = DispatchSemaphore(value: 0)
+            process.terminationHandler = { _ in finished.signal() }
             do {
                 try process.run()
             } catch {
@@ -770,14 +775,16 @@ final class HomebrewManager: ObservableObject {
                 self.activeProcess = process
                 if self.cancelRequested { Self.stop(process) }
             }
-            process.waitUntilExit()
+            if finished.wait(timeout: .now() + Self.brewOperationTimeout) == .timedOut {
+                Self.stop(process, finished: finished)
+            }
             _ = drained.wait(timeout: .now() + 1)
             pipe.fileHandleForReading.readabilityHandler = nil
             try? pipe.fileHandleForReading.close()
             lock.lock()
             let finalOutput = String(data: output, encoding: .utf8) ?? ""
             lock.unlock()
-            completion(process.terminationStatus, finalOutput)
+            completion(process.isRunning ? -1 : process.terminationStatus, finalOutput)
         }
     }
 
