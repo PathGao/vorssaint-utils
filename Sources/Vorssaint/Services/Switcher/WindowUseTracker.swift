@@ -42,16 +42,20 @@ final class WindowUseTracker {
     /// just cleared.
     private var recording = false
 
-    /// Uptime until which one activation of Vorssaint's own process is read as
-    /// the self-activation `ActivationHandoff` performs on its way to another
-    /// app, rather than as the user coming to Vorssaint.
+    /// Uptime until which the next activation notification is read as part of
+    /// the handoff `ActivationHandoff` is performing: its own self-activation,
+    /// which is not the user coming to Vorssaint, or the target's, by which
+    /// point the self-activation has either been posted or never will be.
     ///
-    /// A deadline instead of a plain flag: macOS posts no activation when
-    /// Vorssaint already held it, and a flag left armed would then swallow the
-    /// next real activation instead. The window only has to cover the trip from
-    /// `NSApp.activate` to the notification arriving on the next main run loop
-    /// turn; a second is far more than that and expires long before a person
-    /// could reach the Dock icon.
+    /// Whichever arrives first clears it. macOS posts no activation when
+    /// Vorssaint already held it, so an arm cleared only by our own pid would
+    /// stay live past the target's notification and swallow the next real
+    /// activation of Vorssaint — and the quick one is `activateOwnWindow`,
+    /// the switcher landing on one of our own windows right after a handoff.
+    /// The deadline is the backstop for when neither notification arrives,
+    /// which takes both the self-activation and the target's activate being
+    /// refused; a second covers the trip to the next main run loop turn many
+    /// times over.
     private var selfActivationHandoffUntil: TimeInterval = 0
     private static let selfActivationHandoffWindow: TimeInterval = 1
 
@@ -99,9 +103,9 @@ final class WindowUseTracker {
         }
     }
 
-    /// Arms the next activation of our own process to go unrecorded. Called by
-    /// `ActivationHandoff` immediately before it self-activates so it can yield
-    /// activation onward: recording that would rank Vorssaint ahead of the app
+    /// Arms the next activation: if it is our own process it goes unrecorded.
+    /// Called by `ActivationHandoff` immediately before it self-activates so it
+    /// can yield activation onward: recording that would rank Vorssaint ahead of the app
     /// the user is switching away from, and a quick toggle back would land on
     /// Vorssaint's own window instead of the previous app.
     ///
@@ -117,7 +121,9 @@ final class WindowUseTracker {
         }
     }
 
-    /// True once per armed handoff, and only while it is fresh.
+    /// True once per armed handoff, and only while it is fresh. Every
+    /// activation calls this, so the first one after arming clears it whatever
+    /// its pid.
     private func consumeSelfActivationHandoff() -> Bool {
         stateLock.withLock {
             guard ProcessInfo.processInfo.systemUptime < selfActivationHandoffUntil else { return false }
@@ -207,6 +213,12 @@ final class WindowUseTracker {
     @objc private func appActivated(_ note: Notification) {
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
         let pid = app.processIdentifier
+        // Any activation clears an armed handoff, not just our own: when
+        // Vorssaint already held activation the self-activation posts nothing,
+        // the first notification to arrive is the target's, and an arm still
+        // live after it would swallow the next real activation of Vorssaint.
+        // Consumed before the pid check so the target's arrival clears it too.
+        let handoffArmed = consumeSelfActivationHandoff()
         // An armed handoff suppresses only the recording: the app here, and the
         // focused-window read the retarget would file, since a titled window of
         // Vorssaint's would otherwise rank second and catch a quick toggle back.
@@ -214,7 +226,7 @@ final class WindowUseTracker {
         // self-activating, and if the yield does not take it stays there, with
         // the observer otherwise left on the app the user came from; when it
         // does take, the target's own notification retargets it a turn later.
-        let selfHandoff = pid == ProcessInfo.processInfo.processIdentifier && consumeSelfActivationHandoff()
+        let selfHandoff = handoffArmed && pid == ProcessInfo.processInfo.processIdentifier
         // The application half is exact and free, so it lands right away; the
         // window half needs Accessibility and happens on the watcher thread.
         if !selfHandoff { promote(app: pid) }

@@ -9885,9 +9885,14 @@ struct MetricsTests {
         let useTrackerSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/Services/Switcher/WindowUseTracker.swift",
             encoding: .utf8)) ?? ""
-        expect(useTrackerSource.contains(
-                    "let selfHandoff = pid == ProcessInfo.processInfo.processIdentifier && consumeSelfActivationHandoff()"),
-               "the use tracker skips recording our own activation only when a handoff armed it")
+        // Whichever activation arrives first clears the arm: when Vorssaint
+        // already held activation its own self-activation posts nothing, the
+        // first arrival is the target's, and an arm cleared only by our pid
+        // would stay live and swallow the next real activation of Vorssaint.
+        expect(useTrackerSource.contains("let handoffArmed = consumeSelfActivationHandoff()")
+                && useTrackerSource.contains(
+                    "let selfHandoff = handoffArmed && pid == ProcessInfo.processInfo.processIdentifier"),
+               "any activation clears an armed handoff, and only our own is then left unrecorded")
         expect(useTrackerSource.contains("if !selfHandoff { promote(app: pid) }")
                 && useTrackerSource.contains("self?.retargetObserver(filingFocusedWindow: !selfHandoff)"),
                "an armed handoff skips only the recording, the observer still follows Vorssaint")
