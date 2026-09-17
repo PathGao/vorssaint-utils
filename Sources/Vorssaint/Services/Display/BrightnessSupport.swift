@@ -49,8 +49,14 @@ enum BrightnessSupport {
         retryAttempts + 1
     }
 
-    static func ddcProbeWriteCycles(classifyingChannel: Bool) -> Int {
-        classifyingChannel ? 1 : writeCycles
+    /// Some monitors answer NULL until a second request arrives a few
+    /// milliseconds behind the first, which is why MonitorControl and m1ddc
+    /// pair theirs. Spacing every request out then reads the channel as
+    /// write-only, so the last attempt pairs them before that verdict is
+    /// reached and cached.
+    static func ddcProbeWriteCycles(classifyingChannel: Bool,
+                                    isFinalAttempt: Bool = false) -> Int {
+        classifyingChannel && !isFinalAttempt ? 1 : writeCycles
     }
 
     static let defaultKeyboardLightLevel: Float = 0.5

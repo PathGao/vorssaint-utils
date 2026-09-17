@@ -1853,9 +1853,10 @@ final class BrightnessService: ObservableObject {
         var request = BrightnessSupport.readRequestPacket(code: BrightnessSupport.luminanceCode)
         var writeAccepted = false
         let attempts = BrightnessSupport.ddcProbeAttempts()
-        let writeCycles = BrightnessSupport.ddcProbeWriteCycles(
-            classifyingChannel: classifyingChannel)
         for attempt in 0..<attempts {
+            let writeCycles = BrightnessSupport.ddcProbeWriteCycles(
+                classifyingChannel: classifyingChannel,
+                isFinalAttempt: attempt + 1 == attempts)
             for _ in 0..<writeCycles {
                 usleep(BrightnessSupport.writePauseMicroseconds)
                 if write(service, BrightnessSupport.chipAddress,

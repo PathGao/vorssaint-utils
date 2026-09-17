@@ -174,6 +174,9 @@ enum DefaultsKey {
     // answer reads. Kept local so wake handling does not repeatedly probe a
     // sensitive display path.
     static let brightnessDDCWriteOnlyPaths = "brightnessDDCWriteOnlyPaths"
+    // Set once the paths cached before paired discovery requests have been
+    // dropped, so a monitor written off then is classified again exactly once.
+    static let brightnessDDCWriteOnlyPathsRechecked = "brightnessDDCWriteOnlyPathsRechecked"
     // Displays this app switched off, so a run that ends without putting them
     // back can be repaired on the next start instead of needing a replug.
     static let displaysSwitchedOff = "displaysSwitchedOff"
@@ -1547,6 +1550,18 @@ enum Defaults {
         migrateOrphanedCaptureShortcut(in: defaults)
         migrateSilentHeadphonesDisconnectVolume(in: defaults)
         migrateSwitcherWindowlessFinder(in: defaults)
+        recheckBrightnessDDCWriteOnlyPaths(in: defaults)
+    }
+
+    /// Discovery used to send one request per read, which reads a monitor that
+    /// answers only paired requests as write-only. That verdict is cached and
+    /// never re-probed, so it would outlive the fix: drop the cache once.
+    static func recheckBrightnessDDCWriteOnlyPaths(in defaults: UserDefaults) {
+        guard !defaults.bool(forKey: DefaultsKey.brightnessDDCWriteOnlyPathsRechecked) else {
+            return
+        }
+        defaults.set(true, forKey: DefaultsKey.brightnessDDCWriteOnlyPathsRechecked)
+        defaults.removeObject(forKey: DefaultsKey.brightnessDDCWriteOnlyPaths)
     }
 
     static func migrateBatteryTemperatureVisibility(in defaults: UserDefaults) {
