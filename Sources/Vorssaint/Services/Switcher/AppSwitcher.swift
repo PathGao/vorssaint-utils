@@ -1344,14 +1344,27 @@ final class AppSwitcher: ObservableObject {
 
     /// Asks the app owning the selected window to quit (⌘Tab → Q) and keeps the
     /// session open — mirroring the system switcher. The request is not the
-    /// answer: an app with unsaved work stays up on its own save sheet, so its
-    /// windows leave the grid when macOS reports the app gone, not before.
+    /// answer: an app with unsaved work stays up on its own save sheet. Its
+    /// windows are treated like closing ones: still listed, never raised on
+    /// release, gone when macOS reports the app gone, and given back if it is
+    /// still running after about as long as a closing window gets.
     private func quitSelectedApp() {
         guard windows.indices.contains(selectedIndex) else { return }
         let pid = windows[selectedIndex].pid
         guard let app = NSRunningApplication(processIdentifier: pid),
               app.bundleIdentifier != Defaults.finderBundleIdentifier else { return }
-        app.terminate()
+        let quittingIDs = Set(sessionItems.lazy.filter { $0.pid == pid }.map(\.id))
+        guard !quittingIDs.isSubset(of: closingItemIDs), app.terminate() else { return }
+        closingItemIDs.formUnion(quittingIDs)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
+            guard let self, self.sessionActive else { return }
+            if app.isTerminated {
+                self.removeTerminatedApp(pid: pid)
+            } else {
+                self.closingItemIDs.subtract(quittingIDs)
+                self.resumePendingCommitAfterClose()
+            }
+        }
     }
 
     /// Watches for terminations while a session is open, so a quit the app
