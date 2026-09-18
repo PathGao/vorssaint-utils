@@ -169,6 +169,9 @@ final class AppSwitcher: ObservableObject {
     private var commitPendingForClose = false
     /// Live only while a session is open; see `startObservingTermination`.
     private var terminationObserver: NSObjectProtocol?
+    /// Apps already asked to quit this session, so a repeated Q is ignored
+    /// while a window closing through W is not.
+    private var quittingPIDs: Set<pid_t> = []
 
     // Virtual key codes handled during a session.
     private enum KeyCode {
@@ -1353,15 +1356,20 @@ final class AppSwitcher: ObservableObject {
         let pid = windows[selectedIndex].pid
         guard let app = NSRunningApplication(processIdentifier: pid),
               app.bundleIdentifier != Defaults.finderBundleIdentifier else { return }
-        let quittingIDs = Set(sessionItems.lazy.filter { $0.pid == pid }.map(\.id))
-        guard !quittingIDs.isSubset(of: closingItemIDs), app.terminate() else { return }
-        closingItemIDs.formUnion(quittingIDs)
+        guard !quittingPIDs.contains(pid), app.terminate() else { return }
+        quittingPIDs.insert(pid)
+        // Only what this quit marked is given back; a window W is closing
+        // keeps its own mark.
+        let markedIDs = Set(sessionItems.lazy.filter { $0.pid == pid }.map(\.id))
+            .subtracting(closingItemIDs)
+        closingItemIDs.formUnion(markedIDs)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
-            guard let self, self.sessionActive else { return }
+            guard let self, self.sessionActive, self.quittingPIDs.contains(pid) else { return }
             if app.isTerminated {
                 self.removeTerminatedApp(pid: pid)
             } else {
-                self.closingItemIDs.subtract(quittingIDs)
+                self.quittingPIDs.remove(pid)
+                self.closingItemIDs.subtract(markedIDs)
                 self.resumePendingCommitAfterClose()
             }
         }
@@ -1390,6 +1398,7 @@ final class AppSwitcher: ObservableObject {
     }
 
     private func removeTerminatedApp(pid: pid_t) {
+        quittingPIDs.remove(pid)
         guard sessionActive, sessionItems.contains(where: { $0.pid == pid }) else { return }
         let removedIDs = Set(sessionItems.lazy.filter { $0.pid == pid }.map(\.id))
         closingItemIDs.subtract(removedIDs)
@@ -1585,6 +1594,7 @@ final class AppSwitcher: ObservableObject {
         shiftBackNavigationHeld = false
         shiftBackChordDeadline = 0
         closingItemIDs = []
+        quittingPIDs = []
         commitPendingForClose = false
     }
 
