@@ -42,18 +42,18 @@ enum BrightnessSupport {
     static let retryAttempts = 4
     static let replyLength = 11
 
-    /// Discovery keeps the normal number of reply chances but sends only one
-    /// request before each read. The read and retry pauses put every request
-    /// more than 50ms apart instead of sending pairs 10ms apart.
+    /// Discovery keeps the normal number of reply chances. Every attempt but
+    /// the last sends one request before its read, so the read and retry
+    /// pauses keep those requests more than 50ms apart instead of pairing
+    /// them 10ms apart.
     static func ddcProbeAttempts() -> Int {
         retryAttempts + 1
     }
 
     /// Some monitors answer NULL until a second request arrives a few
-    /// milliseconds behind the first, which is why MonitorControl and m1ddc
-    /// pair theirs. Spacing every request out then reads the channel as
-    /// write-only, so the last attempt pairs them before that verdict is
-    /// reached and cached.
+    /// milliseconds behind the first, which is why field implementations pair
+    /// theirs. The last discovery attempt pairs them too, before a channel
+    /// that never answered is written off and cached as write-only.
     static func ddcProbeWriteCycles(classifyingChannel: Bool,
                                     isFinalAttempt: Bool = false) -> Int {
         classifyingChannel && !isFinalAttempt ? 1 : writeCycles
