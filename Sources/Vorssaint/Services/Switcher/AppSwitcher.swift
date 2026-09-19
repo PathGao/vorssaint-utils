@@ -1363,8 +1363,11 @@ final class AppSwitcher: ObservableObject {
         let markedIDs = Set(sessionItems.lazy.filter { $0.pid == pid }.map(\.id))
             .subtracting(closingItemIDs)
         closingItemIDs.formUnion(markedIDs)
+        let generation = routeLock.withLock { sessionStartGeneration }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
-            guard let self, self.sessionActive, self.quittingPIDs.contains(pid) else { return }
+            guard let self, self.sessionActive,
+                  self.routeLock.withLock({ self.sessionStartGeneration == generation }),
+                  self.quittingPIDs.contains(pid) else { return }
             if app.isTerminated {
                 self.removeTerminatedApp(pid: pid)
             } else {
