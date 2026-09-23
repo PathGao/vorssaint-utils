@@ -88,6 +88,80 @@ enum UtilitiesFeatureTests {
         suite.expect(Defaults.registeredDefaults[DefaultsKey.panelUtilityPortManager] as? Bool == true,
                "the port manager panel row ships visible like its siblings and travels in backups")
 
+        // MARK: Command environment
+
+        suite.expect(EnvironmentSupport.splitPath("/a:/b::/a:/c\n") == ["/a", "/b", "/c"],
+               "PATH parsing drops empty entries and keeps only the first of a repeat")
+        var pathReport = EnvironmentReport()
+        pathReport.terminalPath = ["/opt/homebrew/bin", "/usr/bin", "/Users/test/.bun/bin"]
+        pathReport.appPath = EnvironmentSupport.launchdDefaultPath
+        suite.expect(pathReport.terminalOnlyPath == ["/opt/homebrew/bin", "/Users/test/.bun/bin"],
+               "the terminal-only list keeps PATH order and names exactly what an app lacks")
+
+        let envFixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vorssaint-env-\(UUID().uuidString)")
+        let envFirst = envFixture.appendingPathComponent("first/bin")
+        let envSecond = envFixture.appendingPathComponent("second/bin")
+        try? FileManager.default.createDirectory(at: envFirst, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: envSecond, withIntermediateDirectories: true)
+        for (directory, body) in [(envFirst, "#!/bin/sh\nexec /Users/test/.bun/bin/bun \"$@\"\n"),
+                                  (envSecond, "#!/bin/sh\necho v1.2.3\n")] {
+            let file = directory.appendingPathComponent("node")
+            try? body.write(to: file, atomically: true, encoding: .utf8)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+        }
+        let shimmed = EnvironmentSupport.tool(named: "node", in: [envFirst.path, envSecond.path, envFirst.path])
+        suite.expect(shimmed.path == envFirst.appendingPathComponent("node").path
+                && shimmed.shadowedPaths == [envSecond.appendingPathComponent("node").path],
+               "the first PATH entry wins and each losing copy is listed once, found \(shimmed.shadowedPaths)")
+        suite.expect(shimmed.shimTarget == "/Users/test/.bun/bin/bun",
+               "a wrapper script reports the command it execs")
+        let plain = EnvironmentSupport.tool(named: "node", in: [envSecond.path])
+        suite.expect(plain.shimTarget == nil && plain.version == "v1.2.3",
+               "a script that execs nothing else is not a shim, and its version is its first line")
+        suite.expect(EnvironmentSupport.tool(named: "vorssaint-missing", in: [envFirst.path]).path == nil,
+               "a command nowhere in PATH reports no path")
+        let linkPath = envFirst.appendingPathComponent("npx")
+        try? FileManager.default.createSymbolicLink(atPath: linkPath.path,
+                                                    withDestinationPath: "../../second/bin/node")
+        suite.expect(EnvironmentSupport.shimTarget(of: linkPath.path, command: "npx")
+                == envSecond.appendingPathComponent("node").path,
+               "a relative symlink to another name is a shim with a normalized target")
+
+        suite.expect(EnvironmentSupport.execTarget(in: #"  install|i) exec "$HOME/.bun/bin/bun" install "$@" ;;"#)
+                == "$HOME/.bun/bin/bun"
+                && EnvironmentSupport.execTarget(in: "exec -a login /bin/zsh") == "/bin/zsh",
+               "exec inside a case branch or with flags still names its target, unquoted")
+        suite.expect(EnvironmentSupport.execTarget(in: "codexec /bin/zsh") == nil,
+               "a word that merely ends in exec is not an exec")
+
+        let home = "/Users/test"
+        try? FileManager.default.createDirectory(at: envFixture.appendingPathComponent("first/conda-meta"),
+                                                 withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: envSecond.deletingLastPathComponent()
+            .appendingPathComponent("pyvenv.cfg").path, contents: Data())
+        let sources = [
+            EnvironmentSupport.source(of: "/opt/homebrew/bin/node",
+                                      resolvedPath: "/opt/homebrew/Cellar/node/22.1.0/bin/node", home: home),
+            EnvironmentSupport.source(of: "/usr/bin/python3", resolvedPath: "/usr/bin/python3", home: home),
+            EnvironmentSupport.source(of: home + "/.nvm/versions/node/v20/bin/node",
+                                      resolvedPath: home + "/.nvm/versions/node/v20/bin/node", home: home),
+            EnvironmentSupport.source(of: envFirst.path + "/python3", resolvedPath: envFirst.path + "/python3",
+                                      home: home),
+            EnvironmentSupport.source(of: envSecond.path + "/python3", resolvedPath: envSecond.path + "/python3",
+                                      home: home),
+            EnvironmentSupport.source(of: "/usr/local/bin/uv", resolvedPath: "/usr/local/bin/uv", home: home),
+        ]
+        suite.expect(sources == ["Homebrew", "macOS", "nvm", "Conda", "venv", nil],
+               "each install source is named from its path or marker file, found \(sources)")
+        try? FileManager.default.removeItem(at: envFixture)
+
+        for lang in AppLanguage.allCases {
+            let strings = FeatureStrings.environment(lang)
+            suite.expect(!strings.hubDescription.isEmpty && strings.runsFormat.contains("%@"),
+                   "command environment strings are complete for \(lang)")
+        }
+
         // MARK: Text snippets engine (issue #201)
 
         suite.expect(TextSnippetSupport.alertSoundNames(from: ["Tink.aiff", "Basso.aiff"])
