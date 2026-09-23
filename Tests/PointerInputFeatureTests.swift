@@ -1207,6 +1207,19 @@ enum PointerInputFeatureTests {
                                                  positionUnavailable: false, systemDragGestureEnabled: true,
                                                  tapFingers: 3),
                "three-finger tap stands down while the system drag gesture owns it")
+        suite.expect(MiddleClickSupport.radialMenuTapFingers(radialMenuWantsTap: true, middleClickTapFingers: 0) == 4
+                && MiddleClickSupport.radialMenuTapFingers(radialMenuWantsTap: true, middleClickTapFingers: 3) == 4
+                && MiddleClickSupport.radialMenuTapFingers(radialMenuWantsTap: false, middleClickTapFingers: 0) == 0,
+               "a radial menu wheel that asks for the tap gets four fingers, beside a three-finger middle click")
+        suite.expect(MiddleClickSupport.radialMenuTapFingers(radialMenuWantsTap: true, middleClickTapFingers: 4) == 0,
+               "a middle click already on four fingers keeps them")
+        let tapWheel = RadialMenuProfile(name: "Tap", trackpadTap: true)
+        let legacyWheel = Data(#"[{"name":"Old","shortcut":"","mouseButton":"off","items":[]}]"#.utf8)
+        suite.expect(RadialMenuSupport.decodeProfiles(RadialMenuSupport.encodeProfiles([tapWheel])).first?.trackpadTap == true
+                && RadialMenuSupport.decodeProfiles(legacyWheel).first?.trackpadTap == false,
+               "the trackpad tap is saved with its wheel and off for wheels saved before it")
+        suite.expect(RadialMenuSupport.needsAccessibility([tapWheel]),
+               "a wheel opened by the trackpad tap needs the event tap's Accessibility permission")
         suite.expect(MiddleClickSupport.tapShouldFire(duration: 0.15, maxMovement: 0.01, maxSpreadChange: 0.01,
                                                 exceededFingerCount: false, buttonPressedDuring: false,
                                                 positionUnavailable: false, systemDragGestureEnabled: true,

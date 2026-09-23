@@ -15,6 +15,8 @@ struct RadialMenuSettings: View {
     @AppStorage(DefaultsKey.radialMenuAtPointer) private var atPointer = true
     @AppStorage(DefaultsKey.radialMenuActivationMode) private var activationModeRaw =
         RadialMenuActivationMode.pressOrHold.rawValue
+    @AppStorage(DefaultsKey.middleClickEnabled) private var middleClickEnabled = false
+    @AppStorage(DefaultsKey.middleClickTapFingers) private var middleClickTapFingers = 0
 
     @State private var profiles: [RadialMenuProfile] = RadialMenuSupport.decodeProfiles(
         UserDefaults.standard.data(forKey: DefaultsKey.radialMenuProfiles))
@@ -339,6 +341,27 @@ struct RadialMenuSettings: View {
                     .foregroundStyle(.secondary)
             }
             buttonTestRow(for: profile.mouseButton)
+        }
+
+        Toggle(text.trackpadTapLabel, isOn: Binding(
+            get: { profile.trackpadTap },
+            set: { on in
+                guard profiles.indices.contains(pIndex) else { return }
+                // One wheel owns the tap: claiming it here releases the others.
+                for index in profiles.indices { profiles[index].trackpadTap = on && index == pIndex }
+                persist()
+                if on, !permissions.accessibility { permissions.requestAccessibility() }
+            }
+        ))
+        .disabled(!enabled)
+
+        if profile.trackpadTap, MiddleClickSupport.radialMenuTapFingers(
+            radialMenuWantsTap: true,
+            middleClickTapFingers: AppFeature.middleClick.isAvailable && middleClickEnabled
+                ? middleClickTapFingers : 0) == 0 {
+            Text(text.trackpadTapConflict)
+                .font(.caption)
+                .foregroundStyle(.orange)
         }
     }
 
