@@ -147,6 +147,11 @@ def main():
           + "}\n}\n")
     uninstall = "Sources/Vorssaint/Services/Uninstall/AppUninstaller.swift"
     bar = "Sources/Vorssaint/Services/CommandBar/CommandBarService.swift"
+    write("CommandBarCopyAnswer.swift", "import Foundation\n"
+          + "extension CommandBarFeatureTests.CopyAnswerHost {\n"
+          + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
+                        "    private static func copyAnswer(").replace("private static", "static", 1)
+          + "}\n")
     write("CommandBarEmojiBodies.swift", "import Foundation\n"
           + "extension CommandBarEmojiContract.Catalog {\n"
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
