@@ -168,6 +168,11 @@ def main():
           + declaration("Sources/Vorssaint/Services/SystemMonitor/SystemMonitor.swift",
                         "    private func readCPUUsage(").replace("private func", "func", 1)
           + "}\n}\n")
+    write("SystemSectionBreakdown.swift", "import Foundation\n"
+          + "extension SystemSectionBreakdownTests {\nfinal class Section: Fixture {\n"
+          + declaration("Sources/Vorssaint/UI/MenuPanel/SystemSection.swift",
+                        "    private func refreshBreakdown(").replace("private func", "func", 1)
+          + "}\n}\n")
     uninstall = "Sources/Vorssaint/Services/Uninstall/AppUninstaller.swift"
     bar = "Sources/Vorssaint/Services/CommandBar/CommandBarService.swift"
     write("QuickPaste.swift", "import Foundation\n"

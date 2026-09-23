@@ -19,7 +19,8 @@ enum BreakdownKind {
 
 /// The "System" section of the panel: component temperatures, hardware usage
 /// and memory pressure, only the readings that matter, presented cleanly.
-/// Tapping CPU, GPU or Memory expands the top consumers of that resource.
+/// Tapping CPU, GPU or Memory expands the top consumers of that resource;
+/// CPU also shows the load of each core.
 struct SystemSection: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var monitor = SystemMonitor.shared
@@ -27,6 +28,7 @@ struct SystemSection: View {
     var collapsible = true
     @State private var expanded: BreakdownKind?
     @State private var alertsExpanded = false
+    @State private var cpuAppsExpanded = true
     @State private var breakdownRows: [ProcessUsage] = []
     @State private var breakdownIsLoading = false
     @State private var lastBreakdownRefresh = Date.distantPast
@@ -38,6 +40,7 @@ struct SystemSection: View {
     @AppStorage(DefaultsKey.temperatureUnit) private var temperatureUnit = TemperatureUnit.celsius.rawValue
     @AppStorage(DefaultsKey.monitorSysTemps) private var sysTemps = true
     @AppStorage(DefaultsKey.monitorSysCPU) private var sysCPU = true
+    @AppStorage(DefaultsKey.monitorSysCPUCores) private var sysCPUCores = true
     @AppStorage(DefaultsKey.monitorSysGPU) private var sysGPU = true
     @AppStorage(DefaultsKey.monitorSysMemory) private var sysMemory = true
     @AppStorage(DefaultsKey.monitorSysAlerts) private var sysAlerts = true
@@ -144,6 +147,7 @@ struct SystemSection: View {
         systemOrderRaw = ""
         sysTemps = true
         sysCPU = true
+        sysCPUCores = true
         sysGPU = true
         sysMemory = true
         sysAlerts = true
@@ -176,7 +180,7 @@ struct SystemSection: View {
     }
 
     private func refreshBreakdown() {
-        guard let kind = expanded else { return }
+        guard let kind = expanded, kind != .cpu || cpuAppsExpanded else { return }
         lastBreakdownRefresh = Date()
         breakdownIsLoading = breakdownRows.isEmpty
         let sampleInterval = percentageSampleInterval
@@ -316,7 +320,29 @@ struct SystemSection: View {
                               showsZeroBaseline: true)
                         .frame(height: 22)
                 }
-                breakdownList(for: .cpu)
+                if expanded == .cpu {
+                    if sysCPUCores, !monitor.snapshot.cpuCoreUsage.isEmpty {
+                        CPUCoreMatrix(usage: monitor.snapshot.cpuCoreUsage)
+                    }
+                    Button {
+                        cpuAppsExpanded.toggle()
+                        refreshBreakdown()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(cpuAppsExpanded ? 90 : 0))
+                            subsectionLabel(FeatureStrings.cpuCores(l10n.language).apps)
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    if cpuAppsExpanded {
+                        breakdownList(for: .cpu)
+                    }
+                }
             } else if editing, cpuAvailable {
                 PanelHiddenItemRow(title: l10n.s.cpuLabel, systemImage: "cpu", isVisible: $sysCPU)
             }

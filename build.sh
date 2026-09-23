@@ -323,6 +323,7 @@ if (( TEST )); then
         Sources/Vorssaint/Core/GeneralSettingsStrings.swift
         Sources/Vorssaint/Core/SettingsPageStrings.swift
         Sources/Vorssaint/Core/BatteryTimeStrings.swift
+        Sources/Vorssaint/Core/CPUCoreStrings.swift
         Sources/Vorssaint/Core/MonitorLayoutStrings.swift
         Sources/Vorssaint/Core/KeepAwakeStrings.swift
         Sources/Vorssaint/Core/BluetoothSleepStrings.swift
@@ -483,6 +484,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/Metrics/PeripheralBatterySupport.swift
         Sources/Vorssaint/Services/Metrics/DiskSupport.swift
         Sources/Vorssaint/Services/Metrics/MonitorSamplingPolicy.swift
+        Sources/Vorssaint/Services/Metrics/CPUCoreSampler.swift
         Sources/Vorssaint/Services/Metrics/MaxCapacityProbe.swift
         Sources/Vorssaint/Services/Metrics/TemperatureSensorSelector.swift
         Sources/Vorssaint/Services/Metrics/SustainedAlertGate.swift
