@@ -401,6 +401,14 @@ enum ClipboardFeatureTests {
         } else {
             suite.expect(false, "clipboard persistence encodes a bounded escaped history")
         }
+        let oversizedPinnedHistory = escapingHistory.map { entry -> ClipboardHistoryEntry in
+            var pinned = entry
+            pinned.pinnedAt = Date()
+            return pinned
+        }
+        suite.expect(ClipboardHistoryEditing.encodedHistory(
+            oversizedPinnedHistory, byteLimit: encodedHistoryLimit) == nil,
+               "clipboard persistence keeps the previous snapshot instead of dropping pinned items")
         let largeClipboardPreview = ClipboardHistoryEntry(text: largeClipboardText).preview
         suite.expect(largeClipboardPreview.hasSuffix("…")
                 && largeClipboardPreview.count <= ClipboardHistoryEditing.previewCharacters + 1,

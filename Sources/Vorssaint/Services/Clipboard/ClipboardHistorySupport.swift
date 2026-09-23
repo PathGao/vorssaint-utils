@@ -389,7 +389,12 @@ enum ClipboardHistoryEditing {
         for entry in ordered {
             guard let encoded = try? encoder.encode(entry) else { return nil }
             let addedSize = encoded.count + (encodedEntries.isEmpty ? 0 : 1)
-            guard encodedSize + addedSize <= byteLimit else { continue }
+            guard encodedSize + addedSize <= byteLimit else {
+                // A pinned item is never dropped to make room: keep the
+                // previous snapshot on disk and the full list in memory.
+                if entry.isPinned { return nil }
+                continue
+            }
             retained.append(entry)
             encodedEntries.append(encoded)
             encodedSize += addedSize
