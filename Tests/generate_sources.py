@@ -277,6 +277,14 @@ def main():
           + "static func canRemove(_ item: Item, installed: Set<String> = []) -> Bool {\n"
           + "mayRemove(item, installed: installed)\n}\n}\n")
 
+    super_key = "Sources/Vorssaint/Services/SuperKey/SuperKeyService.swift"
+    write("SuperKeyTap.swift", "import CoreGraphics\nimport Foundation\n"
+          + "extension SuperKeyTapContract {\nfinal class SuperKeyService: State {\n"
+          + "".join(declaration(super_key, prefix).replace("private func", "func", 1)
+                    for prefix in ["    private func runEventTap()", "    private func setMappingFailure("])
+            .replace("CGEvent.tapCreate(", "Tap.create(")
+          + "}\n}\n")
+
     updates = "Sources/Vorssaint/Services/AppUpdates/AppUpdatesService.swift"
     loader = "Sources/Vorssaint/Services/AppUpdates/AppUpdateFeedLoader.swift"
     # Only the network configuration, clock and declaration visibility change.
