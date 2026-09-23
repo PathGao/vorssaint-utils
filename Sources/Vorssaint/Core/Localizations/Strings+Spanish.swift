@@ -198,6 +198,8 @@ extension Strings {
         micMuteCaption: "Corta el micrófono del Mac con un clic o atajo, en cualquier app.",
         micMutedHUD: "Micrófono silenciado",
         micUnmutedHUD: "Micrófono reactivado",
+        micMutePartialHUD: "Algunos micrófonos no se pudieron silenciar",
+        micUnmutePartialHUD: "Algunos micrófonos siguen silenciados",
         micMuteMenuBarToggle: "Mostrar en la barra de menús mientras está silenciado",
         micMuteMenuBarCaption: "Un micrófono tachado en rojo aparece junto al icono de la app en la barra de menús.",
         pastePlainName: "Pegar como texto sin formato",

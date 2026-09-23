@@ -330,6 +330,8 @@ struct Strings {
     let micMuteCaption: String
     let micMutedHUD: String
     let micUnmutedHUD: String
+    let micMutePartialHUD: String
+    let micUnmutePartialHUD: String
     let micMuteMenuBarToggle: String
     let micMuteMenuBarCaption: String
     let pastePlainName: String
@@ -1411,6 +1413,8 @@ extension Strings {
         micMuteCaption: "Corta o microfone do Mac com um clique ou atalho, valendo para qualquer app.",
         micMutedHUD: "Microfone silenciado",
         micUnmutedHUD: "Microfone reativado",
+        micMutePartialHUD: "Alguns microfones não puderam ser silenciados",
+        micUnmutePartialHUD: "Alguns microfones continuam silenciados",
         micMuteMenuBarToggle: "Mostrar na barra de menus enquanto silenciado",
         micMuteMenuBarCaption: "Um microfone cortado em vermelho aparece ao lado do ícone do app na barra de menus.",
         pastePlainName: "Colar como texto puro",
@@ -2457,6 +2461,8 @@ extension Strings {
         micMuteCaption: "Cuts the Mac’s microphone with a click or shortcut, across every app.",
         micMutedHUD: "Microphone muted",
         micUnmutedHUD: "Microphone back on",
+        micMutePartialHUD: "Some microphones could not be muted",
+        micUnmutePartialHUD: "Some microphones are still muted",
         micMuteMenuBarToggle: "Show in the menu bar while muted",
         micMuteMenuBarCaption: "A red crossed-out mic appears beside the app’s icon in the menu bar.",
         pastePlainName: "Paste as plain text",

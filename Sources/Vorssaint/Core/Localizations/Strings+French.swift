@@ -198,6 +198,8 @@ extension Strings {
         micMuteCaption: "Coupe le micro du Mac d’un clic ou d’un raccourci, dans toutes les apps.",
         micMutedHUD: "Micro coupé",
         micUnmutedHUD: "Micro réactivé",
+        micMutePartialHUD: "Certains micros n’ont pas pu être coupés",
+        micUnmutePartialHUD: "Certains micros sont encore coupés",
         micMuteMenuBarToggle: "Afficher dans la barre des menus quand le micro est coupé",
         micMuteMenuBarCaption: "Un micro barré en rouge apparaît à côté de l’icône de l’app dans la barre des menus.",
         pastePlainName: "Coller en texte brut",

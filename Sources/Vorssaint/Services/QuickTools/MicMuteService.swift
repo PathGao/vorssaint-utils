@@ -234,6 +234,11 @@ final class MicMuteService: ObservableObject {
         UserDefaults.standard.set(muted, forKey: DefaultsKey.micMuteActive)
         syncListeners()
         guard announce else { return }
+        if outcome.failed {
+            QuickToolHUD.show(icon: "exclamationmark.triangle",
+                              message: muted ? L10n.shared.s.micMutePartialHUD : L10n.shared.s.micUnmutePartialHUD)
+            return
+        }
         QuickToolHUD.show(icon: muted ? "mic.slash.fill" : "mic.fill",
                           message: muted ? L10n.shared.s.micMutedHUD : L10n.shared.s.micUnmutedHUD)
     }
@@ -249,6 +254,8 @@ final class MicMuteService: ObservableObject {
         var applied: Bool
         var savedVolumes: [String: Double]
         var mutedDevices: [String]
+        /// A device this sweep had to reach and could not, next to ones it did.
+        var failed = false
     }
 
     /// Runs on `halQueue`. Every CoreAudio call of a sweep happens here.
@@ -303,6 +310,14 @@ final class MicMuteService: ObservableObject {
                 outcome.mutedDevices.append(device.uid)
             } else {
                 outcome.savedVolumes.removeValue(forKey: device.uid)
+                // Only a microphone some app records from is left open. An aggregate
+                // has no switch or level of its own; the microphones under it are
+                // swept and reported on their own.
+                var transport: UInt32 = 0
+                var running: UInt32 = 0
+                read(device.id, kAudioDevicePropertyTransportType, &transport)
+                read(device.id, kAudioDevicePropertyDeviceIsRunningSomewhere, &running)
+                if transport != kAudioDeviceTransportTypeAggregate, running != 0 { outcome.failed = true }
             }
         }
         return outcome
@@ -330,6 +345,7 @@ final class MicMuteService: ObservableObject {
                     outcome.savedVolumes.removeValue(forKey: device.uid)
                 } else {
                     outcome.mutedDevices.append(device.uid)
+                    outcome.failed = true
                 }
                 continue
             }
@@ -353,6 +369,7 @@ final class MicMuteService: ObservableObject {
                 outcome.savedVolumes.removeValue(forKey: device.uid)
             } else {
                 outcome.mutedDevices.append(device.uid)
+                outcome.failed = true
             }
         }
         // Nothing left silenced is a finished unmute; the user must never be

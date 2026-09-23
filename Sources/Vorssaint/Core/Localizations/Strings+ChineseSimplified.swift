@@ -198,6 +198,8 @@ extension Strings {
         micMuteCaption: "通过点按或快捷键切断 Mac 的麦克风，对所有 App 生效。",
         micMutedHUD: "麦克风已静音",
         micUnmutedHUD: "麦克风已恢复",
+        micMutePartialHUD: "部分麦克风未能静音",
+        micUnmutePartialHUD: "部分麦克风仍处于静音",
         micMuteMenuBarToggle: "静音时在菜单栏显示",
         micMuteMenuBarCaption: "菜单栏中的 App 图标旁会出现一个红色的划线麦克风。",
         pastePlainName: "粘贴为纯文本",
