@@ -1014,6 +1014,7 @@ extension Strings {
         urlCleanerRulesAddButton: "추가",
         urlCleanerRulesRemoveButton: "이름 삭제",
         urlCleanerRulesRemoveSiteButton: "이 사이트의 규칙 모두 끄기",
+        urlCleanerRulesRestoreSiteButton: "이 사이트의 규칙 모두 켜기",
         urlCleanerRemovedFormat: "%@ 삭제함",
         switcherSearchPin: "S로 검색창 고정",
         switcherSearchPinCaption: "S를 누르면 검색을 시작하고 전환기를 고정합니다. 단축키가 ⌥를 사용할 때 특수 문자가 입력되는 문제와, Q나 W로 시작하는 검색이 창을 닫거나 앱을 종료시키는 문제를 모두 막아줍니다.",

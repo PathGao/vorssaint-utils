@@ -1013,6 +1013,7 @@ extension Strings {
         urlCleanerRulesAddButton: "Hinzufügen",
         urlCleanerRulesRemoveButton: "Name löschen",
         urlCleanerRulesRemoveSiteButton: "Alle Regeln dieser Website ausschalten",
+        urlCleanerRulesRestoreSiteButton: "Alle Regeln dieser Website einschalten",
         urlCleanerRemovedFormat: "Entfernt %@",
         switcherSearchPin: "Suche mit S anpinnen",
         switcherSearchPinCaption: "S startet die Suche und pinnt den Umschalter an – so tippst du keine Sonderzeichen mehr, wenn dein Kurzbefehl ⌥ nutzt, und eine Suche, die mit Q oder W beginnt, schließt das Fenster oder die App nicht mehr versehentlich.",

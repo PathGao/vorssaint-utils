@@ -1014,6 +1014,7 @@ extension Strings {
         urlCleanerRulesAddButton: "新增",
         urlCleanerRulesRemoveButton: "刪除名稱",
         urlCleanerRulesRemoveSiteButton: "關閉這個網站的全部規則",
+        urlCleanerRulesRestoreSiteButton: "打開這個網站的全部規則",
         urlCleanerRemovedFormat: "已移除 %@",
         switcherSearchPin: "按 S 固定搜尋",
         switcherSearchPinCaption: "瀏覽時按 S 啟動搜尋，固定切換器；避免自訂快捷鍵為 ⌥ 時打出特殊字元，以及 Q/W 開頭誤觸發關閉/結束。",

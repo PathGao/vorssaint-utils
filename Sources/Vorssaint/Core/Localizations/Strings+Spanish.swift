@@ -1013,6 +1013,7 @@ extension Strings {
         urlCleanerRulesAddButton: "Añadir",
         urlCleanerRulesRemoveButton: "Eliminar nombre",
         urlCleanerRulesRemoveSiteButton: "Desactivar todas las reglas de este sitio",
+        urlCleanerRulesRestoreSiteButton: "Activar todas las reglas de este sitio",
         urlCleanerRemovedFormat: "Eliminados %@",
         switcherSearchPin: "Fijar búsqueda con S",
         switcherSearchPinCaption: "S inicia una búsqueda y fija el selector abierto: al escribir ya no aparecen caracteres especiales cuando el atajo usa ⌥, y una búsqueda que empieza por Q o W ya no cierra la ventana ni cierra la app por error.",

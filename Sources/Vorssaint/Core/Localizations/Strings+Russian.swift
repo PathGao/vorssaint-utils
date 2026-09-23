@@ -1014,6 +1014,7 @@ extension Strings {
         urlCleanerRulesAddButton: "Добавить",
         urlCleanerRulesRemoveButton: "Удалить название",
         urlCleanerRulesRemoveSiteButton: "Отключить все правила этого сайта",
+        urlCleanerRulesRestoreSiteButton: "Включить все правила этого сайта",
         urlCleanerRemovedFormat: "Удалено: %@",
         switcherSearchPin: "Закрепить поиск по S",
         switcherSearchPinCaption: "S запускает поиск и закрепляет переключатель открытым. Печать больше не даёт специальные символы, если сочетание использует ⌥, а поиск, начинающийся с Q или W, больше не закрывает окно и не завершает приложение по ошибке.",

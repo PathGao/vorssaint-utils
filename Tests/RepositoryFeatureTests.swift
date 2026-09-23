@@ -246,6 +246,16 @@ enum RepositoryFeatureTests {
             .flatMap(\.entries).map(\.name).filter { $0 != $0.lowercased() }
         suite.expect(upperCaseBuiltIns.isEmpty,
                "built-in names are lowercase, since matching and switched off names are: \(upperCaseBuiltIns)")
+        let siteOff = URLCleaning.settingSite("weibo.com", enabled: false, rules: editedRules)
+        suite.expect(URLCleaning.ruleGroups(rules: siteOff).first { $0.site == "weibo.com" }?.enabledCount == 0
+                && siteOff.added == editedRules.added,
+               "switching a site off keeps the names the user added to it")
+        suite.expect(URLCleaning.settingSite("weibo.com", enabled: true, rules: siteOff) == editedRules,
+               "switching a site back on restores it as it was")
+        let youTubeOff = URLCleaning.settingSite("youtube.com", enabled: false, rules: .none)
+        expectEqual(URLCleaning.clean("https://www.youtube.com/watch?v=1&si=x&fbclid=y", rules: youTubeOff)?.url ?? "",
+                    "https://www.youtube.com/watch?v=1&si=x",
+                    "a site switched off keeps its own names while the global ones still go")
         expectEqual(URLCleaning.siteKey(from: " https://WWW.Weibo.com/path?x=1 ") ?? "",
                     "weibo.com", "the site field takes a pasted link and keeps the host")
         suite.expect(URLCleaning.siteKey(from: "not a host") == nil,

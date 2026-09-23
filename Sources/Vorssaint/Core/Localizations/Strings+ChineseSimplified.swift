@@ -1013,6 +1013,7 @@ extension Strings {
         urlCleanerRulesAddButton: "添加",
         urlCleanerRulesRemoveButton: "删除名称",
         urlCleanerRulesRemoveSiteButton: "关闭这个网站的全部规则",
+        urlCleanerRulesRestoreSiteButton: "打开这个网站的全部规则",
         urlCleanerRemovedFormat: "已移除 %@",
         switcherSearchPin: "按 S 固定搜索",
         switcherSearchPinCaption: "浏览时按 S 启动搜索，固定切换器；避免自定义快捷键为 ⌥ 时打出特殊字符，以及 Q/W 开头误触发关闭/退出。",

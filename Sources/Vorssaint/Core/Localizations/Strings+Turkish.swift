@@ -1013,6 +1013,7 @@ extension Strings {
         urlCleanerRulesAddButton: "Ekle",
         urlCleanerRulesRemoveButton: "Adı sil",
         urlCleanerRulesRemoveSiteButton: "Bu sitenin tüm kurallarını kapat",
+        urlCleanerRulesRestoreSiteButton: "Bu sitenin tüm kurallarını aç",
         urlCleanerRemovedFormat: "Kaldırıldı: %@",
         switcherSearchPin: "S ile aramayı sabitle",
         switcherSearchPinCaption: "S, aramayı başlatır ve değiştiriciyi sabitler; kısayolun ⌥ kullanması durumunda özel karakter yazılmasını, Q veya W ile başlayan aramaların pencereyi kapatmasını veya uygulamadan çıkmasını önler.",

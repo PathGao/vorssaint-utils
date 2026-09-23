@@ -170,6 +170,18 @@ enum URLCleaning {
         return groups.filter { !$0.entries.isEmpty }
     }
 
+    /// Switches a whole row off or back on. Off keeps the names the user added,
+    /// only switched off, so turning the row back on restores it as it was.
+    static func settingSite(_ site: String, enabled: Bool, rules: Rules) -> Rules {
+        var result = rules
+        if enabled {
+            result.disabled[site] = nil
+        } else if let group = ruleGroups(rules: rules).first(where: { $0.site == site }) {
+            result.disabled[site, default: []].formUnion(group.entries.map(\.name))
+        }
+        return result
+    }
+
     /// Comma-separated names, the format the global custom list has always
     /// been stored in.
     static func customParameters(from storedValue: String?) -> Set<String> {
