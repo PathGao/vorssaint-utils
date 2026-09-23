@@ -384,6 +384,7 @@ extension Strings {
         homebrewFormulas: "Formule",
         homebrewCasks: "Cask",
         homebrewNoPackages: "Nessun pacchetto trovato",
+        homebrewDependencies: "Dipendenze",
         homebrewNoSelection: "Seleziona un pacchetto installato o cercane uno nuovo.",
         homebrewDetailsTitle: "Dettagli pacchetto",
         homebrewInstall: "Installa",

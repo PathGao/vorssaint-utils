@@ -385,6 +385,7 @@ extension Strings {
         homebrewFormulas: "Formula",
         homebrewCasks: "Cask",
         homebrewNoPackages: "패키지를 찾을 수 없습니다",
+        homebrewDependencies: "종속성",
         homebrewNoSelection: "설치한 패키지를 선택하거나 새 패키지를 검색하세요.",
         homebrewDetailsTitle: "패키지 세부 정보",
         homebrewInstall: "설치",

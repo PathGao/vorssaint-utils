@@ -385,6 +385,7 @@ extension Strings {
         homebrewFormulas: "Formulae",
         homebrewCasks: "Casks",
         homebrewNoPackages: "Пакеты не найдены",
+        homebrewDependencies: "Зависимости",
         homebrewNoSelection: "Выберите установленный пакет или найдите новый.",
         homebrewDetailsTitle: "Детали пакета",
         homebrewInstall: "Установить",

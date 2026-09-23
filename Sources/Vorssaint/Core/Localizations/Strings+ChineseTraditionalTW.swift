@@ -385,6 +385,7 @@ extension Strings {
         homebrewFormulas: "Formula",
         homebrewCasks: "Cask",
         homebrewNoPackages: "找不到套件",
+        homebrewDependencies: "相依套件",
         homebrewNoSelection: "選擇一個已安裝的套件，或搜尋新的套件。",
         homebrewDetailsTitle: "套件詳細資訊",
         homebrewInstall: "安裝",

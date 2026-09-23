@@ -384,6 +384,7 @@ extension Strings {
         homebrewFormulas: "Formüller",
         homebrewCasks: "Cask’ler",
         homebrewNoPackages: "Paket bulunamadı",
+        homebrewDependencies: "Bağımlılıklar",
         homebrewNoSelection: "Yüklü bir paket seç veya yenisini ara.",
         homebrewDetailsTitle: "Paket ayrıntıları",
         homebrewInstall: "Yükle",
