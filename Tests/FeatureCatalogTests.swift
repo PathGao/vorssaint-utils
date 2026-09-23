@@ -1108,6 +1108,23 @@ enum FeatureCatalogTests {
         suite.expect(activeSet(.accessibility)
                 == [.windowLayout, .cleaningMode, .commandBar, .screenRecorder],
                "with nothing enabled only on-demand features use accessibility")
+        func radialMenuUsesAccessibility(_ profile: RadialMenuProfile, legacyItems: [RadialMenuItem]) -> Bool {
+            let stored = [DefaultsKey.radialMenuProfiles: RadialMenuSupport.encodeProfiles([profile]),
+                          DefaultsKey.radialMenuItems: RadialMenuSupport.encode(legacyItems)]
+            return AppFeature.activeFeatures(using: .accessibility,
+                                             isAvailable: { _ in true },
+                                             boolFor: { $0 == DefaultsKey.radialMenuEnabled },
+                                             stringFor: { _ in nil },
+                                             dataFor: { stored[$0] ?? nil })
+                .contains(.radialMenu)
+        }
+        let appItem = RadialMenuItem(kind: .app, payload: "/Applications/Safari.app")
+        let shortcutItem = RadialMenuItem(kind: .shortcut, payload: "control+option+command:49")
+        suite.expect(radialMenuUsesAccessibility(
+                    RadialMenuProfile(mouseButton: RadialMenuMouseTrigger.back.rawValue, items: [appItem]),
+                    legacyItems: [appItem])
+                && !radialMenuUsesAccessibility(RadialMenuProfile(items: [appItem]), legacyItems: [shortcutItem]),
+               "radial menu accessibility follows the saved profiles, not the pre-profile wheel")
         suite.expect(activeSet(.accessibility, on: [DefaultsKey.scrollInverterEnabled]).contains(.scrollInverter),
                "an enabled feature counts as using its permission")
         suite.expect(activeSet(.accessibility, on: [DefaultsKey.scrollInverterHorizontalEnabled])
