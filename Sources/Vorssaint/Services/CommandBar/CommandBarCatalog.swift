@@ -1740,13 +1740,16 @@ enum CommandBarCatalog {
     }
 
     /// Brightness lands on the display under the pointer, the screen where
-    /// the bar was just used. The routes may need one refresh when the panel
-    /// or Settings never opened this session.
+    /// the bar was just used, and never on another one. The routes may need
+    /// one refresh when the panel or Settings never opened this session.
     private static func applyBrightness(percent: Int, retried: Bool = false) {
         let service = BrightnessService.shared
         let value = Double(percent) / 100
-        if let display = pointerDisplay(in: service.displays) {
-            service.setBrightness(value, for: display.id, showOSD: true)
+        let pointer = NSEvent.mouseLocation
+        let pointerDisplay = NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) }
+            .flatMap { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value }
+        if let id = pointerDisplay, service.displays.contains(where: { $0.id == id }) {
+            service.setBrightness(value, for: id, showOSD: true)
             return
         }
         guard !retried else {
@@ -1757,15 +1760,5 @@ enum CommandBarCatalog {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             applyBrightness(percent: percent, retried: true)
         }
-    }
-
-    private static func pointerDisplay(in displays: [BrightnessDisplay]) -> BrightnessDisplay? {
-        guard !displays.isEmpty else { return nil }
-        let pointerScreen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }
-        if let number = pointerScreen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
-           let match = displays.first(where: { $0.id == number.uint32Value }) {
-            return match
-        }
-        return displays.first
     }
 }

@@ -166,6 +166,11 @@ def main():
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
                         "    private static func copyAnswer(").replace("private static", "static", 1)
           + "}\n")
+    write("CommandBarBrightness.swift", "import AppKit\n"
+          + "extension CommandBarFeatureTests.BrightnessHost {\n"
+          + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
+                        "    private static func applyBrightness(").replace("private static", "static", 1)
+          + "}\n")
     write("CommandBarEmojiBodies.swift", "import Foundation\n"
           + "extension CommandBarEmojiContract.Catalog {\n"
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
