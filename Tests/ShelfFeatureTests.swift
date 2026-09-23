@@ -110,6 +110,12 @@ enum ShelfFeatureTests {
             suite.expect(ShelfPasteboardSupport.isFilePromiseType(type),
                    "NSFilePromiseReceiver type \(type) is recognized as a file promise")
         }
+        // Pasteboard: text (0), promise with two files (1), link (2), and a
+        // receiver with no promised item behind it.
+        let mixedDropOrder = ShelfPasteboardSupport.mergedItemIndices(
+            companionPositions: [0, 2], receiverIndices: [0, 0, 1], promisePositions: [1])
+        suite.expect(mixedDropOrder == [0, 2, 3, 1, 4],
+               "a mixed drop keeps promised files where they were dropped (got \(mixedDropOrder))")
         suite.expect(!ShelfPasteboardSupport.isFilePromiseType("public.file-url"),
                "ordinary file URLs are not classified as file promises")
         suite.expect(ShelfPasteboardSupport.isDroppablePasteboardType(

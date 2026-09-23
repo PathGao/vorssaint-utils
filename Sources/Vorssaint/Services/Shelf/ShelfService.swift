@@ -1440,8 +1440,10 @@ final class ShelfService: ObservableObject {
             as? [NSFilePromiseReceiver] ?? []
     }
 
-    private func beginPromisedFileReceive(_ receivers: [NSFilePromiseReceiver], additions: [Item] = [],
+    private func beginPromisedFileReceive(_ receivers: [NSFilePromiseReceiver],
+                                          additions companions: (items: [Item], positions: [Int], promises: [Int]),
                                           mergeInto targetID: UUID?) -> Bool {
+        let additions = companions.items
         // Each receiver promises at least one file. Some legacy receivers
         // promise more, so the actual count is checked again before adding.
         let available = ShelfPersistenceSupport.maxLeaves - itemCount - additions.reduce(0) { $0 + $1.leafCount }
@@ -1479,7 +1481,10 @@ final class ShelfService: ObservableObject {
                 self.reportPromiseDeliveryProblem(title: strings.fullTitle, body: strings.fullBody)
                 return
             }
-            let receivedItems = additions + result.urls.map { self.fileItem(for: $0, deferImageThumbnail: true) }
+            let combined = additions + result.urls.map { self.fileItem(for: $0, deferImageThumbnail: true) }
+            let receivedItems = ShelfPasteboardSupport.mergedItemIndices(
+                companionPositions: companions.positions, receiverIndices: result.receiverIndices,
+                promisePositions: companions.promises).map { combined[$0] }
             let added: Bool
             if receivedItems.isEmpty {
                 added = true
@@ -1759,10 +1764,20 @@ final class ShelfService: ObservableObject {
         return entries.flatMap { items(from: $0) }
     }
 
-    private func nonPromisedItems(from pasteboard: NSPasteboard) -> [Item] {
-        (pasteboard.pasteboardItems ?? []).filter { item in
-            !item.types.contains { ShelfPasteboardSupport.isFilePromiseType($0.rawValue) }
-        }.flatMap { items(from: $0) }
+    /// Positions are pasteboard item indexes, so promised files can be put
+    /// back between the plain items they were dropped with.
+    private func nonPromisedItems(from pasteboard: NSPasteboard) -> (items: [Item], positions: [Int], promises: [Int]) {
+        var result: (items: [Item], positions: [Int], promises: [Int]) = ([], [], [])
+        for (index, entry) in (pasteboard.pasteboardItems ?? []).enumerated() {
+            if entry.types.contains(where: { ShelfPasteboardSupport.isFilePromiseType($0.rawValue) }) {
+                result.promises.append(index)
+            } else {
+                let found = items(from: entry)
+                result.items += found
+                result.positions += Array(repeating: index, count: found.count)
+            }
+        }
+        return result
     }
 
     /// Preserve each item's file/image/link/text preference in a mixed drop.

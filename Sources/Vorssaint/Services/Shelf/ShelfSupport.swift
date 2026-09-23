@@ -166,6 +166,18 @@ enum ShelfInteractionSupport {
 
 /// Types accepted by the native shelf drop targets.
 enum ShelfPasteboardSupport {
+    /// Orders a mixed drop by pasteboard position. Receivers follow the
+    /// promised pasteboard items in order; a receiver without one goes last.
+    static func mergedItemIndices(companionPositions: [Int], receiverIndices: [Int],
+                                  promisePositions: [Int]) -> [Int] {
+        let positions = companionPositions + receiverIndices.map { index in
+            promisePositions.indices.contains(index) ? promisePositions[index] : Int.max
+        }
+        return positions.indices.sorted {
+            positions[$0] == positions[$1] ? $0 < $1 : positions[$0] < positions[$1]
+        }
+    }
+
     static let filePromiseTypeIdentifiers: Set<String> = {
         var ids = Set(NSFilePromiseReceiver.readableDraggedTypes)
         ids.formUnion(["Apple files promise pasteboard type",
