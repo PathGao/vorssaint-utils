@@ -1308,6 +1308,16 @@ enum FeatureCatalogTests {
                 && GlobalShortcutRole.keyboardBrightnessDecrease.group == .mouseKeyboard
                 && GlobalShortcutRole.keyboardBrightnessIncrease.group == .mouseKeyboard,
                "keyboard brightness stays owned by the brightness service but appears with keyboard controls")
+        let shortcutsPage = ShortcutsPage(state: Expansion())
+        let displayBrightness = shortcutsPage.expansionBinding(for: .brightness, in: .energyDisplay)
+        let keyboardLight = shortcutsPage.expansionBinding(for: .brightness, in: .mouseKeyboard)
+        displayBrightness.wrappedValue = true
+        suite.expect(displayBrightness.wrappedValue && !keyboardLight.wrappedValue,
+               "opening brightness in one shortcut group leaves its row in the other group closed")
+        keyboardLight.wrappedValue = true
+        displayBrightness.wrappedValue = false
+        suite.expect(!displayBrightness.wrappedValue && keyboardLight.wrappedValue,
+               "closing brightness in one shortcut group leaves an open row in the other group open")
         suite.expect(GlobalShortcutRole.keyboardBrightnessDecrease.requiredEnableKeys
                 == [DefaultsKey.keyboardBrightnessShortcutsEnabled]
                 && GlobalShortcutRole.keyboardBrightnessIncrease.requiredEnableKeys
