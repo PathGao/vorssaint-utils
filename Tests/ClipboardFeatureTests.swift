@@ -12,6 +12,38 @@ import ImageIO
 import VMStatisticsCompat
 
 enum ClipboardFeatureTests {
+    /// Runs the production `pasteIntoPreviousApp` with a target app, the
+    /// Accessibility grant, the beep and the paste all recorded as events.
+    final class QuickPasteHost {
+        final class App {
+            let isTerminated: Bool
+            init(isTerminated: Bool) { self.isTerminated = isTerminated }
+            func activate(options: [Int]) { host?.events.append("activate") }
+        }
+        typealias NSRunningApplication = App
+        enum Sound {
+            static func beep() { host?.events.append("beep") }
+        }
+        typealias NSSound = Sound
+        final class Access {
+            static let shared = Access()
+            func requestAccessibility() { host?.events.append("prompt") }
+        }
+        typealias Permissions = Access
+        final class Queue {
+            static let main = Queue()
+            func asyncAfter(deadline: DispatchTime, execute work: @escaping () -> Void) { work() }
+        }
+        typealias DispatchQueue = Queue
+        static var host: QuickPasteHost?
+        var events: [String] = []
+        var trusted = true
+        var promptedForAccessibility = false
+        init() { Self.host = self }
+        func AXIsProcessTrusted() -> Bool { trusted }
+        static func postPasteShortcut() { host?.events.append("paste") }
+    }
+
     static func run(_ suite: TestSuite) {
         ClipboardPreviewContract.run(suite)
         func expectEqual(_ actual: String, _ expected: String, _ label: String,
@@ -667,6 +699,19 @@ enum ClipboardFeatureTests {
             encoding: .utf8)) ?? ""
         suite.expect(pastePlainSource.contains("GeneralPasteboardAccess.shared.async"),
                "paste as plain text reads the clipboard on the lane, not on the main thread")
+        for (terminated, trusted, expected) in [
+            (true, true, ["beep"]),
+            (false, false, ["activate", "prompt", "activate", "beep"]),
+            (false, true, ["activate", "paste"]),
+        ] {
+            let host = QuickPasteHost()
+            host.trusted = trusted
+            let app = QuickPasteHost.App(isTerminated: terminated)
+            host.pasteIntoPreviousApp(app)
+            if !trusted { host.pasteIntoPreviousApp(app) }
+            suite.expect(host.events == expected,
+                   "quick paste beeps or asks for Accessibility when it cannot paste, found \(host.events)")
+        }
 
     }
 }

@@ -84,6 +84,7 @@ final class ClipboardHistoryService: ObservableObject {
     private var hotKeyHandler: EventHandlerRef?
     private var registeredShortcut: GlobalShortcut?
     private var pasteTargetApp: NSRunningApplication?
+    private var promptedForAccessibility = false
     /// Writes coalesce per mutation cycle; the JSON encode and the disk write
     /// stay off the main thread (a full history of long texts is real work),
     /// serialized so blobs land in mutation order.
@@ -1166,9 +1167,23 @@ final class ClipboardHistoryService: ObservableObject {
         pasteTargetApp = app
     }
 
+    /// The entry is already on the clipboard, so a paste that cannot follow
+    /// says so the way Paste as Plain Text does (#186) instead of doing nothing.
     private func pasteIntoPreviousApp(_ app: NSRunningApplication?) {
-        guard let app, !app.isTerminated else { return }
+        guard let app, !app.isTerminated else {
+            NSSound.beep()
+            return
+        }
         app.activate(options: [])
+        guard AXIsProcessTrusted() else {
+            if promptedForAccessibility {
+                NSSound.beep()
+            } else {
+                promptedForAccessibility = true
+                Permissions.shared.requestAccessibility()
+            }
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             Self.postPasteShortcut()
         }
