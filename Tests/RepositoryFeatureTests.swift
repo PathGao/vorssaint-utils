@@ -12,6 +12,41 @@ import ImageIO
 import VMStatisticsCompat
 
 enum RepositoryFeatureTests {
+    /// Runs the production `pollPasteboard` against a pasteboard whose items
+    /// and change count the test sets, recording what would be written back.
+    enum URLCleanerPollHost {
+        struct Kind: Equatable {
+            let rawValue: String
+            static let string = Kind(rawValue: "public.utf8-plain-text")
+        }
+        final class Pasteboard {
+            static let general = Pasteboard()
+            var changeCount = 1
+            var items = 1
+            var text = ""
+            var copiedDuringRead = false
+            var types: [Kind]? { [.string] }
+            var pasteboardItems: [Int]? { Array(repeating: 0, count: items) }
+            func string(forType type: Kind) -> String? {
+                if copiedDuringRead { changeCount += 1 }
+                return type == .string ? text : nil
+            }
+        }
+        typealias NSPasteboard = Pasteboard
+        final class PollToken { let isCancelled = false }
+        struct PollResult {
+            let changeCount: Int
+            let cleaned: URLCleaning.Result?
+        }
+        static let urlType = Kind(rawValue: "public.url")
+        static var rules: URLCleaning.Rules { .none }
+        static var written: [String] = []
+        static func writeToPasteboard(_ urlString: String) -> Int {
+            written.append(urlString)
+            return 0
+        }
+    }
+
     private struct SourceRead: Sendable {
         let path: String
         let source: String?
@@ -334,6 +369,28 @@ enum RepositoryFeatureTests {
         ]) && !URLCleaning.canRewritePasteboard(types: [
             "public.utf8-plain-text", "org.nspasteboard.TransientType",
         ]), "a concealed or transient copy is never rewritten")
+        suite.expect(URLCleaning.isLinkOnly(" https://example.com/?utm_source=a\n"),
+               "a copied link with a trailing newline is still a link")
+        suite.expect(!URLCleaning.isLinkOnly("https://example.com/?utm_source=a see this")
+                && !URLCleaning.isLinkOnly("https://example.com/?fbclid=1\nhttps://example.org/"),
+               "a link followed by words or another line is not rewritten down to the link")
+        for (text, items, copiedDuringRead, expected) in [
+            ("https://example.com/?utm_source=a", 1, false, ["https://example.com/"]),
+            ("https://example.com/?utm_source=a see this", 1, false, []),
+            ("https://example.com/?fbclid=1\nhttps://example.org/", 1, false, []),
+            ("https://example.com/?utm_source=a", 2, false, []),
+            ("https://example.com/?utm_source=a", 1, true, []),
+        ] {
+            let pasteboard = URLCleanerPollHost.Pasteboard.general
+            pasteboard.text = text
+            pasteboard.items = items
+            pasteboard.copiedDuringRead = copiedDuringRead
+            URLCleanerPollHost.written = []
+            _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
+            suite.expect(URLCleanerPollHost.written == expected,
+                   "automatic cleaning only rewrites a single copied link that is still on the pasteboard, "
+                   + "found \(URLCleanerPollHost.written) for \(items) items of \(text.debugDescription)")
+        }
 
         // MARK: Homebrew command building and parsing
 

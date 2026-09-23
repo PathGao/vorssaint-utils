@@ -150,12 +150,17 @@ final class URLCleanerService: ObservableObject {
         // The types decide before any content is read: a picture or a file
         // is never fetched only to be left alone. Some "copy link" commands
         // put the link on the pasteboard only as a URL, with no text next
-        // to it.
+        // to it. The rewrite keeps one item, so a copy of several is left alone.
         guard URLCleaning.canRewritePasteboard(types: (pasteboard.types ?? []).map(\.rawValue)),
+              pasteboard.pasteboardItems?.count == 1,
               let text = pasteboard.string(forType: .string) ?? pasteboard.string(forType: urlType),
+              URLCleaning.isLinkOnly(text),
               let cleaned = URLCleaning.clean(text, rules: rules),
               cleaned.url != text.trimmingCharacters(in: .whitespacesAndNewlines),
-              !token.isCancelled else {
+              !token.isCancelled,
+              // Another app may have copied since the read; there is no
+              // compare-and-swap across processes, so this only narrows it.
+              pasteboard.changeCount == changeCount else {
             return PollResult(changeCount: changeCount, cleaned: nil)
         }
 

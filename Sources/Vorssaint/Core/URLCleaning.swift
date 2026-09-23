@@ -299,6 +299,13 @@ enum URLCleaning {
         return types.allSatisfy(typeSurvivesRewrite)
     }
 
+    /// Whether copied text is a link and nothing else. A link at the start of
+    /// a sentence or a list still parses, and rewriting it would drop the rest.
+    static func isLinkOnly(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .rangeOfCharacter(from: .whitespacesAndNewlines) == nil
+    }
+
     private static let plainPasteboardTypes: Set<String> = [
         "public.utf8-plain-text", "public.url", "public.url-name",
         "NSStringPboardType", "NSURLPboardType",

@@ -161,6 +161,11 @@ def main():
           + "}\n}\n")
     uninstall = "Sources/Vorssaint/Services/Uninstall/AppUninstaller.swift"
     bar = "Sources/Vorssaint/Services/CommandBar/CommandBarService.swift"
+    write("URLCleanerPoll.swift", "import AppKit\n"
+          + "extension RepositoryFeatureTests.URLCleanerPollHost {\n"
+          + declaration("Sources/Vorssaint/Services/URLCleanerService.swift",
+                        "    private static func pollPasteboard(").replace("private static", "static", 1)
+          + "}\n")
     write("CommandBarCopyAnswer.swift", "import Foundation\n"
           + "extension CommandBarFeatureTests.CopyAnswerHost {\n"
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
