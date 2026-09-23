@@ -17,6 +17,7 @@ struct MetricsTests {
             ("metrics", {
                 MetricsFeatureTests.run(suite)
                 ProcessNameContract.run(suite)
+                SystemMonitorCPUTests.run(suite)
             }),
             ("clipboard", { ClipboardFeatureTests.run(suite) }),
             ("pointer-input", {
