@@ -25,6 +25,7 @@ struct MetricsTests {
             ("mixer", {
                 MixerNativeDragTests.run(suite)
                 MixerOutputAdjustmentContract.run(suite)
+                SoundOutputSwitchContract.run(suite)
                 MixerInputVolumeContract.run(suite)
                 MixerFeatureTests.run(suite)
             }),
