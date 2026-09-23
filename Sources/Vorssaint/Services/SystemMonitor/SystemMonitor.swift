@@ -41,6 +41,7 @@ struct SystemSnapshot {
     /// value is carried over failed reads, and the hot CPU alert has to tell
     /// those repeats apart from fresh readings.
     var cpuUsageReadAt: TimeInterval?
+    var cpuCoreUsage: [Double?] = [] // 0...1 per logical core, only while the menu panel shows System
     var gpuUsage: Double?          // 0...1
     var memoryUsed: UInt64?
     var memoryAppUsed: UInt64?
@@ -165,6 +166,7 @@ final class SystemMonitor: ObservableObject {
     private let networkSampler = NetworkSampler()
     private let diskSampler = DiskSampler()
     private let peripheralBatterySampler = PeripheralBatterySampler()
+    private let cpuCoreSampler = CPUCoreSampler()
     private var powerSampler: PowerSampler?
 
     // Running state
@@ -664,6 +666,7 @@ final class SystemMonitor: ObservableObject {
         refreshInFlight = true
         let suppressGPUReadsUntil = self.suppressGPUReadsUntil
         let foregroundSampling = fullMonitorVisible || menuPanelNeeds.any || notchDetailNeeds.any || notchVisible
+        let needsCPUCores = menuPanelNeeds.system
         let intervalSeconds = self.intervalSeconds
         // Ticks advance by the timer's cadence so `tick % stride` keeps
         // measuring base intervals; mutated on main only, read by the queue
@@ -694,7 +697,11 @@ final class SystemMonitor: ObservableObject {
             }
 
             if plan.needCPU {
-                if take(.cpu),
+                let readsCPU = take(.cpu)
+                if readsCPU, needsCPUCores {
+                    next.cpuCoreUsage = self.cpuCoreSampler.sample(now: now)
+                }
+                if readsCPU,
                    let cpu = self.readCPUUsage(now: now) {
                     self.lastCPUUsage = cpu
                     self.lastCPUUsageReadAt = now
