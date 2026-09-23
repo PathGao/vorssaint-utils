@@ -633,6 +633,11 @@ enum FeatureCatalogTests {
                "a wake owing nothing leaves Bluetooth off")
         suite.expect(!BluetoothSleepSupport.restores(owesRestore: true, isPoweredOn: true),
                "Bluetooth the user switched on first is left alone")
+        var readControllerPower = false
+        func controllerPower() -> Bool { readControllerPower = true; return false }
+        _ = BluetoothSleepSupport.restores(owesRestore: false, isPoweredOn: controllerPower())
+        suite.expect(!readControllerPower,
+               "a launch owing no restore never reads the Bluetooth controller")
 
         suite.expect((Defaults.registeredDefaults[DefaultsKey.panelShowFanControl] as? Bool) == true,
                "installing fan control reveals its panel section by default")
