@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "已选择 %d 项，共 %d 项",
         uninstallerRemove: "移到废纸篓",
         uninstallerCancel: "取消",
+        uninstallerConfirmationExpired: "此次确认已失效。请检查当前项目并重新确认。",
         uninstallerDoneTitle: "完成！",
         uninstallerFreedFormat: "已释放 %@",
         uninstallerSomeFailed: "部分项目无法移到废纸篓。",

@@ -182,7 +182,8 @@ def main():
           + "final class Uninstaller: UninstallerState {\nstatic let shared = Uninstaller()\n"
           + "".join(declaration(uninstall, prefix) for prefix in [
               "    var isRemoving: Bool", "    func select(appURL:",
-              "    func reset()", "    func setInclude("])
+              "    func reset()", "    func setInclude(", "    struct HomebrewRemovalConfirmation",
+              "    var homebrewRemovalConfirmation:", "    func removeSelectedWithHomebrew("])
           + "}\nfinal class Service: ServiceState {\n"
           + "".join(declaration(bar, prefix).replace("private func", "func", 1) for prefix in [
               "    @Published var query", "    private func beginUninstallReview(",

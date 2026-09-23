@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d di %d selezionati",
         uninstallerRemove: "Sposta nel Cestino",
         uninstallerCancel: "Annulla",
+        uninstallerConfirmationExpired: "Questa conferma non è più valida. Controlla gli elementi attuali e conferma di nuovo.",
         uninstallerDoneTitle: "Fatto!",
         uninstallerFreedFormat: "%@ recuperati",
         uninstallerSomeFailed: "Impossibile spostare alcuni elementi nel Cestino.",

@@ -326,6 +326,7 @@ extension Strings {
         uninstallerSelectedFormat: "已選取 %d 項，共 %d 項",
         uninstallerRemove: "移到垃圾桶",
         uninstallerCancel: "取消",
+        uninstallerConfirmationExpired: "此確認已失效。請檢查目前的項目並重新確認。",
         uninstallerDoneTitle: "完成！",
         uninstallerFreedFormat: "已釋放 %@",
         uninstallerSomeFailed: "部分項目無法移到垃圾桶。",

@@ -462,6 +462,7 @@ struct Strings {
     let uninstallerSelectedFormat: String   // + selected, total
     let uninstallerRemove: String
     let uninstallerCancel: String
+    let uninstallerConfirmationExpired: String
     let uninstallerDoneTitle: String
     let uninstallerFreedFormat: String      // + size string
     let uninstallerSomeFailed: String
@@ -1543,6 +1544,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d de %d selecionados",
         uninstallerRemove: "Mover para a Lixeira",
         uninstallerCancel: "Cancelar",
+        uninstallerConfirmationExpired: "Esta confirmação não é mais válida. Revise os itens atuais e confirme de novo.",
         uninstallerDoneTitle: "Pronto!",
         uninstallerFreedFormat: "%@ recuperados",
         uninstallerSomeFailed: "Alguns itens não puderam ser movidos para a Lixeira.",
@@ -2593,6 +2595,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d of %d selected",
         uninstallerRemove: "Move to Trash",
         uninstallerCancel: "Cancel",
+        uninstallerConfirmationExpired: "This confirmation is no longer valid. Review the current items and confirm again.",
         uninstallerDoneTitle: "Done!",
         uninstallerFreedFormat: "%@ recovered",
         uninstallerSomeFailed: "Some items couldn’t be moved to the Trash.",

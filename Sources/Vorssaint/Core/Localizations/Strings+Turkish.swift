@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d / %d seçili",
         uninstallerRemove: "Çöp Sepeti’ne Taşı",
         uninstallerCancel: "İptal",
+        uninstallerConfirmationExpired: "Bu onay artık geçerli değil. Güncel öğeleri gözden geçirip yeniden onaylayın.",
         uninstallerDoneTitle: "Tamamlandı!",
         uninstallerFreedFormat: "%@ geri kazanıldı",
         uninstallerSomeFailed: "Bazı öğeler Çöp Sepeti’ne taşınamadı.",

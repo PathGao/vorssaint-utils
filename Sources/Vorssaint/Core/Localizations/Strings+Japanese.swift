@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d／%d 件を選択中",
         uninstallerRemove: "ゴミ箱に移動",
         uninstallerCancel: "キャンセル",
+        uninstallerConfirmationExpired: "この確認は無効になりました。現在の項目を確認して、もう一度承認してください。",
         uninstallerDoneTitle: "完了！",
         uninstallerFreedFormat: "%@ を回復しました",
         uninstallerSomeFailed: "一部の項目をゴミ箱に移動できませんでした。",

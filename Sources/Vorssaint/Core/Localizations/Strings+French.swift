@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d sur %d sélectionnés",
         uninstallerRemove: "Placer dans la corbeille",
         uninstallerCancel: "Annuler",
+        uninstallerConfirmationExpired: "Cette confirmation n’est plus valable. Vérifiez les éléments actuels et confirmez à nouveau.",
         uninstallerDoneTitle: "Terminé\u{00A0}!",
         uninstallerFreedFormat: "%@ récupérés",
         uninstallerSomeFailed: "Certains éléments n’ont pas pu être placés dans la corbeille.",

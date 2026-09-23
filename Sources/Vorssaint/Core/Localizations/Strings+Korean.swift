@@ -326,6 +326,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d / %d개 선택됨",
         uninstallerRemove: "휴지통으로 이동",
         uninstallerCancel: "취소",
+        uninstallerConfirmationExpired: "이 확인은 더 이상 유효하지 않습니다. 현재 항목을 검토한 뒤 다시 확인하세요.",
         uninstallerDoneTitle: "완료!",
         uninstallerFreedFormat: "%@ 확보됨",
         uninstallerSomeFailed: "일부 항목을 휴지통으로 이동할 수 없습니다.",

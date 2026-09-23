@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d von %d ausgewählt",
         uninstallerRemove: "In den Papierkorb legen",
         uninstallerCancel: "Abbrechen",
+        uninstallerConfirmationExpired: "Diese Bestätigung ist nicht mehr gültig. Prüfe die aktuellen Einträge und bestätige erneut.",
         uninstallerDoneTitle: "Fertig!",
         uninstallerFreedFormat: "%@ freigegeben",
         uninstallerSomeFailed: "Einige Objekte konnten nicht in den Papierkorb bewegt werden.",
