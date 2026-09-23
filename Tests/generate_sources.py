@@ -161,6 +161,11 @@ def main():
           + "}\n}\n")
     uninstall = "Sources/Vorssaint/Services/Uninstall/AppUninstaller.swift"
     bar = "Sources/Vorssaint/Services/CommandBar/CommandBarService.swift"
+    write("URLCleanerCopy.swift", "import Foundation\n"
+          + "extension RepositoryFeatureTests.URLCleanerCopyHost {\n"
+          + "".join(declaration("Sources/Vorssaint/UI/Settings/URLCleanerSettings.swift", prefix)
+                    .replace("private ", "", 1) for prefix in ["    private var canCopy:", "    private func copy("])
+          + "}\n")
     write("CommandBarCopyAnswer.swift", "import Foundation\n"
           + "extension CommandBarFeatureTests.CopyAnswerHost {\n"
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",

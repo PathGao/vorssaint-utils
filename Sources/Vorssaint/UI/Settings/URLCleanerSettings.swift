@@ -19,6 +19,11 @@ struct URLCleanerSettings: View {
     @State private var message: String?
     @State private var showingAddSite = false
     private var canClearInput: Bool { !input.isEmpty || !output.isEmpty || message != nil }
+    /// Editing the link or the rules leaves the last result on screen, which
+    /// then no longer answers what is in the field.
+    private var canCopy: Bool {
+        !output.isEmpty && cleaner.clean(input)?.url == output
+    }
     private var rules: URLCleaning.Rules {
         URLCleaning.rules(globalNames: globalNames,
                           siteNames: siteNames,
@@ -124,7 +129,7 @@ struct URLCleanerSettings: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button(l10n.s.urlCleanerCopyButton) { copy() }
-                        .disabled(output.isEmpty)
+                        .disabled(!canCopy)
                 }
                 if output.isEmpty {
                     Text(message ?? l10n.s.urlCleanerOutputPlaceholder)
@@ -337,7 +342,7 @@ struct URLCleanerSettings: View {
     }
 
     private func copy() {
-        guard !output.isEmpty else { return }
+        guard canCopy else { return }
         cleaner.copy(output)
         message = l10n.s.urlCleanerCopied
     }

@@ -12,6 +12,23 @@ import ImageIO
 import VMStatisticsCompat
 
 enum RepositoryFeatureTests {
+    /// Runs the production `copy` of the manual URL cleaner with a cleaner
+    /// whose rules the test changes, recording what reaches the clipboard.
+    final class URLCleanerCopyHost {
+        final class Cleaner {
+            var rules = URLCleaning.Rules.none
+            var copied: [String] = []
+            func clean(_ text: String) -> URLCleaning.Result? { URLCleaning.clean(text, rules: rules) }
+            func copy(_ urlString: String) { copied.append(urlString) }
+        }
+        struct Strings { let urlCleanerCopied = "Copied" }
+        let l10n = (s: Strings(), 0)
+        let cleaner = Cleaner()
+        var input = ""
+        var output = ""
+        var message: String?
+    }
+
     private struct SourceRead: Sendable {
         let path: String
         let source: String?
@@ -189,6 +206,22 @@ enum RepositoryFeatureTests {
         suite.expect(urlCleanerSettingsSource.components(separatedBy: "TextField(").count
                 == urlCleanerSettingsSource.components(separatedBy: ".labelsHidden()").count,
                "every Clean URL field hides its label so the field owns the row")
+        for (edit, rules, expected) in [
+            ("https://example.com/?utm_source=a&keep=1", URLCleaning.Rules.none, ["https://example.com/?keep=1"]),
+            ("https://example.org/?utm_source=a&keep=1", .none, []),
+            ("https://example.com/?utm_source=a&keep=1",
+             URLCleaning.rules(globalNames: "keep", siteNames: nil, disabledNames: nil), []),
+        ] {
+            let host = URLCleanerCopyHost()
+            host.input = "https://example.com/?utm_source=a&keep=1"
+            host.output = host.cleaner.clean(host.input)?.url ?? ""
+            host.input = edit
+            host.cleaner.rules = rules
+            host.copy()
+            suite.expect(host.cleaner.copied == expected,
+                   "Copy only takes a result that still matches the field and the rules, "
+                   + "found \(host.cleaner.copied) after editing to \(edit)")
+        }
 
         // Rules are stored as a difference from the built-in tables, never as
         // a copy of them, so names a later version adds still reach someone
