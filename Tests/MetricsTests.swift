@@ -93,7 +93,10 @@ struct MetricsTests {
                 LocalizationFeatureContractTests.run(suite)
             }),
             ("cleaner", { CleanerEligibilityTests.run(suite) }),
-            ("uninstaller", { UninstallerFlowTests.run(suite) }),
+            ("uninstaller", {
+                UninstallerFlowTests.run(suite)
+                SelfUninstallContract.run(suite)
+            }),
             ("launcher", { QuickLauncherContract.run(suite) }),
             ("dock-autohide", {
                 DockAutohideHoldTests.run(suite)

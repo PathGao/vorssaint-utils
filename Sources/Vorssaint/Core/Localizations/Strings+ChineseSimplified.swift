@@ -130,6 +130,7 @@ extension Strings {
         advancedResetDescription: "移除你授予 Vorssaint 的所有权限（辅助功能、屏幕录制、完全磁盘访问权限等）、登录项以及合盖规则。适合重新开始或卸载前使用。App 仍保持安装状态。",
         advancedClearButton: "清除所有权限",
         advancedCleared: "权限已清除。",
+        advancedClearFailed: "部分权限或合盖规则未能移除。请重试，并在出现密码请求时允许。",
         advancedClearConfirmTitle: "清除所有权限？",
         advancedClearConfirmBody: "依赖权限的功能将停止工作，直到你重新授予。你的设置会保留。",
         advancedUninstallSection: "卸载",

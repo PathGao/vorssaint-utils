@@ -130,6 +130,7 @@ extension Strings {
         advancedResetDescription: "Elimina todos los permisos que concediste a Vorssaint (Accesibilidad, Grabación de pantalla, Acceso total al disco y otros), el ítem de inicio de sesión y la regla de tapa cerrada. Útil para empezar de cero o antes de desinstalar. La app sigue instalada.",
         advancedClearButton: "Borrar todos los permisos",
         advancedCleared: "Permisos borrados.",
+        advancedClearFailed: "No se pudieron eliminar algunos permisos o la regla de tapa cerrada. Inténtalo de nuevo y permite la solicitud de contraseña si aparece.",
         advancedClearConfirmTitle: "¿Borrar todos los permisos?",
         advancedClearConfirmBody: "Las funciones que necesitan permisos dejarán de funcionar hasta que los concedas de nuevo. Tus ajustes se conservan.",
         advancedUninstallSection: "Desinstalar",

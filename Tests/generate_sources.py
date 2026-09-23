@@ -795,6 +795,21 @@ def main():
             .replace("private func", "func", 1)
           + "}\n}\n")
 
+    self_uninstall = "Sources/Vorssaint/Services/SelfUninstall.swift"
+    write("SelfUninstallRemoval.swift", "import Foundation\n\nextension SelfUninstallContract {\nenum Host {\n"
+          + "static let bundleID = \"test\"\n"
+          + "static func suspendInputInterceptors() -> Bool { events.append(\"suspend\"); return true }\n"
+          + "static func restoreSleepBeforeRemoval() -> Bool { events.append(\"sleep\"); return true }\n"
+          + "@discardableResult static func detachFromSystem() -> Bool { events.append(\"detach\"); return true }\n"
+          + "static func removePreferences() { events.append(\"preferences\") }\n"
+          + "static func trashOwnBundleAndQuit() { events.append(\"trash\") }\n"
+          + declaration(self_uninstall, "    static func clearPermissions(")
+          + declaration(self_uninstall, "    static func uninstallCompletely(")
+          + declaration(self_uninstall, "    private static func removeSudoersRuleIfPresent(")
+          + declaration(self_uninstall, "    private static func resetTCC(")
+            .replace("private static", "@discardableResult static", 1)
+          + "}\n}\n")
+
     downloads = "Sources/Vorssaint/Services/Notch/NotchDownloadService.swift"
     write("NotchDownloadFolderChoice.swift", "import Foundation\n\nextension NotchDownloadFolderChoiceContract {\n"
           + "final class Service {\nvar chooser: NSOpenPanel?\nvar chooserID = UUID()\nvar chooserInNotch = false\n"
