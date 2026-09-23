@@ -277,6 +277,15 @@ def main():
           + "static func canRemove(_ item: Item, installed: Set<String> = []) -> Bool {\n"
           + "mayRemove(item, installed: installed)\n}\n}\n")
 
+    write("CleanerLastRun.swift", "import Foundation\nextension CleanerLastRunContract {\n"
+          + "final class Scheduler: SchedulerState {\n"
+          + declaration("Sources/Vorssaint/Services/Cleaner/CleanerScheduler.swift", "    private func finishRun(")
+            .replace("private func", "func", 1)
+          + "}\nfinal class Card: CardState {\n"
+          + declaration("Sources/Vorssaint/UI/Cleaner/CleanerView.swift", "    private var lastRunLine:")
+            .replace("private var", "var", 1)
+          + "}\n}\n")
+
     updates = "Sources/Vorssaint/Services/AppUpdates/AppUpdatesService.swift"
     loader = "Sources/Vorssaint/Services/AppUpdates/AppUpdateFeedLoader.swift"
     # Only the network configuration, clock and declaration visibility change.

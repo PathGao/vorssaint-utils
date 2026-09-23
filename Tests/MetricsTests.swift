@@ -93,7 +93,10 @@ struct MetricsTests {
                 LocalizationTests.run(suite)
                 LocalizationFeatureContractTests.run(suite)
             }),
-            ("cleaner", { CleanerEligibilityTests.run(suite) }),
+            ("cleaner", {
+                CleanerEligibilityTests.run(suite)
+                CleanerLastRunContract.run(suite)
+            }),
             ("uninstaller", {
                 UninstallerFlowTests.run(suite)
                 SelfUninstallContract.run(suite)
