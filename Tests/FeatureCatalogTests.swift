@@ -1669,6 +1669,14 @@ enum FeatureCatalogTests {
         suite.expect(Set(AppFeature.allCases.compactMap(\.settingsDestination.sectionAnchor))
                 == Set(SettingsSectionAnchor.allCases),
                "every declared Settings section anchor is used by a feature destination")
+        suite.expect(AppFeature.dockPreview.settingsDestination
+                == FeatureSettingsDestination(.dock, sectionAnchor: .dock)
+                && AppFeature.dockClick.settingsDestination
+                == FeatureSettingsDestination(.dock, sectionAnchor: .dockClick)
+                && FeatureVisibilitySupport.features(for: .switcher) == [.switcher]
+                && pageVisible(.dock, available: [.dockClick])
+                && !pageVisible(.switcher, available: [.dockPreview, .dockClick]),
+               "Dock Preview and Dock clicks have their own page, apart from the switcher")
         suite.expect(AppFeature.windowMaximizer.settingsDestination
                 == FeatureSettingsDestination(.general, sectionAnchor: .panelConfiguration)
                 && AppFeature.mixer.settingsDestination
