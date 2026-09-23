@@ -233,6 +233,7 @@ extension Strings {
         switcherWindowlessAppsAll: "Todas las apps",
         switcherNoOpenWindow: "Sin ventanas abiertas",
         switcherOtherDesktop: "Otro escritorio",
+        switcherQuitFailedFormat: "No se pudo pedir a %@ que salga.",
         dockPreviewName: "Dock Preview",
         dockPreviewEnable: "Previsualizar ventanas en el Dock",
         dockPreviewEnableCaption: "Pasa el cursor sobre una app abierta en el Dock para ver sus ventanas y haz clic en la que quieras abrir.",

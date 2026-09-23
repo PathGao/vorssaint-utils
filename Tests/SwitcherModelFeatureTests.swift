@@ -338,6 +338,16 @@ enum SwitcherModelFeatureTests {
         suite.expect(!switcherCode.contains("hasForegroundItem: source != nil")
                && switcherCode.contains("hasForegroundItem: listedSource != nil"),
                "the App Switcher initial selection follows the window the trimmed list still holds")
+        // ⌘Tab → Q keeps the session open, so a refused quit request needs a
+        // message or the key looks like it did nothing.
+        let quitCode = ((switcherSource.components(separatedBy: "private func quitSelectedApp()").last ?? "")
+            .components(separatedBy: "\n    private func ").first ?? "")
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        let quitFailureHUDs = quitCode.components(separatedBy: "L10n.shared.s.switcherQuitFailedFormat").count - 1
+        suite.expect(quitFailureHUDs == 1,
+               "the App Switcher reports a refused quit request, found \(quitFailureHUDs)")
         suite.expect(!SwitcherSupport.usesAppGroupsForMainShortcut(iconRowLayout: true,
                                                               windowRow: true)
                && SwitcherSupport.usesAppGroupsForMainShortcut(iconRowLayout: true,

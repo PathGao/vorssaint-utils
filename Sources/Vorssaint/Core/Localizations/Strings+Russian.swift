@@ -234,6 +234,7 @@ extension Strings {
         switcherWindowlessAppsAll: "Все приложения",
         switcherNoOpenWindow: "Без открытых окон",
         switcherOtherDesktop: "Другой рабочий стол",
+        switcherQuitFailedFormat: "Не удалось попросить %@ завершиться.",
         dockPreviewName: "Dock Preview",
         dockPreviewEnable: "Показывать окна из Dock",
         dockPreviewEnableCaption: "Наведите указатель на открытое приложение в Dock, чтобы увидеть его окна, затем нажмите нужное.",

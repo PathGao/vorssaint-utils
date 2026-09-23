@@ -367,6 +367,7 @@ struct Strings {
     let switcherWindowlessAppsAll: String
     let switcherNoOpenWindow: String
     let switcherOtherDesktop: String
+    let switcherQuitFailedFormat: String
     let dockPreviewName: String
     let dockPreviewEnable: String
     let dockPreviewEnableCaption: String
@@ -1447,6 +1448,7 @@ extension Strings {
         switcherWindowlessAppsAll: "Todos os apps",
         switcherNoOpenWindow: "Sem janela aberta",
         switcherOtherDesktop: "Outra Mesa",
+        switcherQuitFailedFormat: "Não foi possível pedir para %@ encerrar.",
         dockPreviewName: "Dock Preview",
         dockPreviewEnable: "Pré-visualizar janelas no Dock",
         dockPreviewEnableCaption: "Passe o mouse em um app aberto no Dock para ver suas janelas e clique na que quiser abrir.",
@@ -2493,6 +2495,7 @@ extension Strings {
         switcherWindowlessAppsAll: "All apps",
         switcherNoOpenWindow: "No open window",
         switcherOtherDesktop: "Other desktop",
+        switcherQuitFailedFormat: "Could not ask %@ to quit.",
         dockPreviewName: "Dock Preview",
         dockPreviewEnable: "Preview windows from the Dock",
         dockPreviewEnableCaption: "Hover over an open app in the Dock to see its windows, then click the one you want.",

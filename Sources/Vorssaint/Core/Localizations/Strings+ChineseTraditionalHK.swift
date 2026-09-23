@@ -234,6 +234,7 @@ extension Strings {
         switcherWindowlessAppsAll: "所有 App",
         switcherNoOpenWindow: "沒有開啟視窗",
         switcherOtherDesktop: "其他桌面",
+        switcherQuitFailedFormat: "無法要求 %@ 結束。",
         dockPreviewName: "Dock Preview",
         dockPreviewEnable: "在 Dock 中預覽視窗",
         dockPreviewEnableCaption: "將指標停在 Dock 中已開啟的 App 上查看視窗，然後點按要開啟的視窗。",

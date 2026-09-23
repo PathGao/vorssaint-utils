@@ -233,6 +233,7 @@ extension Strings {
         switcherWindowlessAppsAll: "すべてのアプリ",
         switcherNoOpenWindow: "ウインドウなし",
         switcherOtherDesktop: "別のデスクトップ",
+        switcherQuitFailedFormat: "%@ に終了を要求できませんでした。",
         dockPreviewName: "Dock Preview",
         dockPreviewEnable: "Dock でウインドウをプレビュー",
         dockPreviewEnableCaption: "Dock の開いているアプリにポインタを重ねてウインドウを確認し、開きたいウインドウをクリックします。",

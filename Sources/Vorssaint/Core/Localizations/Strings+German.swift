@@ -233,6 +233,7 @@ extension Strings {
         switcherWindowlessAppsAll: "Alle Apps",
         switcherNoOpenWindow: "Kein geöffnetes Fenster",
         switcherOtherDesktop: "Anderer Schreibtisch",
+        switcherQuitFailedFormat: "%@ konnte nicht zum Beenden aufgefordert werden.",
         dockPreviewName: "Dock Preview",
         dockPreviewEnable: "Fenster im Dock vorab anzeigen",
         dockPreviewEnableCaption: "Zeige auf eine geöffnete App im Dock, um ihre Fenster zu sehen, und klicke dann auf das gewünschte.",

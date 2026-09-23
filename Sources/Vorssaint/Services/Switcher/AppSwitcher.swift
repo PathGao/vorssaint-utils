@@ -1353,10 +1353,16 @@ final class AppSwitcher: ObservableObject {
     /// still running after about as long as a closing window gets.
     private func quitSelectedApp() {
         guard windows.indices.contains(selectedIndex) else { return }
-        let pid = windows[selectedIndex].pid
+        let item = windows[selectedIndex]
+        let pid = item.pid
         guard let app = NSRunningApplication(processIdentifier: pid),
-              app.bundleIdentifier != Defaults.finderBundleIdentifier else { return }
-        guard !quittingPIDs.contains(pid), app.terminate() else { return }
+              app.bundleIdentifier != Defaults.finderBundleIdentifier,
+              !quittingPIDs.contains(pid) else { return }
+        guard app.terminate() else {
+            QuickToolHUD.show(icon: "exclamationmark.triangle",
+                              message: String(format: L10n.shared.s.switcherQuitFailedFormat, item.appName))
+            return
+        }
         quittingPIDs.insert(pid)
         // Only what this quit marked is given back; a window W is closing
         // keeps its own mark.

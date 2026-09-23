@@ -234,6 +234,7 @@ extension Strings {
         switcherWindowlessAppsAll: "모든 앱",
         switcherNoOpenWindow: "열린 윈도우 없음",
         switcherOtherDesktop: "다른 데스크탑",
+        switcherQuitFailedFormat: "%@에 종료를 요청하지 못했습니다.",
         dockPreviewName: "Dock 미리보기",
         dockPreviewEnable: "Dock에서 윈도우 미리보기",
         dockPreviewEnableCaption: "Dock의 열린 앱 위에 포인터를 올려 윈도우를 확인한 다음 원하는 윈도우를 클릭하세요.",
