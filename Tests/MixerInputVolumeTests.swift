@@ -707,5 +707,17 @@ enum MixerInputVolumeContract {
         check(
             QuickToolHUD.messages == ["muted"] && MicMuteService.isSilenced(10),
             "an idle microphone with no mute or level of its own does not make the mute partial")
+        HAL.reset()
+        HAL.levels[HAL.key(10)] = 0.5
+        HAL.levels[HAL.key(10, 1)] = 1
+        HAL.levels[HAL.key(10, 2)] = 0.6
+        MicMuteService.shared.setMuted(true)
+        DispatchQueue.drain()
+        MicMuteService.shared.setMuted(false)
+        DispatchQueue.drain()
+        check(
+            HAL.levels[HAL.key(10)] == 0.5 && HAL.levels[HAL.key(10, 1)] == 1
+                && HAL.levels[HAL.key(10, 2)] == 0.6,
+            "a gain mute through the main level leaves the channel balance alone")
     }
 }

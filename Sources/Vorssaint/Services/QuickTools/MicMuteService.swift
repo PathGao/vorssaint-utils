@@ -492,6 +492,9 @@ final class MicMuteService: ObservableObject {
             var value = volume
             if AudioObjectSetPropertyData(device, &address, 0, nil,
                                           UInt32(MemoryLayout<Float>.size), &value) == noErr {
+                // The main level covers every channel. Writing the same value
+                // into each channel too would flatten their balance on restore.
+                if address.mElement == kAudioObjectPropertyElementMain { return true }
                 applied = true
             }
         }
