@@ -1082,6 +1082,7 @@ struct Strings {
     let musicBlockUnavailable: String
     let musicBlockReplacementLabel: String
     let musicBlockReplacementNone: String
+    let musicBlockReplacementBlocked: String
     let musicBlockChooseApp: String
 
     // MARK: Cleaner
@@ -2133,6 +2134,7 @@ extension Strings {
         musicBlockUnavailable: "Esta proteção está indisponível agora. Desligue e ligue a opção para tentar novamente.",
         musicBlockReplacementLabel: "Abrir no lugar",
         musicBlockReplacementNone: "Nenhum",
+        musicBlockReplacementBlocked: "O Música e o iTunes são os apps bloqueados, então não podem abrir no lugar. Escolha outro app.",
         musicBlockChooseApp: "Escolher app…",
         cleanerName: "Limpeza",
         cleanerIntroTitle: "Limpe o lixo do Mac",
@@ -3183,6 +3185,7 @@ extension Strings {
         musicBlockUnavailable: "This protection is unavailable right now. Turn it off and on to try again.",
         musicBlockReplacementLabel: "Open instead",
         musicBlockReplacementNone: "None",
+        musicBlockReplacementBlocked: "Music and iTunes are the apps being blocked, so they can’t open instead. Choose another app.",
         musicBlockChooseApp: "Choose app…",
         cleanerName: "Cleaner",
         cleanerIntroTitle: "Clean up your Mac",

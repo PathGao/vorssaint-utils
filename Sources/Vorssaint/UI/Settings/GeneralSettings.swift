@@ -15,6 +15,7 @@ struct GeneralSettings: View {
     @ObservedObject private var hotkeys = HotkeyManager.shared
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginError: String?
+    @State private var musicBlockReplacementRejected = false
     @AppStorage(DefaultsKey.hotkeyEnabled) private var hotkeyEnabled = true
     @AppStorage(DefaultsKey.musicBlockEnabled) private var musicBlockEnabled = false
     @AppStorage(DefaultsKey.musicBlockReplacementPath) private var musicBlockReplacementPath = ""
@@ -196,6 +197,13 @@ struct GeneralSettings: View {
                     }
                 }
                 .padding(.leading, settingsRowTextInset)
+                if musicBlockReplacementRejected {
+                    Text(l10n.s.musicBlockReplacementBlocked)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, settingsRowTextInset)
+                }
             }
         }
     }
@@ -227,7 +235,11 @@ struct GeneralSettings: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         // Picking the blocked app itself would start a launch-and-kill loop.
         if let bundleID = Bundle(url: url)?.bundleIdentifier,
-           MusicLaunchBlocker.blockedBundleIDs.contains(bundleID) { return }
+           MusicLaunchBlocker.blockedBundleIDs.contains(bundleID) {
+            musicBlockReplacementRejected = true
+            return
+        }
+        musicBlockReplacementRejected = false
         musicBlockReplacementPath = url.path
     }
 }

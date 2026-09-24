@@ -915,6 +915,7 @@ extension Strings {
         musicBlockUnavailable: "Bu koruma şu anda kullanılamıyor. Yeniden denemek için kapatıp açın.",
         musicBlockReplacementLabel: "Yerine aç",
         musicBlockReplacementNone: "Hiçbiri",
+        musicBlockReplacementBlocked: "Engellenen uygulamalar Müzik ve iTunes olduğu için yerine açılamazlar. Başka bir uygulama seçin.",
         musicBlockChooseApp: "Uygulama seç…",
         cleanerName: "Temizlik",
         cleanerIntroTitle: "Mac içindeki gereksizleri temizle",

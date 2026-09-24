@@ -916,6 +916,7 @@ extension Strings {
         musicBlockUnavailable: "지금은 이 보호 기능을 사용할 수 없습니다. 껐다가 다시 켜서 시도하세요.",
         musicBlockReplacementLabel: "대신 열기",
         musicBlockReplacementNone: "없음",
+        musicBlockReplacementBlocked: "음악과 iTunes는 차단 대상이라 대신 열 수 없습니다. 다른 앱을 선택하세요.",
         musicBlockChooseApp: "앱 선택…",
         cleanerName: "정리",
         cleanerIntroTitle: "Mac의 불필요한 파일 정리",

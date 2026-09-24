@@ -916,6 +916,7 @@ extension Strings {
         musicBlockUnavailable: "Эта защита сейчас недоступна. Выключите и снова включите её, чтобы повторить попытку.",
         musicBlockReplacementLabel: "Открывать вместо",
         musicBlockReplacementNone: "Нет",
+        musicBlockReplacementBlocked: "Музыка и iTunes как раз блокируются, поэтому не могут открываться вместо них. Выберите другое приложение.",
         musicBlockChooseApp: "Выбрать приложение…",
         cleanerName: "Очистка",
         cleanerIntroTitle: "Очистите Mac от мусора",

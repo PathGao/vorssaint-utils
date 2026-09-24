@@ -915,6 +915,7 @@ extension Strings {
         musicBlockUnavailable: "Questa protezione non è disponibile al momento. Disattivala e riattivala per riprovare.",
         musicBlockReplacementLabel: "Apri al suo posto",
         musicBlockReplacementNone: "Nessuna",
+        musicBlockReplacementBlocked: "Musica e iTunes sono le app bloccate, quindi non possono aprirsi al loro posto. Scegli un’altra app.",
         musicBlockChooseApp: "Scegli app…",
         cleanerName: "Pulizia",
         cleanerIntroTitle: "Pulisci il Mac",

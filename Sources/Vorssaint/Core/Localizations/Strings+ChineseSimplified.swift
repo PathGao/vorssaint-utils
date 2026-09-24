@@ -915,6 +915,7 @@ extension Strings {
         musicBlockUnavailable: "此保护目前不可用。请关闭后重新开启，再试一次。",
         musicBlockReplacementLabel: "改为打开",
         musicBlockReplacementNone: "无",
+        musicBlockReplacementBlocked: "被阻止的正是音乐和 iTunes，所以不能改为打开它们。请选择其他 App。",
         musicBlockChooseApp: "选择 App…",
         cleanerName: "清理",
         cleanerIntroTitle: "清理 Mac 垃圾",
