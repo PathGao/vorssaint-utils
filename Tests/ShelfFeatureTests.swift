@@ -355,6 +355,51 @@ enum ShelfFeatureTests {
         suite.expect(ShelfDockDragSupport.triggerFrame(pillFrame: nil, anchorFrame: nil, screenFrame: testScreen) == nil,
                "trigger frame returns nil when neither pill nor anchor is available")
 
+        // MARK: Shelf dock placement
+
+        let placementDomain = "com.vorssaint.tests.shelf-dock-placement"
+        let placementDefaults = UserDefaults(suiteName: placementDomain)!
+        placementDefaults.removePersistentDomain(forName: placementDomain)
+        defer { placementDefaults.removePersistentDomain(forName: placementDomain) }
+        for (key, value) in AppFeature.availabilityDefaults { placementDefaults.set(value, forKey: key) }
+        placementDefaults.set(false, forKey: DefaultsKey.notchEnabled)
+        suite.expect(ShelfDockPlacement.current(in: placementDefaults) == .menuBar,
+                     "an unset placement keeps the shelf under the menu bar icon")
+        placementDefaults.set("elsewhere", forKey: DefaultsKey.shelfDockPlacement)
+        suite.expect(ShelfDockPlacement.current(in: placementDefaults) == .menuBar,
+                     "an unknown placement falls back to the menu bar icon")
+        placementDefaults.set(ShelfDockPlacement.topCenter.rawValue, forKey: DefaultsKey.shelfDockPlacement)
+        suite.expect(ShelfDockPlacement.current(in: placementDefaults) == .topCenter,
+                     "the top center placement applies while the Dynamic Island is off")
+        placementDefaults.set(true, forKey: DefaultsKey.notchEnabled)
+        suite.expect(NotchSupport.isEnabled(in: placementDefaults)
+                     && ShelfDockPlacement.current(in: placementDefaults) == .menuBar,
+                     "the Dynamic Island keeps the top center, so the shelf stays under the icon")
+
+        let dockVisible = CGRect(x: 0, y: 0, width: 1512, height: 950)
+        let badgeSize = CGSize(width: 180, height: 40)
+        let dockAnchor = CGRect(x: 1200, y: 954, width: 28, height: 28)
+        let underIcon = ShelfDockPlacement.menuBar.frame(size: badgeSize, visible: dockVisible, safeTop: 950, anchor: dockAnchor)
+        suite.expect(underIcon == CGRect(x: 1124, y: 906, width: 180, height: 40),
+                     "menu bar placement centers under the icon, got \(underIcon)")
+        let topCenter = ShelfDockPlacement.topCenter.frame(size: badgeSize, visible: dockVisible, safeTop: 950, anchor: dockAnchor)
+        suite.expect(topCenter == CGRect(x: 666, y: 906, width: 180, height: 40),
+                     "top center placement ignores the icon and centers on the screen, got \(topCenter)")
+        let noIcon = ShelfDockPlacement.menuBar.frame(size: badgeSize, visible: dockVisible, safeTop: 950, anchor: nil)
+        suite.expect(noIcon.minX == 1320, "without an icon the menu bar placement keeps the right corner, got \(noIcon)")
+        let edgeIcon = ShelfDockPlacement.menuBar.frame(size: badgeSize, visible: dockVisible, safeTop: 950,
+                                                        anchor: CGRect(x: 1500, y: 954, width: 28, height: 28))
+        suite.expect(edgeIcon.maxX == 1504, "an icon at the edge is clamped on screen, got \(edgeIcon)")
+        // Full screen or a hidden menu bar: the visible frame reaches the top of
+        // a notched 982-point screen whose safe area starts 32 points down.
+        let fullVisible = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let notchedBadge = ShelfDockPlacement.topCenter.frame(size: badgeSize, visible: fullVisible, safeTop: 950,
+                                                              anchor: dockAnchor)
+        suite.expect(notchedBadge.maxY == 950, "the top center badge stays below the notch, got \(notchedBadge)")
+        let fullPill = ShelfDockPlacement.menuBar.frame(size: badgeSize, visible: fullVisible, safeTop: 950,
+                                                        anchor: dockAnchor)
+        suite.expect(fullPill.maxY == 978, "the pill under the icon keeps its place, got \(fullPill)")
+
         suite.expect(ShelfDockDragSupport.isPointNearDock(point: CGPoint(x: 1200, y: 930),
                                                    isProximate: false,
                                                    panelFrame: testPill,

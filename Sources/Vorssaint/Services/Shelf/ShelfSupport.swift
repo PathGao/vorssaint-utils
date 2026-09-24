@@ -481,6 +481,34 @@ enum ShelfEdgeDragSupport {
     }
 }
 
+/// Where the menu bar drop zone docks the shelf.
+enum ShelfDockPlacement: String {
+    case menuBar, topCenter
+
+    /// The Dynamic Island owns the top center of the screen while it is on,
+    /// so the top center placement waits until it is off.
+    static func current(in defaults: UserDefaults = .standard) -> Self {
+        guard !NotchSupport.isEnabled(in: defaults),
+              defaults.string(forKey: DefaultsKey.shelfDockPlacement) == Self.topCenter.rawValue
+        else { return .menuBar }
+        return .topCenter
+    }
+
+    /// The docked panel's frame: its top edge just below the menu bar, either
+    /// centered under the icon or centered on the screen, clamped on screen.
+    /// `safeTop` is the screen's `frame.maxY - safeAreaInsets.top`: with a
+    /// hidden menu bar or in full screen the visible frame reaches the very top,
+    /// which would put the centered badge behind the camera housing.
+    func frame(size: CGSize, visible: CGRect, safeTop: CGFloat, anchor: CGRect?) -> CGRect {
+        var x = self == .topCenter
+            ? visible.midX - size.width / 2
+            : anchor.map { $0.midX - size.width / 2 } ?? (visible.maxX - size.width - 12)
+        x = min(max(visible.minX + 8, x), visible.maxX - size.width - 8)
+        let top = self == .topCenter ? min(visible.maxY - 4, safeTop) : visible.maxY - 4
+        return CGRect(x: x, y: top - size.height, width: size.width, height: size.height)
+    }
+}
+
 enum ShelfDockDragSupport {
     /// How long the pointer has to stay within the collapsed pill trigger
     /// area before expanding into the full shelf card, so a fast pass
