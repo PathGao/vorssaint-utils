@@ -1741,24 +1741,25 @@ enum CommandBarCatalog {
 
     /// Brightness lands on the display under the pointer, the screen where
     /// the bar was just used, and never on another one. The routes may need
-    /// one refresh when the panel or Settings never opened this session.
-    private static func applyBrightness(percent: Int, retried: Bool = false) {
+    /// one refresh when the panel or Settings never opened this session, and
+    /// the retry looks for that same display wherever the pointer went since.
+    private static func applyBrightness(percent: Int, display: CGDirectDisplayID? = nil) {
         let service = BrightnessService.shared
         let value = Double(percent) / 100
         let pointer = NSEvent.mouseLocation
-        let pointerDisplay = NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) }
+        let target = display ?? NSScreen.screens.first { NSMouseInRect(pointer, $0.frame, false) }
             .flatMap { ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value }
-        if let id = pointerDisplay, service.displays.contains(where: { $0.id == id }) {
+        if let id = target, service.displays.contains(where: { $0.id == id }) {
             service.setBrightness(value, for: id, showOSD: true)
             return
         }
-        guard !retried else {
+        guard display == nil, let target else {
             NSSound.beep()
             return
         }
         service.refresh()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            applyBrightness(percent: percent, retried: true)
+            applyBrightness(percent: percent, display: target)
         }
     }
 }

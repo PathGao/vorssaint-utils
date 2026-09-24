@@ -43,8 +43,9 @@ enum CommandBarFeatureTests {
             static let shared = Service()
             var displays = [Display(id: 1), Display(id: 2)]
             var set: [CGDirectDisplayID] = []
+            var onRefresh: (() -> Void)?
             func setBrightness(_ value: Double, for id: CGDirectDisplayID, showOSD: Bool) { set.append(id) }
-            func refresh() {}
+            func refresh() { onRefresh?() }
         }
         typealias BrightnessService = Service
         final class Screen {
@@ -276,6 +277,23 @@ enum CommandBarFeatureTests {
             suite.expect(set == expected && BrightnessHost.Sound.beeps == beeps,
                    "brightness from the bar only reaches the display under the pointer, found \(set) and \(BrightnessHost.Sound.beeps) beeps")
         }
+        // The refresh either finds the display the pointer was on, or the
+        // pointer has moved onto a listed display that must stay untouched.
+        for (refreshed, expected, beeps) in [
+            ({ BrightnessHost.Service.shared.displays.append(.init(id: 3)) }, [CGDirectDisplayID(3)], 0),
+            ({ BrightnessHost.Event.mouseLocation = NSPoint(x: 50, y: 50) }, [], 1),
+        ] as [(() -> Void, [CGDirectDisplayID], Int)] {
+            BrightnessHost.Event.mouseLocation = NSPoint(x: 150, y: 50)
+            BrightnessHost.Service.shared.displays = [.init(id: 1), .init(id: 2)]
+            BrightnessHost.Service.shared.set = []
+            BrightnessHost.Service.shared.onRefresh = refreshed
+            BrightnessHost.Sound.beeps = 0
+            BrightnessHost.applyBrightness(percent: 40)
+            let set = BrightnessHost.Service.shared.set
+            suite.expect(set == expected && BrightnessHost.Sound.beeps == beeps,
+                   "the retry after a refresh looks for the display the command started on, found \(set) and \(BrightnessHost.Sound.beeps) beeps")
+        }
+        BrightnessHost.Service.shared.onRefresh = nil
 
         // MARK: Compact mode, what an empty field shows
         suite.expect(CommandBarHome.showsBrowseList(compact: false, hasCategory: false, isPeeking: false),
