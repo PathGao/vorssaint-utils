@@ -712,6 +712,13 @@ enum ClipboardFeatureTests {
             suite.expect(host.events == expected,
                    "quick paste beeps or asks for Accessibility when it cannot paste, found \(host.events)")
         }
+        for trusted in [true, false] {
+            let host = QuickPasteHost()
+            host.trusted = trusted
+            host.pasteIntoPreviousApp(nil)
+            suite.expect(host.events.isEmpty,
+                   "quick paste with no target app stays a silent copy, found \(host.events)")
+        }
 
     }
 }

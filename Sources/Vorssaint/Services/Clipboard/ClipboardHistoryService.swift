@@ -1169,8 +1169,11 @@ final class ClipboardHistoryService: ObservableObject {
 
     /// The entry is already on the clipboard, so a paste that cannot follow
     /// says so the way Paste as Plain Text does (#186) instead of doing nothing.
+    /// No target means the window opened over Vorssaint itself or an app
+    /// without a Dock icon, where a pick is only a copy and stays silent.
     private func pasteIntoPreviousApp(_ app: NSRunningApplication?) {
-        guard let app, !app.isTerminated else {
+        guard let app else { return }
+        guard !app.isTerminated else {
             NSSound.beep()
             return
         }
