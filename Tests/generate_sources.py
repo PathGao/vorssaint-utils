@@ -294,7 +294,7 @@ def main():
     write("CleanerEligibilityBodies.swift", "import Foundation\nextension CleanerEligibilityTests {\n"
           + "".join(declaration(cleaner, "    private static func " + name)
                     .replace("private static func", "static func", 1)
-                    for name in ["appendLeftovers(", "scanCaches(", "scanLogs(",
+                    for name in ["appendLeftovers(", "scanCaches(", "scanLogs(", "scanDeveloperJunk(",
                                  "directorySize(", "fileSize(", "sorted("])
           + declaration(cleaner, "    private static func leftoverOwner(")
           + declaration(cleaner, "    private static func containerOwner(")
