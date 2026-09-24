@@ -1468,6 +1468,13 @@ enum SwitcherModelFeatureTests {
         suite.expect(DockPreviewSupport.cardThumbnailHeight
                 > DockPreviewSupport.cardHeight * 0.7,
                "the thumbnail keeps most of the Dock Preview card")
+        // Minimal previews have no title band, so the card loses its height
+        // rather than handing it to a picture too narrow to use it.
+        UserDefaults.standard.set(true, forKey: DefaultsKey.minimalWindowPreviews)
+        suite.expectClose(Double(DockPreviewSupport.cardHeight),
+                    Double(DockPreviewSupport.cardThumbnailHeight + DockPreviewSupport.cardPadding * 2),
+                    "a minimal Dock Preview card is the thumbnail and its padding, nothing more")
+        UserDefaults.standard.removeObject(forKey: DefaultsKey.minimalWindowPreviews)
 
         // The card used to draw the app icon on every thumbnail and the window
         // title both over the thumbnail and under it. In a panel every card
