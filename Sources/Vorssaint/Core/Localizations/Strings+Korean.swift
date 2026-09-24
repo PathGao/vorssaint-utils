@@ -330,7 +330,7 @@ extension Strings {
         uninstallerCancel: "취소",
         uninstallerConfirmationExpired: "이 확인은 더 이상 유효하지 않습니다. 현재 항목을 검토한 뒤 다시 확인하세요.",
         uninstallerDoneTitle: "완료!",
-        uninstallerFreedFormat: "%@ 휴지통으로 이동됨",
+        uninstallerFreedFormat: "%@ 제거됨",
         uninstallerSomeFailed: "일부 항목을 휴지통으로 이동할 수 없습니다.",
         uninstallerFailedNeedsFDA: "샌드박스 앱 데이터는 전체 디스크 접근 권한이 있어야 옮길 수 있습니다. 관리자 암호로는 대신할 수 없습니다.",
         uninstallerFailedMoreFormat: "외 %d개",

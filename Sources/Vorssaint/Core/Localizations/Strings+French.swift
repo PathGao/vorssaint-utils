@@ -329,7 +329,7 @@ extension Strings {
         uninstallerCancel: "Annuler",
         uninstallerConfirmationExpired: "Cette confirmation n’est plus valable. Vérifiez les éléments actuels et confirmez à nouveau.",
         uninstallerDoneTitle: "Terminé\u{00A0}!",
-        uninstallerFreedFormat: "%@ placés dans la corbeille",
+        uninstallerFreedFormat: "%@ supprimés",
         uninstallerSomeFailed: "Certains éléments n’ont pas pu être placés dans la corbeille.",
         uninstallerFailedNeedsFDA: "Les données des apps en bac à sable ne peuvent être déplacées qu’avec l’accès complet au disque. Le mot de passe administrateur ne le remplace pas.",
         uninstallerFailedMoreFormat: "et %d autres",

@@ -329,7 +329,7 @@ extension Strings {
         uninstallerCancel: "İptal",
         uninstallerConfirmationExpired: "Bu onay artık geçerli değil. Güncel öğeleri gözden geçirip yeniden onaylayın.",
         uninstallerDoneTitle: "Tamamlandı!",
-        uninstallerFreedFormat: "%@ Çöp Sepetine taşındı",
+        uninstallerFreedFormat: "%@ kaldırıldı",
         uninstallerSomeFailed: "Bazı öğeler Çöp Sepeti’ne taşınamadı.",
         uninstallerFailedNeedsFDA: "Kum havuzundaki uygulama verileri yalnızca Tam Disk Erişimi ile taşınabilir. Yönetici parolası bu iznin yerine geçmez.",
         uninstallerFailedMoreFormat: "ve %d tane daha",

@@ -329,7 +329,7 @@ extension Strings {
         uninstallerCancel: "Cancelar",
         uninstallerConfirmationExpired: "Esta confirmación ya no es válida. Revisa los elementos actuales y confirma de nuevo.",
         uninstallerDoneTitle: "¡Listo!",
-        uninstallerFreedFormat: "%@ movidos a la Papelera",
+        uninstallerFreedFormat: "%@ eliminados",
         uninstallerSomeFailed: "Algunos ítems no se pudieron mover a la Papelera.",
         uninstallerFailedNeedsFDA: "Los datos de apps en zona protegida solo se pueden mover con Acceso total al disco. La contraseña de administrador no lo sustituye.",
         uninstallerFailedMoreFormat: "y %d más",

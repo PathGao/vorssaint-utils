@@ -330,7 +330,7 @@ extension Strings {
         uninstallerCancel: "Отмена",
         uninstallerConfirmationExpired: "Это подтверждение больше не действует. Проверьте текущие элементы и подтвердите снова.",
         uninstallerDoneTitle: "Готово!",
-        uninstallerFreedFormat: "В Корзину перемещено %@",
+        uninstallerFreedFormat: "Удалено %@",
         uninstallerSomeFailed: "Некоторые элементы не удалось переместить в Корзину.",
         uninstallerFailedNeedsFDA: "Данные приложений в песочнице можно переместить только с полным доступом к диску. Пароль администратора его не заменяет.",
         uninstallerFailedMoreFormat: "и ещё %d",

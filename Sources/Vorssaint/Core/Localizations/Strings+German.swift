@@ -329,7 +329,7 @@ extension Strings {
         uninstallerCancel: "Abbrechen",
         uninstallerConfirmationExpired: "Diese Bestätigung ist nicht mehr gültig. Prüfe die aktuellen Einträge und bestätige erneut.",
         uninstallerDoneTitle: "Fertig!",
-        uninstallerFreedFormat: "%@ in den Papierkorb gelegt",
+        uninstallerFreedFormat: "%@ entfernt",
         uninstallerSomeFailed: "Einige Objekte konnten nicht in den Papierkorb bewegt werden.",
         uninstallerFailedNeedsFDA: "Daten von Apps in der Sandbox lassen sich nur mit Festplattenvollzugriff bewegen. Das Administratorpasswort ersetzt diese Berechtigung nicht.",
         uninstallerFailedMoreFormat: "und %d weitere",

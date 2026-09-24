@@ -330,7 +330,7 @@ extension Strings {
         uninstallerCancel: "取消",
         uninstallerConfirmationExpired: "此確認已失效。請檢查目前的項目並重新確認。",
         uninstallerDoneTitle: "完成！",
-        uninstallerFreedFormat: "已將 %@ 移到垃圾桶",
+        uninstallerFreedFormat: "已移除 %@",
         uninstallerSomeFailed: "部分項目無法移到垃圾桶。",
         uninstallerFailedNeedsFDA: "沙盒應用程式的資料只有在具備完整磁碟存取權限時才能移動，管理者密碼無法取代這項權限。",
         uninstallerFailedMoreFormat: "另有 %d 項",

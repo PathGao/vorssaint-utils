@@ -329,7 +329,7 @@ extension Strings {
         uninstallerCancel: "キャンセル",
         uninstallerConfirmationExpired: "この確認は無効になりました。現在の項目を確認して、もう一度承認してください。",
         uninstallerDoneTitle: "完了！",
-        uninstallerFreedFormat: "%@ をゴミ箱に移動しました",
+        uninstallerFreedFormat: "%@ を削除しました",
         uninstallerSomeFailed: "一部の項目をゴミ箱に移動できませんでした。",
         uninstallerFailedNeedsFDA: "サンドボックス内のアプリデータは、フルディスクアクセスがなければ移動できません。管理者パスワードでは代われません。",
         uninstallerFailedMoreFormat: "ほか %d 項目",

@@ -329,7 +329,7 @@ extension Strings {
         uninstallerCancel: "取消",
         uninstallerConfirmationExpired: "此次确认已失效。请检查当前项目并重新确认。",
         uninstallerDoneTitle: "完成！",
-        uninstallerFreedFormat: "已将 %@ 移到废纸篓",
+        uninstallerFreedFormat: "已移除 %@",
         uninstallerSomeFailed: "部分项目无法移到废纸篓。",
         uninstallerFailedNeedsFDA: "沙盒 App 的数据只有在拥有完全磁盘访问权限时才能移动，管理员密码无法代替这项权限。",
         uninstallerFailedMoreFormat: "另有 %d 项",

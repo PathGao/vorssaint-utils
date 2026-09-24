@@ -329,7 +329,7 @@ extension Strings {
         uninstallerCancel: "Annulla",
         uninstallerConfirmationExpired: "Questa conferma non è più valida. Controlla gli elementi attuali e conferma di nuovo.",
         uninstallerDoneTitle: "Fatto!",
-        uninstallerFreedFormat: "%@ spostati nel Cestino",
+        uninstallerFreedFormat: "%@ rimossi",
         uninstallerSomeFailed: "Impossibile spostare alcuni elementi nel Cestino.",
         uninstallerFailedNeedsFDA: "I dati delle app in sandbox si possono spostare solo con Accesso completo al disco. La password di amministratore non lo sostituisce.",
         uninstallerFailedMoreFormat: "e altri %d",
