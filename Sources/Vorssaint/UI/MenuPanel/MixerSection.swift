@@ -53,7 +53,7 @@ struct MixerSection: View {
         VStack(alignment: .leading, spacing: 8) {
             audioDevicesSection
 
-            if AppVolumeMixer.isSupported, (!visibleApps.isEmpty || mixer.needsPermission) {
+            if AppVolumeMixer.isSupported {
                 Divider()
             }
 
@@ -61,10 +61,27 @@ struct MixerSection: View {
                 emptyLabel(l10n.s.mixerUnavailable)
             } else if mixer.needsPermission {
                 permissionHint
-            } else if visibleApps.isEmpty {
-                emptyLabel(l10n.s.mixerEmpty)
             } else {
-                mixerRows
+                let strings = FeatureStrings.mixer(l10n.language)
+                HStack(spacing: 8) {
+                    Text(strings.appScope)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 6)
+                    Picker(strings.appScope, selection: $hideInactiveApps) {
+                        Text(strings.allApps).tag(false)
+                        Text(strings.playingApps).tag(true)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .fixedSize()
+                }
+                if visibleApps.isEmpty {
+                    emptyLabel(hideInactiveApps ? strings.playingEmpty : l10n.s.mixerEmpty)
+                } else {
+                    mixerRows
+                }
             }
 
             Divider()
@@ -105,7 +122,8 @@ struct MixerSection: View {
             .buttonStyle(.plain)
 
             if optionsExpanded {
-                MixerOptionsControls(includeSharedAudioFeatures: !settingsMode)
+                MixerOptionsControls(includeSharedAudioFeatures: !settingsMode,
+                                     showsInactiveAppsToggle: false)
                     .padding(.leading, 19)
             }
         }
@@ -543,10 +561,12 @@ struct MixerOptionsControls: View {
     private var preciseVolumeRollerEnabled = false
     @State private var showListChooser = false
     var includeSharedAudioFeatures = true
+    /// The mixer section shows this switch as a picker above its rows instead.
+    var showsInactiveAppsToggle = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if AppVolumeMixer.isSupported {
+            if AppVolumeMixer.isSupported, showsInactiveAppsToggle {
                 inactiveAppsVisibilityToggle
             }
             headphoneDisconnectProtectionToggle
