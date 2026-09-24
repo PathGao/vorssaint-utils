@@ -479,7 +479,7 @@ extension QuitProtectionStrings {
         allApps: "所有 App",
         selectedOnly: "仅所选 App",
         allExceptSelected: "除所选外的所有 App",
-        exceptions: "例外列表",
+        exceptions: "所选 App",
         noExceptions: "未选择任何 App",
         addApp: "添加 App…",
         feedback: "显示视觉反馈",
