@@ -25,6 +25,36 @@ struct MonitorToken: View {
     private var on: Bool { included && available }
 
     var body: some View {
+        // The summary shows only while it fits beside the name on one line;
+        // otherwise the name may take two lines and the options keep a chevron.
+        ViewThatFits(in: .horizontal) {
+            row(showsSummary: true)
+            row(showsSummary: false)
+        }
+        .font(.system(size: large ? 13 : 12, weight: large ? .medium : .regular))
+        .imageScale(large ? .large : .medium)
+        .frame(maxWidth: .infinity, minHeight: large ? 40 : 28)
+        .background(on ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.07),
+                    in: RoundedRectangle(cornerRadius: large ? 10 : 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: large ? 10 : 8, style: .continuous)
+                .strokeBorder(selected ? Color.accentColor.opacity(0.7) : .clear, lineWidth: 1)
+        }
+        .popover(isPresented: $showsOptions, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(title, systemImage: symbol).font(.headline)
+                options
+            }
+            .padding(14)
+            .frame(width: 250, alignment: .leading)
+            .toggleStyle(.switch)
+        }
+        .opacity(available ? 1 : 0.5)
+        .disabled(!available)
+        .help(title)
+    }
+
+    private func row(showsSummary: Bool) -> some View {
         HStack(spacing: 0) {
             HStack(spacing: 4) {
                 Button { included.toggle() } label: {
@@ -36,8 +66,9 @@ struct MonitorToken: View {
                 .accessibilityAddTraits(included ? .isSelected : [])
                 Button { if let select { select() } else { included.toggle() } } label: {
                     Label(title, systemImage: symbol)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
+                        .lineLimit(showsSummary ? 1 : 2)
+                        .minimumScaleFactor(showsSummary ? 1 : 0.8)
+                        .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(on ? .primary : .secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
@@ -47,11 +78,14 @@ struct MonitorToken: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
             .padding(.horizontal, 9)
-            if let options {
+            .padding(.vertical, 4)
+            if options != nil {
                 Divider().frame(height: 14)
                 Button { showsOptions = true } label: {
                     HStack(spacing: 3) {
-                        Text(optionsSummary).lineLimit(1)
+                        if showsSummary {
+                            Text(optionsSummary).lineLimit(1).fixedSize()
+                        }
                         Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
                     }
                     .foregroundStyle(on ? Color.accentColor : .secondary)
@@ -62,30 +96,8 @@ struct MonitorToken: View {
                 .buttonStyle(.plain)
                 .disabled(!on)
                 .accessibilityLabel("\(title): \(optionsSummary)")
-                .popover(isPresented: $showsOptions, arrowEdge: .bottom) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label(title, systemImage: symbol).font(.headline)
-                        options
-                    }
-                    .padding(14)
-                    .frame(width: 250, alignment: .leading)
-                    .toggleStyle(.switch)
-                }
             }
         }
-        .font(.system(size: large ? 13 : 12, weight: large ? .medium : .regular))
-        .imageScale(large ? .large : .medium)
-        .frame(maxWidth: .infinity)
-        .frame(height: large ? 40 : 28)
-        .background(on ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.07),
-                    in: RoundedRectangle(cornerRadius: large ? 10 : 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: large ? 10 : 8, style: .continuous)
-                .strokeBorder(selected ? Color.accentColor.opacity(0.7) : .clear, lineWidth: 1)
-        }
-        .opacity(available ? 1 : 0.5)
-        .disabled(!available)
-        .help(title)
     }
 }
 

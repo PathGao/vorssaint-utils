@@ -77,9 +77,7 @@ struct MonitorPanelConfig: View {
 
     private var tileLayout: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // One row: the blocks are few and pick what the box below shows.
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, availableBlocks.count)),
-                      spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 116), spacing: 10)], spacing: 10) {
                 ForEach(availableBlocks, id: \.self) { block in
                     MonitorToken(symbol: block.section.symbolName,
                                  title: block.section.title(l10n.s),
@@ -91,6 +89,8 @@ struct MonitorPanelConfig: View {
                 }
             }
             if let block = currentBlock, block != .mixer {
+                Text(block.section.title(l10n.s))
+                    .font(.subheadline.weight(.medium))
                 LazyVGrid(columns: monitorLargeTokenColumns, spacing: 10) {
                     itemTiles(for: block)
                 }
