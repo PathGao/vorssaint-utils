@@ -77,7 +77,7 @@ struct MonitorPanelConfig: View {
 
     private var tileLayout: some View {
         VStack(alignment: .leading, spacing: 10) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 116), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 175), spacing: 10)], spacing: 10) {
                 ForEach(availableBlocks, id: \.self) { block in
                     MonitorToken(symbol: block.section.symbolName,
                                  title: block.section.title(l10n.s),
