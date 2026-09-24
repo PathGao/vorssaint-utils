@@ -279,6 +279,7 @@ final class ClipboardHistoryService: ObservableObject {
         // Restored by looking it up again once the move actually lands.
         let previousPasteboardEntry = latestPasteboardEntry
         var updated = entries.remove(at: index)
+        let pinning = !updated.isPinned
         if updated.isPinned {
             updated.pinnedAt = nil
             entries.insert(updated, at: firstRecentIndex)
@@ -290,7 +291,8 @@ final class ClipboardHistoryService: ObservableObject {
         trimToLimit()
         let reverted: Bool
         if entries.contains(where: { $0.id == entry.id }),
-           ClipboardHistoryEditing.preservesPinnedEntries(from: previousEntries, in: entries) {
+           ClipboardHistoryEditing.preservesPinnedEntries(from: previousEntries, in: entries),
+           !pinning || ClipboardHistoryEditing.pinnedEntriesFit(entries, byteLimit: encodedHistoryByteLimit) {
             reverted = false
         } else {
             entries = previousEntries
@@ -323,8 +325,10 @@ final class ClipboardHistoryService: ObservableObject {
         let previousEntries = entries
         entries[index].text = text
         trimToLimit()
-        guard entries.contains(where: { $0.id == entry.id }),
-              ClipboardHistoryEditing.preservesPinnedEntries(from: previousEntries, in: entries)
+        guard let edited = entries.first(where: { $0.id == entry.id }),
+              ClipboardHistoryEditing.preservesPinnedEntries(from: previousEntries, in: entries),
+              !edited.isPinned
+                || ClipboardHistoryEditing.pinnedEntriesFit(entries, byteLimit: encodedHistoryByteLimit)
         else {
             entries = previousEntries
             return false
@@ -873,6 +877,10 @@ final class ClipboardHistoryService: ObservableObject {
             save()
         }
     }
+
+    /// The saved file drops whatever it cannot hold, pinned items included, so
+    /// a pin or an edit that would push them past it is refused instead.
+    private var encodedHistoryByteLimit: Int { ClipboardHistoryEditing.maxEncodedHistoryBytes }
 
     private var firstRecentIndex: Int {
         entries.firstIndex { !$0.isPinned } ?? entries.endIndex

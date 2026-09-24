@@ -406,9 +406,11 @@ enum ClipboardFeatureTests {
             pinned.pinnedAt = Date()
             return pinned
         }
-        suite.expect(ClipboardHistoryEditing.encodedHistory(
-            oversizedPinnedHistory, byteLimit: encodedHistoryLimit) == nil,
-               "clipboard persistence keeps the previous snapshot instead of dropping pinned items")
+        suite.expect(!ClipboardHistoryEditing.pinnedEntriesFit(oversizedPinnedHistory, byteLimit: encodedHistoryLimit)
+                && ClipboardHistoryEditing.pinnedEntriesFit(Array(oversizedPinnedHistory.prefix(2)),
+                                                            byteLimit: encodedHistoryLimit)
+                && ClipboardHistoryEditing.pinnedEntriesFit(escapingHistory, byteLimit: encodedHistoryLimit),
+               "pinned entries are measured as escaped JSON against the saved file, unpinned ones do not count")
         let largeClipboardPreview = ClipboardHistoryEntry(text: largeClipboardText).preview
         suite.expect(largeClipboardPreview.hasSuffix("…")
                 && largeClipboardPreview.count <= ClipboardHistoryEditing.previewCharacters + 1,
@@ -689,6 +691,7 @@ enum ClipboardPreviewContract {
         func writeToPasteboard(_ list: [ClipboardHistoryEntry], completion: @escaping (Bool) -> Void) {
             pendingWrite = completion
         }
+        var encodedHistoryByteLimit = ClipboardHistoryEditing.maxEncodedHistoryBytes
         func trimToLimit() {}
         func save() {}
     }
@@ -749,5 +752,24 @@ enum ClipboardPreviewContract {
         service.setEntries([pinnedImage])
         suite.expect(service.latestPasteboardEntry == pinnedImage,
                      "immutable image content keeps its preview even when a legacy entry lacks a hash")
+
+        // Escaped backslashes double in the saved file: two of these pinned
+        // entries fit in 5,000 bytes and three do not.
+        var heavy = (0..<3).map { ClipboardHistoryEntry(text: String(repeating: "\\", count: 1_000 + $0)) }
+        heavy[0].pinnedAt = Date()
+        heavy[1].pinnedAt = Date()
+        service.setEntries(heavy)
+        service.encodedHistoryByteLimit = 5_000
+        service.togglePin(heavy[2])
+        suite.expect(service.entries == heavy,
+                     "a pin the saved file cannot hold beside the other pinned items is refused")
+        suite.expect(!service.updateText(heavy[0], to: String(repeating: "\\", count: 1_500))
+                     && service.entries == heavy,
+                     "an edit that makes the pinned items too large for the saved file is refused")
+        suite.expect(service.updateText(heavy[2], to: String(repeating: "\\", count: 1_500)),
+                     "an unpinned item can still grow, since saving trims it instead")
+        service.togglePin(heavy[0])
+        suite.expect(service.entries.first { $0.id == heavy[0].id }?.isPinned == false,
+                     "unpinning is never refused by the size of the saved file")
     }
 }
