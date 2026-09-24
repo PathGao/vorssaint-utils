@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d sur %d sélectionnés",
         uninstallerRemove: "Placer dans la corbeille",
         uninstallerCancel: "Annuler",
+        uninstallerConfirmationExpired: "Cette confirmation n’est plus valable. Vérifiez les éléments actuels et confirmez à nouveau.",
         uninstallerDoneTitle: "Terminé\u{00A0}!",
         uninstallerFreedFormat: "%@ récupérés",
         uninstallerSomeFailed: "Certains éléments n’ont pas pu être placés dans la corbeille.",
@@ -527,7 +528,7 @@ extension Strings {
         shelfCloseAfterDrop: "Fermer après un dépôt dans une autre app",
         shelfCloseAfterDropCaption: "Ferme l’étagère quand la destination accepte les éléments. L’épingle du panneau la maintient ouverte.",
         shelfRemoveAfterDrop: "Retirer les éléments après le dépôt",
-        shelfRemoveAfterDropCaption: "Les éléments acceptés par une autre app quittent l’étagère. Désactivez cette option pour en garder une copie.",
+        shelfRemoveAfterDropCaption: "Les éléments acceptés par une autre app quittent l’étagère. Désactivez cette option pour en garder une copie. Les éléments épinglés restent toujours.",
         shelfExclusionsTitle: "Exceptions automatiques",
         shelfExclusionsEmpty: "Aucune app ajoutée.",
         shelfExclusionsCaption: "Le geste de secousse et la zone de dépôt restent inactifs pour les glissements commencés dans ces apps. Le raccourci et Ouvrir restent disponibles.",
@@ -565,6 +566,8 @@ extension Strings {
         shelfActionOpen: "Ouvrir",
         shelfActionOpenWith: "Ouvrir avec",
         shelfActionShare: "Partager",
+        shelfActionPin: "Épingler",
+        shelfActionUnpin: "Désépingler",
 
         breakdownMeasuring: "Mesure…",
 

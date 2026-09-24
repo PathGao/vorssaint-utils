@@ -159,6 +159,10 @@ def main():
           + declaration(ports, "    private static func snapshot(").replace("private static", "static", 1)
           + declaration(ports, "    private static func startTimes(").replace("private static", "static", 1)
           + "}\n}\n")
+    write("ProcessName.swift", "import Foundation\n"
+          + "extension ProcessNameContract {\nfinal class Lookup: Fixture {\n"
+          + declaration("Sources/Vorssaint/Services/ResponsibleProcess.swift", "    static func displayName(")
+          + "}\n}\n")
     uninstall = "Sources/Vorssaint/Services/Uninstall/AppUninstaller.swift"
     bar = "Sources/Vorssaint/Services/CommandBar/CommandBarService.swift"
     write("CommandBarCopyAnswer.swift", "import Foundation\n"
@@ -182,7 +186,8 @@ def main():
           + "final class Uninstaller: UninstallerState {\nstatic let shared = Uninstaller()\n"
           + "".join(declaration(uninstall, prefix) for prefix in [
               "    var isRemoving: Bool", "    func select(appURL:",
-              "    func reset()", "    func setInclude("])
+              "    func reset()", "    func setInclude(", "    struct HomebrewRemovalConfirmation",
+              "    var homebrewRemovalConfirmation:", "    func removeSelectedWithHomebrew("])
           + "}\nfinal class Service: ServiceState {\n"
           + "".join(declaration(bar, prefix).replace("private func", "func", 1) for prefix in [
               "    @Published var query", "    private func beginUninstallReview(",
@@ -277,6 +282,14 @@ def main():
           + "static func canRemove(_ item: Item, installed: Set<String> = []) -> Bool {\n"
           + "mayRemove(item, installed: installed)\n}\n}\n")
 
+    super_key = "Sources/Vorssaint/Services/SuperKey/SuperKeyService.swift"
+    write("SuperKeyTap.swift", "import CoreGraphics\nimport Foundation\n"
+          + "extension SuperKeyTapContract {\nfinal class SuperKeyService: State {\n"
+          + "".join(declaration(super_key, prefix).replace("private func", "func", 1)
+                    for prefix in ["    private func runEventTap()", "    private func setMappingFailure("])
+            .replace("CGEvent.tapCreate(", "Tap.create(")
+          + "}\n}\n")
+
     write("CleanerLastRun.swift", "import Foundation\nextension CleanerLastRunContract {\n"
           + "final class Scheduler: SchedulerState {\n"
           + declaration("Sources/Vorssaint/Services/Cleaner/CleanerScheduler.swift", "    private func finishRun(")
@@ -331,7 +344,8 @@ def main():
           + "weak var internalDragWindow: NSWindow?\nvar internalDragWasMerged = false\n"
           + "var panel: NSWindow?\nvar dockedPanel: NSWindow?\n"
           + "var isPinned = false\nvar isVisible = false\nvar dockedVisible = false\n"
-          + "var removed: [UUID] = []\nvar floatingClosures = 0\nvar dockedClosures = 0\n"
+          + "var removed: [UUID] = []\nvar protectedIDs: Set<UUID> = []\n"
+          + "var floatingClosures = 0\nvar dockedClosures = 0\n"
           + "func endInteraction() {}\nfunc removeItems(_ ids: [UUID]) { removed += ids }\n"
           + "func hide() { floatingClosures += 1; isVisible = false }\n"
           + "func collapseDocked() { dockedClosures += 1; dockedVisible = false }\n"

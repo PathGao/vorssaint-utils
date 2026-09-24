@@ -326,6 +326,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d / %d개 선택됨",
         uninstallerRemove: "휴지통으로 이동",
         uninstallerCancel: "취소",
+        uninstallerConfirmationExpired: "이 확인은 더 이상 유효하지 않습니다. 현재 항목을 검토한 뒤 다시 확인하세요.",
         uninstallerDoneTitle: "완료!",
         uninstallerFreedFormat: "%@ 확보됨",
         uninstallerSomeFailed: "일부 항목을 휴지통으로 이동할 수 없습니다.",
@@ -528,7 +529,7 @@ extension Strings {
         shelfCloseAfterDrop: "다른 앱에 놓은 후 닫기",
         shelfCloseAfterDropCaption: "대상 앱이 항목을 받으면 선반을 닫습니다. 패널 고정으로 열어 둘 수 있습니다.",
         shelfRemoveAfterDrop: "놓은 후 항목 제거",
-        shelfRemoveAfterDropCaption: "다른 앱이 받은 항목을 선반에서 제거합니다. 사본을 남기려면 끄세요.",
+        shelfRemoveAfterDropCaption: "다른 앱이 받은 항목을 선반에서 제거합니다. 사본을 남기려면 끄세요. 고정한 항목은 항상 남습니다.",
         shelfExclusionsTitle: "자동 표시 예외",
         shelfExclusionsEmpty: "추가한 앱이 없습니다.",
         shelfExclusionsCaption: "이 앱에서 시작한 드래그에서는 흔들기 동작과 메뉴 막대 영역이 열리지 않습니다. 단축키와 지금 열기는 계속 사용할 수 있습니다.",
@@ -566,6 +567,8 @@ extension Strings {
         shelfActionOpen: "열기",
         shelfActionOpenWith: "다음으로 열기",
         shelfActionShare: "공유",
+        shelfActionPin: "고정",
+        shelfActionUnpin: "고정 해제",
 
         breakdownMeasuring: "측정 중…",
 

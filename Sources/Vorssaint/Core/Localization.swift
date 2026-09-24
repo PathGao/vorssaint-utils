@@ -462,6 +462,7 @@ struct Strings {
     let uninstallerSelectedFormat: String   // + selected, total
     let uninstallerRemove: String
     let uninstallerCancel: String
+    let uninstallerConfirmationExpired: String
     let uninstallerDoneTitle: String
     let uninstallerFreedFormat: String      // + size string
     let uninstallerSomeFailed: String
@@ -711,6 +712,8 @@ struct Strings {
     let shelfActionOpen: String
     let shelfActionOpenWith: String
     let shelfActionShare: String
+    let shelfActionPin: String
+    let shelfActionUnpin: String
 
     // MARK: Panel — per-app breakdown
     let breakdownMeasuring: String
@@ -1543,6 +1546,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d de %d selecionados",
         uninstallerRemove: "Mover para a Lixeira",
         uninstallerCancel: "Cancelar",
+        uninstallerConfirmationExpired: "Esta confirmação não é mais válida. Revise os itens atuais e confirme de novo.",
         uninstallerDoneTitle: "Pronto!",
         uninstallerFreedFormat: "%@ recuperados",
         uninstallerSomeFailed: "Alguns itens não puderam ser movidos para a Lixeira.",
@@ -1745,7 +1749,7 @@ extension Strings {
         shelfCloseAfterDrop: "Fechar depois de soltar em outro app",
         shelfCloseAfterDropCaption: "Fecha a área quando o destino aceita os itens. O alfinete no painel a mantém aberta.",
         shelfRemoveAfterDrop: "Remover itens depois de soltar",
-        shelfRemoveAfterDropCaption: "Itens aceitos por outro app saem da área. Desative para manter uma cópia nela.",
+        shelfRemoveAfterDropCaption: "Itens aceitos por outro app saem da área. Desative para manter uma cópia nela. Itens fixados sempre ficam.",
         shelfExclusionsTitle: "Exceções automáticas",
         shelfExclusionsEmpty: "Nenhum app adicionado.",
         shelfExclusionsCaption: "Sacudir e a área da barra de menus não abrem durante arrastes iniciados nesses apps. O atalho e Abrir agora continuam funcionando.",
@@ -1783,6 +1787,8 @@ extension Strings {
         shelfActionOpen: "Abrir",
         shelfActionOpenWith: "Abrir com",
         shelfActionShare: "Compartilhar",
+        shelfActionPin: "Fixar",
+        shelfActionUnpin: "Desafixar",
 
         breakdownMeasuring: "Medindo…",
 
@@ -2593,6 +2599,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d of %d selected",
         uninstallerRemove: "Move to Trash",
         uninstallerCancel: "Cancel",
+        uninstallerConfirmationExpired: "This confirmation is no longer valid. Review the current items and confirm again.",
         uninstallerDoneTitle: "Done!",
         uninstallerFreedFormat: "%@ recovered",
         uninstallerSomeFailed: "Some items couldn’t be moved to the Trash.",
@@ -2795,7 +2802,7 @@ extension Strings {
         shelfCloseAfterDrop: "Close after dropping into another app",
         shelfCloseAfterDropCaption: "Closes the shelf when the destination accepts the items. The pin in the panel keeps it open.",
         shelfRemoveAfterDrop: "Remove items after dropping",
-        shelfRemoveAfterDropCaption: "Items accepted by another app leave the shelf. Turn this off to keep a copy there.",
+        shelfRemoveAfterDropCaption: "Items accepted by another app leave the shelf. Turn this off to keep a copy there. Pinned items always stay.",
         shelfExclusionsTitle: "Automatic exceptions",
         shelfExclusionsEmpty: "No apps added.",
         shelfExclusionsCaption: "Shake and the menu bar drop zone stay off for drags started in these apps. The shortcut and Open now still work.",
@@ -2833,6 +2840,8 @@ extension Strings {
         shelfActionOpen: "Open",
         shelfActionOpenWith: "Open With",
         shelfActionShare: "Share",
+        shelfActionPin: "Pin",
+        shelfActionUnpin: "Unpin",
 
         breakdownMeasuring: "Measuring…",
 

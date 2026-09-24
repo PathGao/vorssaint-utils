@@ -326,6 +326,7 @@ extension Strings {
         uninstallerSelectedFormat: "Выбрано %d из %d",
         uninstallerRemove: "Переместить в Корзину",
         uninstallerCancel: "Отмена",
+        uninstallerConfirmationExpired: "Это подтверждение больше не действует. Проверьте текущие элементы и подтвердите снова.",
         uninstallerDoneTitle: "Готово!",
         uninstallerFreedFormat: "Освобождено %@",
         uninstallerSomeFailed: "Некоторые элементы не удалось переместить в Корзину.",
@@ -528,7 +529,7 @@ extension Strings {
         shelfCloseAfterDrop: "Закрывать после переноса в другое приложение",
         shelfCloseAfterDropCaption: "Закрывает полку, когда приложение принимает элементы. Булавка на панели оставляет её открытой.",
         shelfRemoveAfterDrop: "Удалять элементы после переноса",
-        shelfRemoveAfterDropCaption: "Принятые другим приложением элементы покидают полку. Отключите, чтобы сохранить копию.",
+        shelfRemoveAfterDropCaption: "Принятые другим приложением элементы покидают полку. Отключите, чтобы сохранить копию. Закреплённые элементы остаются всегда.",
         shelfExclusionsTitle: "Автоматические исключения",
         shelfExclusionsEmpty: "Приложения не добавлены.",
         shelfExclusionsCaption: "Встряхивание и зона в строке меню не открываются для перетаскиваний из этих приложений. Сочетание клавиш и Открыть сейчас продолжают работать.",
@@ -566,6 +567,8 @@ extension Strings {
         shelfActionOpen: "Открыть",
         shelfActionOpenWith: "Открыть с помощью",
         shelfActionShare: "Поделиться",
+        shelfActionPin: "Закрепить",
+        shelfActionUnpin: "Открепить",
 
         breakdownMeasuring: "Измерение…",
 

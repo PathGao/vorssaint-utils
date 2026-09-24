@@ -14,9 +14,15 @@ struct MetricsTests {
                 TestHarnessTests.run(suite)
                 PreferenceNamespaceTests.run(suite)
             }),
-            ("metrics", { MetricsFeatureTests.run(suite) }),
+            ("metrics", {
+                MetricsFeatureTests.run(suite)
+                ProcessNameContract.run(suite)
+            }),
             ("clipboard", { ClipboardFeatureTests.run(suite) }),
-            ("pointer-input", { PointerInputFeatureTests.run(suite) }),
+            ("pointer-input", {
+                PointerInputFeatureTests.run(suite)
+                SuperKeyTapContract.run(suite)
+            }),
             ("scroll-modifier", { ScrollHorizontalModifierTests.run(suite) }),
             ("preferences", { PreferencesFeatureTests.run(suite) }),
             ("app-management", { AppManagementFeatureTests.run(suite) }),

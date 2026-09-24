@@ -729,6 +729,7 @@ enum DefaultsKey {
     static let notchCaptureControls = "notchCaptureControls"
     static let notchQuickPanel = "notchQuickPanel"
     static let notchAppPanel = "notchAppPanel"
+    static let notchHidesMenuBarIcon = "notchHidesMenuBarIcon" // the island takes the glyph's place while it is on
     static let notchScratchpad = "notchScratchpad"
     static let notchHoverExpands = "notchHoverExpands"
     static let notchGesturesEnabled = "notchGesturesEnabled"
@@ -1222,6 +1223,7 @@ enum Defaults {
         DefaultsKey.notchCaptureControls: true,
         DefaultsKey.notchQuickPanel: true,
         DefaultsKey.notchAppPanel: true,
+        DefaultsKey.notchHidesMenuBarIcon: false,
         DefaultsKey.notchScratchpad: true,
         DefaultsKey.notchHoverExpands: true,
         DefaultsKey.notchGesturesEnabled: true,

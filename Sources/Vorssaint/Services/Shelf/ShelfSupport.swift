@@ -162,10 +162,34 @@ enum ShelfInteractionSupport {
                                       removeAfterDrop: Bool) -> Bool {
         dropAccepted && draggedItemCount > 0 && removeAfterDrop
     }
+
+    /// The dragged tiles that may leave the Shelf after a drop. A pinned item,
+    /// or anything inside a pinned pile, is reused across sessions and stays.
+    static func removableAfterDrag(_ draggedIDs: [UUID], protectedIDs: Set<UUID>) -> [UUID] {
+        draggedIDs.filter { !protectedIDs.contains($0) }
+    }
+
+    /// A pinned item is dragged out again and again, so a destination must
+    /// never be offered a move: it would take the file away from the Shelf.
+    static func offersMoveOutside(removeAfterDrop: Bool, dragIncludesPinned: Bool) -> Bool {
+        removeAfterDrop && !dragIncludesPinned
+    }
 }
 
 /// Types accepted by the native shelf drop targets.
 enum ShelfPasteboardSupport {
+    /// Orders a mixed drop by pasteboard position. Receivers follow the
+    /// promised pasteboard items in order; a receiver without one goes last.
+    static func mergedItemIndices(companionPositions: [Int], receiverIndices: [Int],
+                                  promisePositions: [Int]) -> [Int] {
+        let positions = companionPositions + receiverIndices.map { index in
+            promisePositions.indices.contains(index) ? promisePositions[index] : Int.max
+        }
+        return positions.indices.sorted {
+            positions[$0] == positions[$1] ? $0 < $1 : positions[$0] < positions[$1]
+        }
+    }
+
     static let filePromiseTypeIdentifiers: Set<String> = {
         var ids = Set(NSFilePromiseReceiver.readableDraggedTypes)
         ids.formUnion(["Apple files promise pasteboard type",
@@ -540,6 +564,9 @@ struct ShelfPersistedItem: Codable, Equatable {
     /// and older app versions simply ignore it.
     var bookmark: Data?
     var children: [ShelfPersistedItem]?
+    /// Kept after a drag-out and a Clear all. Nil rather than false when
+    /// unpinned, so the common case adds nothing to the saved blob.
+    var pinned: Bool?
 
     init(id: UUID,
          kind: Kind,
@@ -548,7 +575,8 @@ struct ShelfPersistedItem: Codable, Equatable {
          url: String? = nil,
          path: String? = nil,
          bookmark: Data? = nil,
-         children: [ShelfPersistedItem]? = nil) {
+         children: [ShelfPersistedItem]? = nil,
+         pinned: Bool? = nil) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -557,6 +585,7 @@ struct ShelfPersistedItem: Codable, Equatable {
         self.path = path
         self.bookmark = bookmark
         self.children = children
+        self.pinned = pinned == true ? true : nil
     }
 }
 
@@ -567,7 +596,7 @@ struct ShelfPersistedItem: Codable, Equatable {
 // drops instead of losing the whole shelf.
 extension ShelfPersistedItem {
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, text, url, path, bookmark, children
+        case id, kind, title, text, url, path, bookmark, children, pinned
     }
 
     init(from decoder: Decoder) throws {
@@ -580,7 +609,8 @@ extension ShelfPersistedItem {
                   path: try container.decodeIfPresent(String.self, forKey: .path),
                   bookmark: try container.decodeIfPresent(Data.self, forKey: .bookmark),
                   children: try container.decodeIfPresent([FailableShelfPersistedItem].self, forKey: .children)?
-                      .compactMap(\.value))
+                      .compactMap(\.value),
+                  pinned: try container.decodeIfPresent(Bool.self, forKey: .pinned))
     }
 }
 
@@ -734,29 +764,35 @@ enum ShelfPersistenceSupport {
                 }
                 remainingLeaves -= 1
                 result.append(ShelfPersistedItem(id: item.id, kind: .file, title: keptTitle,
-                                                 path: keptPath, bookmark: item.bookmark))
+                                                 path: keptPath, bookmark: item.bookmark,
+                                                 pinned: item.pinned))
             case .text:
                 guard let text = item.text,
                       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
                 remainingLeaves -= 1
                 result.append(ShelfPersistedItem(id: item.id, kind: .text, title: item.title,
-                                                 text: String(text.prefix(maxTextLength))))
+                                                 text: String(text.prefix(maxTextLength)),
+                                                 pinned: item.pinned))
             case .link:
                 guard let raw = item.url, let url = URL(string: raw),
                       url.scheme != nil, !url.isFileURL else { continue }
                 remainingLeaves -= 1
-                result.append(ShelfPersistedItem(id: item.id, kind: .link, title: item.title, url: raw))
+                result.append(ShelfPersistedItem(id: item.id, kind: .link, title: item.title, url: raw,
+                                                 pinned: item.pinned))
             case .batch:
                 let children = sanitized(item.children ?? [], depth: depth + 1,
                                          remainingLeaves: &remainingLeaves,
                                          fileExists: fileExists, resolveBookmark: resolveBookmark)
                 if children.isEmpty { continue }
                 if children.count == 1 {
-                    result.append(children[0])
+                    // The survivor inherits the pile's pin, as it does live.
+                    var survivor = children[0]
+                    if item.pinned == true { survivor.pinned = true }
+                    result.append(survivor)
                     continue
                 }
                 result.append(ShelfPersistedItem(id: item.id, kind: .batch, title: item.title,
-                                                 children: children))
+                                                 children: children, pinned: item.pinned))
             }
         }
         return result

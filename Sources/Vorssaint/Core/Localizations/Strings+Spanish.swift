@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d de %d seleccionados",
         uninstallerRemove: "Mover a la Papelera",
         uninstallerCancel: "Cancelar",
+        uninstallerConfirmationExpired: "Esta confirmación ya no es válida. Revisa los elementos actuales y confirma de nuevo.",
         uninstallerDoneTitle: "¡Listo!",
         uninstallerFreedFormat: "%@ recuperados",
         uninstallerSomeFailed: "Algunos ítems no se pudieron mover a la Papelera.",
@@ -527,7 +528,7 @@ extension Strings {
         shelfCloseAfterDrop: "Cerrar después de soltar en otra app",
         shelfCloseAfterDropCaption: "Cierra el estante cuando el destino acepta los ítems. El alfiler del panel lo mantiene abierto.",
         shelfRemoveAfterDrop: "Quitar ítems después de soltarlos",
-        shelfRemoveAfterDropCaption: "Los ítems aceptados por otra app salen del estante. Desactívalo para conservar una copia.",
+        shelfRemoveAfterDropCaption: "Los ítems aceptados por otra app salen del estante. Desactívalo para conservar una copia. Los ítems fijados siempre se quedan.",
         shelfExclusionsTitle: "Excepciones automáticas",
         shelfExclusionsEmpty: "No se añadieron apps.",
         shelfExclusionsCaption: "Agitar y la zona de la barra de menús no se activan en arrastres iniciados en estas apps. El atajo y Abrir ahora siguen funcionando.",
@@ -565,6 +566,8 @@ extension Strings {
         shelfActionOpen: "Abrir",
         shelfActionOpenWith: "Abrir con",
         shelfActionShare: "Compartir",
+        shelfActionPin: "Fijar",
+        shelfActionUnpin: "Dejar de fijar",
 
         breakdownMeasuring: "Midiendo…",
 

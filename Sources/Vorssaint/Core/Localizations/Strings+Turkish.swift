@@ -325,6 +325,7 @@ extension Strings {
         uninstallerSelectedFormat: "%d / %d seçili",
         uninstallerRemove: "Çöp Sepeti’ne Taşı",
         uninstallerCancel: "İptal",
+        uninstallerConfirmationExpired: "Bu onay artık geçerli değil. Güncel öğeleri gözden geçirip yeniden onaylayın.",
         uninstallerDoneTitle: "Tamamlandı!",
         uninstallerFreedFormat: "%@ geri kazanıldı",
         uninstallerSomeFailed: "Bazı öğeler Çöp Sepeti’ne taşınamadı.",
@@ -527,7 +528,7 @@ extension Strings {
         shelfCloseAfterDrop: "Başka bir uygulamaya bırakınca kapat",
         shelfCloseAfterDropCaption: "Hedef öğeleri kabul edince rafı kapatır. Paneldeki iğne rafı açık tutar.",
         shelfRemoveAfterDrop: "Bıraktıktan sonra öğeleri kaldır",
-        shelfRemoveAfterDropCaption: "Başka bir uygulamanın kabul ettiği öğeler raftan çıkar. Bir kopyayı tutmak için kapat.",
+        shelfRemoveAfterDropCaption: "Başka bir uygulamanın kabul ettiği öğeler raftan çıkar. Bir kopyayı tutmak için kapat. Sabitlenen öğeler her zaman kalır.",
         shelfExclusionsTitle: "Otomatik istisnalar",
         shelfExclusionsEmpty: "Uygulama eklenmedi.",
         shelfExclusionsCaption: "Bu uygulamalarda başlayan sürüklemelerde sallama ve menü çubuğu alanı açılmaz. Kısayol ve Şimdi aç çalışmaya devam eder.",
@@ -565,6 +566,8 @@ extension Strings {
         shelfActionOpen: "Aç",
         shelfActionOpenWith: "Birlikte aç",
         shelfActionShare: "Paylaş",
+        shelfActionPin: "Sabitle",
+        shelfActionUnpin: "Sabitlemeyi kaldır",
 
         breakdownMeasuring: "Ölçülüyor…",
 
