@@ -2914,9 +2914,8 @@ enum SwitcherModelFeatureTests {
         suite.expectClose(Double(SwitcherIconRowLayout.rowHeight - selectedIconTileHeight),
                     Double(SwitcherIconRowLayout.iconTileVerticalMargin * 2),
                     "App Switcher Small keeps the selection outline inside its icon row")
-        suite.expect(DockPreviewSupport.cardWidth < DockPreviewSupport.cardSize(scale: 1).width
-                   && DockPreviewSupport.cardHeight < DockPreviewSupport.cardSize(scale: 1).height,
-               "Dock Preview Small keeps a smaller card than the default size")
+        suite.expect(DockPreviewSupport.cardSize(scale: PreviewSizing.scale) == CGSize(width: 190, height: 165),
+               "Dock Preview Small keeps a 190x165 card, so it cannot drift toward the default one")
         // The grid card's chrome is two lines of text that do not change with
         // the preview size. The card does, so the thumbnail has to take every
         // point the chrome leaves, at whichever size is stored.
