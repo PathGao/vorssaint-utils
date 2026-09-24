@@ -189,6 +189,7 @@ struct GeneralSettings: View {
                     if !musicBlockReplacementPath.isEmpty {
                         Button {
                             musicBlockReplacementPath = ""
+                            musicBlockReplacementRejected = false
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                         }
@@ -226,6 +227,8 @@ struct GeneralSettings: View {
     }
 
     private func chooseMusicReplacement() {
+        // The note answers the pick being made now, so a cancel clears it too.
+        musicBlockReplacementRejected = false
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
@@ -239,7 +242,6 @@ struct GeneralSettings: View {
             musicBlockReplacementRejected = true
             return
         }
-        musicBlockReplacementRejected = false
         musicBlockReplacementPath = url.path
     }
 }
