@@ -85,6 +85,17 @@ struct RadialMenuProfile: Codable, Identifiable, Equatable {
     func displayName(_ text: RadialMenuFeatureStrings) -> String {
         name.isEmpty ? text.presetGeneral : name
     }
+
+    /// The copy Duplicate adds. The shortcut and the trackpad tap each open
+    /// one wheel, so the copy starts without them and leaves the original's.
+    func duplicate(named name: String) -> RadialMenuProfile {
+        var copy = self
+        copy.id = UUID()
+        copy.name = name
+        copy.shortcut = ""
+        copy.trackpadTap = false
+        return copy
+    }
 }
 
 extension RadialMenuProfile {

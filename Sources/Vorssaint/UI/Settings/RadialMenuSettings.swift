@@ -378,11 +378,7 @@ struct RadialMenuSettings: View {
     }
 
     private func duplicateProfile() {
-        var copy = selectedProfile
-        copy.id = UUID()
-        let baseName = copy.name.isEmpty ? text.presetGeneral : copy.name
-        copy.name = "\(baseName) 2"
-        copy.shortcut = ""
+        let copy = selectedProfile.duplicate(named: "\(selectedProfile.displayName(text)) 2")
         profiles.append(copy)
         selectedProfileID = copy.id
         openSubmenuID = nil
