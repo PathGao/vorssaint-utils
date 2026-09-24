@@ -683,6 +683,7 @@ enum ClipboardPreviewContract {
         }
         func trimToLimit() {}
         func save() {}
+        func pruneQuickBatchSelection() {}
     }
 
     static func run(_ suite: TestSuite) {
@@ -741,5 +742,18 @@ enum ClipboardPreviewContract {
         service.setEntries([pinnedImage])
         suite.expect(service.latestPasteboardEntry == pinnedImage,
                      "immutable image content keeps its preview even when a legacy entry lacks a hash")
+
+        let counted = ClipboardHistoryEntry(text: "Counted by the confirmation")
+        let copiedLater = ClipboardHistoryEntry(text: "Copied while the alert was open")
+        var pinnedLater = ClipboardHistoryEntry(text: "Pinned while the alert was open")
+        let confirmed: Set<UUID> = [counted.id, pinnedLater.id]
+        pinnedLater.pinnedAt = Date()
+        service.setEntries([pinnedLater, copiedLater, counted])
+        service.clearRecent(confirmedIDs: confirmed)
+        suite.expect(service.entries.map(\.id) == [pinnedLater.id, copiedLater.id],
+                     "confirmed clear deletes only the counted unpinned items, got \(service.entries.map(\.text))")
+        service.clearRecent()
+        suite.expect(service.entries.map(\.id) == [pinnedLater.id],
+                     "clearing without a count still removes every unpinned item, got \(service.entries.map(\.text))")
     }
 }

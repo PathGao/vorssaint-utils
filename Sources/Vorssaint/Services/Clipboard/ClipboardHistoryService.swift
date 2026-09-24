@@ -333,14 +333,12 @@ final class ClipboardHistoryService: ObservableObject {
         return true
     }
 
-    func clearRecent() {
-        entries.removeAll { !$0.isPinned }
+    /// A confirmation passes the IDs it counted, so anything copied while
+    /// it was open survives.
+    func clearRecent(confirmedIDs: Set<UUID>? = nil) {
+        entries.removeAll { !$0.isPinned && confirmedIDs?.contains($0.id) ?? true }
         pruneQuickBatchSelection()
         save()
-    }
-
-    func clearAll() {
-        clearRecent()
     }
 
     func canMove(_ entry: ClipboardHistoryEntry, _ direction: ClipboardHistoryMoveDirection) -> Bool {

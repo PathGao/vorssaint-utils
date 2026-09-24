@@ -10,6 +10,7 @@ struct PanelClipboardView: View {
     @AppStorage(DefaultsKey.clipboardHistoryShortcutEnabled) private var shortcutEnabled = true
     @State private var query = ""
     @State private var copiedID: UUID?
+    @State private var clearingIDs: Set<UUID>?
 
     var onClose: () -> Void
 
@@ -74,7 +75,7 @@ struct PanelClipboardView: View {
                     .font(.system(size: 11))
                     .disabled(history.entries.isEmpty)
                 Button {
-                    history.clearRecent()
+                    clearingIDs = Set(history.recentEntries.map(\.id))
                     copiedID = nil
                 } label: {
                     Image(systemName: "trash")
@@ -85,6 +86,7 @@ struct PanelClipboardView: View {
                 .controlSize(.mini)
                 .help(text.clearRecent)
                 .disabled(history.recentEntries.isEmpty)
+                .modifier(ClipboardClearRecentConfirmation(entryIDs: $clearingIDs))
                 Button {
                     history.showHistoryWindow()
                 } label: {
