@@ -570,6 +570,7 @@ struct Strings {
     let homebrewGroupDependencies: String
     let homebrewOrphans: String
     let homebrewOrphansNote: String
+    let homebrewDependencyUpdatesFormat: String
     let homebrewNoSelection: String
     let homebrewDetailsTitle: String
     let homebrewInstall: String
@@ -1695,6 +1696,7 @@ extension Strings {
         homebrewGroupDependencies: "Agrupar dependências",
         homebrewOrphans: "Não são mais necessárias",
         homebrewOrphansNote: "Instaladas como dependências, mas nenhum pacote instalado precisa mais delas.",
+        homebrewDependencyUpdatesFormat: "Atualizações de dependências: %d",
         homebrewNoSelection: "Selecione um pacote instalado ou pesquise um novo.",
         homebrewDetailsTitle: "Detalhes do pacote",
         homebrewInstall: "Instalar",
@@ -2789,6 +2791,7 @@ extension Strings {
         homebrewGroupDependencies: "Group dependencies",
         homebrewOrphans: "No longer needed",
         homebrewOrphansNote: "Installed as dependencies, but no installed package needs them any more.",
+        homebrewDependencyUpdatesFormat: "Dependency updates: %d",
         homebrewNoSelection: "Select an installed package or search for a new one.",
         homebrewDetailsTitle: "Package details",
         homebrewInstall: "Install",

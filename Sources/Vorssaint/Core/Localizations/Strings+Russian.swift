@@ -400,6 +400,7 @@ extension Strings {
         homebrewGroupDependencies: "Группировать зависимости",
         homebrewOrphans: "Больше не нужны",
         homebrewOrphansNote: "Установлены как зависимости, но ни одному установленному пакету они больше не нужны.",
+        homebrewDependencyUpdatesFormat: "Обновления зависимостей: %d",
         homebrewNoSelection: "Выберите установленный пакет или найдите новый.",
         homebrewDetailsTitle: "Детали пакета",
         homebrewInstall: "Установить",

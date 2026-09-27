@@ -399,6 +399,7 @@ extension Strings {
         homebrewGroupDependencies: "Bağımlılıkları grupla",
         homebrewOrphans: "Artık gerekmeyenler",
         homebrewOrphansNote: "Bağımlılık olarak kuruldular, ancak artık kurulu hiçbir paket bunlara ihtiyaç duymuyor.",
+        homebrewDependencyUpdatesFormat: "Bağımlılık güncellemeleri: %d",
         homebrewNoSelection: "Yüklü bir paket seç veya yenisini ara.",
         homebrewDetailsTitle: "Paket ayrıntıları",
         homebrewInstall: "Yükle",

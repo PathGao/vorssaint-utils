@@ -400,6 +400,7 @@ extension Strings {
         homebrewGroupDependencies: "將依賴項目分組",
         homebrewOrphans: "不再需要",
         homebrewOrphansNote: "作為依賴項目安裝，但現時已安裝的套件都不需要它們。",
+        homebrewDependencyUpdatesFormat: "依賴項目更新：%d",
         homebrewNoSelection: "選取已安裝的套件，或搜尋新的套件。",
         homebrewDetailsTitle: "套件詳情",
         homebrewInstall: "安裝",

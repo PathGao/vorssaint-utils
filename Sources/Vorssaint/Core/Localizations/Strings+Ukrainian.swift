@@ -385,6 +385,7 @@ extension Strings {
         homebrewGroupDependencies: "Групувати залежності",
         homebrewOrphans: "Більше не потрібні",
         homebrewOrphansNote: "Встановлені як залежності, але жоден встановлений пакет їх більше не потребує.",
+        homebrewDependencyUpdatesFormat: "Оновлення залежностей: %d",
         homebrewNoSelection: "Виберіть встановлений пакет або знайдіть новий.",
         homebrewDetailsTitle: "Деталі пакета",
         homebrewInstall: "Встановити",

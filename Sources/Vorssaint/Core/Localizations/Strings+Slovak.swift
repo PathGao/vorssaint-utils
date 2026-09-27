@@ -399,6 +399,7 @@ extension Strings {
         homebrewGroupDependencies: "Zoskupiť závislosti",
         homebrewOrphans: "Už nepotrebné",
         homebrewOrphansNote: "Nainštalované ako závislosti, ale žiadny nainštalovaný balík ich už nepotrebuje.",
+        homebrewDependencyUpdatesFormat: "Aktualizácie závislostí: %d",
         homebrewNoSelection: "Vyberte nainštalovaný balík alebo vyhľadajte nový.",
         homebrewDetailsTitle: "Detaily balíka",
         homebrewInstall: "Inštalovať",

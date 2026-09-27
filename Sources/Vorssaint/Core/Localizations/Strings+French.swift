@@ -399,6 +399,7 @@ extension Strings {
         homebrewGroupDependencies: "Regrouper les dépendances",
         homebrewOrphans: "Plus nécessaires",
         homebrewOrphansNote: "Installés comme dépendances, mais plus aucun paquet installé n’en a besoin.",
+        homebrewDependencyUpdatesFormat: "Mises à jour de dépendances\u{00A0}: %d",
         homebrewNoSelection: "Sélectionnez un paquet installé ou recherchez-en un nouveau.",
         homebrewDetailsTitle: "Détails du paquet",
         homebrewInstall: "Installer",
