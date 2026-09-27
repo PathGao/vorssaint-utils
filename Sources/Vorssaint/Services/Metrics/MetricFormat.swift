@@ -258,6 +258,19 @@ enum MetricFormat {
     // MARK: Watts & percentages
 
     /// Power, e.g. "8.5 W" / "23 W" (one decimal under 10, none above).
+    /// The top of an auto-scaled graph: the peak rounded up to 1, 2 or 5 of a
+    /// unit, so its label reads "2.0 MB/s" and it only moves when the traffic
+    /// crosses a step. `unitStep` is 1024 for byte rates and 1000 for watts.
+    static func graphCeiling(_ peak: Double, unitStep: Double) -> Double {
+        for power in 0..<6 {
+            for step in [1.0, 2, 5, 10, 20, 50, 100, 200, 500] {
+                let ceiling = step * pow(unitStep, Double(power))
+                if ceiling >= peak { return ceiling }
+            }
+        }
+        return peak
+    }
+
     static func watts(_ value: Double) -> String {
         let magnitude = abs(value)
         return magnitude < 10 ? String(format: "%.1f W", locale: Self.locale, value) : String(format: "%.0f W", locale: Self.locale, value)

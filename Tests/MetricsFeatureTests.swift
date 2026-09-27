@@ -60,6 +60,12 @@ enum MetricsFeatureTests {
         expectEqual(MetricFormat.bytesPerSec(1023.6), "1.0 KB/s", "a rate that rounds to a kilobyte is shown in kilobytes")
         expectEqual(MetricFormat.bytesPerSec(1023.6 * 1024), "1.0 MB/s", "a rate that rounds to a megabyte is shown in megabytes")
 
+        suite.expect(MetricFormat.graphCeiling(1.3 * 1024 * 1024, unitStep: 1024) == 2 * 1024 * 1024,
+                     "a byte-rate graph tops out on a round rate")
+        suite.expect(MetricFormat.graphCeiling(600 * 1024, unitStep: 1024) == 1024 * 1024,
+                     "past 500 KB/s the next step is 1 MB/s")
+        suite.expect(MetricFormat.graphCeiling(12.4, unitStep: 1000) == 20, "a power graph tops out on 20 W")
+        suite.expect(MetricFormat.graphCeiling(20, unitStep: 1000) == 20, "a peak on a step keeps that step")
         expectEqual(MetricFormat.bytesPerSecCompact(0), "0B", "compact zero")
         expectEqual(MetricFormat.bytesPerSecCompact(320 * 1024), "320K", "compact 320K")
         expectEqual(MetricFormat.bytesPerSecCompact(1.2 * 1024 * 1024), "1.2M", "compact 1.2M")
