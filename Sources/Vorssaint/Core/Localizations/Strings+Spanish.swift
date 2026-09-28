@@ -120,7 +120,7 @@ extension Strings {
         tabReleaseNotes: "Novedades",
         releaseNotesOnUpdateToggle: "Mostrar novedades al actualizar",
         minimalWindowPreviews: "Vistas previas minimalistas",
-        minimalWindowPreviewsCaption: "Oculta títulos, botones y adornos en las vistas previas del Dock y del selector de apps. La selección sigue visible.",
+        minimalWindowPreviewsCaption: "Oculta títulos, botones y adornos en las vistas previas del Dock y del selector. La selección sigue visible.",
         previewSizeLabel: "Tamaño de vistas previas",
         previewSizeNormal: "Normal",
         previewSizeLarge: "Grande",
