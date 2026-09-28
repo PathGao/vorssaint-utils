@@ -1895,11 +1895,13 @@ enum Defaults {
 
     /// The app switcher used to share Dock Preview's paused apps. Copy the
     /// list once, before defaults are registered, so both keep pausing in
-    /// the same apps after the upgrade.
+    /// the same apps after the upgrade. With no list saved yet, store an
+    /// empty one: an app paused in Dock Preview later would otherwise be
+    /// copied at the next launch.
     static func migrateSwitcherPreviewExcludedApps(in defaults: UserDefaults) {
-        guard defaults.object(forKey: DefaultsKey.switcherPreviewExcludedApps) == nil,
-              let excluded = defaults.stringArray(forKey: DefaultsKey.windowPreviewExcludedApps) else { return }
-        defaults.set(excluded, forKey: DefaultsKey.switcherPreviewExcludedApps)
+        guard defaults.object(forKey: DefaultsKey.switcherPreviewExcludedApps) == nil else { return }
+        defaults.set(defaults.stringArray(forKey: DefaultsKey.windowPreviewExcludedApps) ?? [],
+                     forKey: DefaultsKey.switcherPreviewExcludedApps)
     }
 
     static func migrateBatteryTemperatureVisibility(in defaults: UserDefaults) {

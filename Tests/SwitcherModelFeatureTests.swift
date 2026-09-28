@@ -3051,6 +3051,12 @@ enum SwitcherModelFeatureTests {
                     && excludedAppsDefaults.stringArray(forKey: DefaultsKey.switcherPreviewExcludedApps) == [],
                    "an upgrade keeps the switcher paused in the apps it shared with Dock Preview, once")
             excludedAppsDefaults.removePersistentDomain(forName: excludedAppsSuite)
+            Defaults.migrateSwitcherPreviewExcludedApps(in: excludedAppsDefaults)
+            excludedAppsDefaults.set(["com.example.vault"], forKey: DefaultsKey.windowPreviewExcludedApps)
+            Defaults.migrateSwitcherPreviewExcludedApps(in: excludedAppsDefaults)
+            suite.expect(excludedAppsDefaults.stringArray(forKey: DefaultsKey.switcherPreviewExcludedApps) == [],
+                   "an app paused in Dock Preview after the first launch leaves the switcher list alone")
+            excludedAppsDefaults.removePersistentDomain(forName: excludedAppsSuite)
         }
         let previewDefaults = PreviewProvider.UserDefaults.standard
         previewDefaults.lists = [DefaultsKey.windowPreviewExcludedApps: ["com.example.vault"],
