@@ -120,7 +120,7 @@ extension Strings {
         tabReleaseNotes: "Novità",
         releaseNotesOnUpdateToggle: "Mostra le novità dopo l’aggiornamento",
         minimalWindowPreviews: "Anteprime minimaliste",
-        minimalWindowPreviewsCaption: "Nasconde titoli, pulsanti e decorazioni nelle anteprime del Dock e del selettore di app. La selezione resta visibile.",
+        minimalWindowPreviewsCaption: "Nasconde titoli, pulsanti e decorazioni nelle anteprime del Dock e del selettore. La selezione resta visibile.",
         previewSizeLabel: "Dimensione anteprime",
         previewSizeNormal: "Normale",
         previewSizeLarge: "Grande",

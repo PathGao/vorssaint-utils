@@ -120,7 +120,7 @@ extension Strings {
         tabReleaseNotes: "新機能",
         releaseNotesOnUpdateToggle: "アップデート後に新機能を表示",
         minimalWindowPreviews: "シンプルなプレビュー",
-        minimalWindowPreviewsCaption: "Dockとアプリ切り替えのプレビューで、タイトル、ボタン、装飾を非表示にします。選択表示は残ります。",
+        minimalWindowPreviewsCaption: "Dockとスイッチャーのプレビューで、タイトル、ボタン、装飾を非表示にします。選択表示は残ります。",
         previewSizeLabel: "プレビューのサイズ",
         previewSizeNormal: "標準",
         previewSizeLarge: "大",
