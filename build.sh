@@ -390,6 +390,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/DockPreview/DockPreviewSupport.swift
         Sources/Vorssaint/Services/DockPreview/DockAutohideHold.swift
         Sources/Vorssaint/Services/Homebrew/HomebrewSupport.swift
+        Sources/Vorssaint/Services/Homebrew/HomebrewEnvironment.swift
         Sources/Vorssaint/Services/AppUpdates/AppUpdatesSupport.swift
         Sources/Vorssaint/Services/AppUpdates/AppUpdateFeedSupport.swift
         Sources/Vorssaint/Core/AppUpdateStrings.swift
@@ -414,6 +415,7 @@ if (( TEST )); then
         Sources/Vorssaint/Core/SettingsNavigationStrings.swift
         Sources/Vorssaint/App/MenuBarSpacingSupport.swift
         Sources/Vorssaint/App/MenuBarAllowanceSupport.swift
+        Sources/Vorssaint/App/ReopenRequestSupport.swift
         Sources/Vorssaint/App/StatusItemAnchorSupport.swift
         Sources/Vorssaint/Services/DockClick/DockClickSupport.swift
         Sources/Vorssaint/Services/Finder/CutPasteProgressSupport.swift
@@ -421,6 +423,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/Finder/FinderPasteImageSupport.swift
         Sources/Vorssaint/Services/MiddleClick/MiddleClickSupport.swift
         Sources/Vorssaint/Services/MouseNavigation/MouseNavigationSupport.swift
+        Sources/Vorssaint/Services/MouseNavigation/MouseNavigationKeys.swift
         Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutSupport.swift
         Sources/Vorssaint/Services/MouseButtons/MouseSpacesGestureSupport.swift
         Sources/Vorssaint/Services/MouseClickDebounce/MouseClickDebounceSupport.swift
@@ -467,6 +470,8 @@ if (( TEST )); then
         Sources/Vorssaint/Core/InputSourceSelection.swift
         Sources/Vorssaint/Services/SessionActivity.swift
         Sources/Vorssaint/Services/SessionActivitySupport.swift
+        Sources/Vorssaint/Services/EventTimestamp.swift
+        Sources/Vorssaint/Services/OwnKeyEvent.swift
         Sources/Vorssaint/Services/ScrollWheelSupport.swift
         Sources/Vorssaint/Services/HorizontalWheelScrolling.swift
         Sources/Vorssaint/Services/SmoothScrollSupport.swift

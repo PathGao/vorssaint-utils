@@ -12,8 +12,141 @@ import ImageIO
 import VMStatisticsCompat
 
 enum SwitcherModelFeatureTests {
+    private static func scrollNavigationChecks(_ suite: TestSuite) {
+        func event(_ vertical: Int32, horizontal: Int32 = 0, continuous: Bool = false,
+                   phase: CGScrollPhase? = nil, momentum: Int64 = 0, scrollCount: Int64 = 0,
+                   timestamp: CGEventTimestamp = 1_000_000_000) -> CGEvent {
+            let event = CGEvent(scrollWheelEvent2Source: nil, units: continuous ? .pixel : .line,
+                                wheelCount: 2, wheel1: vertical, wheel2: horizontal, wheel3: 0)!
+            event.setIntegerValueField(.scrollWheelEventIsContinuous, value: continuous ? 1 : 0)
+            event.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(phase?.rawValue ?? 0))
+            event.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentum)
+            event.setIntegerValueField(.scrollWheelEventScrollCount, value: scrollCount)
+            event.timestamp = timestamp
+            return event
+        }
+        var navigation = SwitcherScrollNavigation()
+        suite.expect(navigation.selectionDelta(for: event(-3)) == 1,
+                     "a wheel sample selects the next app regardless of acceleration")
+        suite.expect(navigation.selectionDelta(for: event(3)) == -1,
+                     "reverse scrolling selects the previous app")
+        suite.expect(navigation.selectionDelta(for: event(0)) == 0,
+                     "zero scrolling preserves the selection")
+        suite.expect(navigation.selectionDelta(for: event(1, horizontal: -3)) == 1,
+                     "horizontal scrolling uses the dominant axis")
+        let step = Int32(SwitcherScrollNavigation.gestureStep)
+        suite.expect(navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .began)) == 0,
+                     "a gesture below the threshold preserves the selection")
+        suite.expect(navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .changed)) == 1,
+                     "continuous scrolling accumulates to one step")
+        suite.expect(navigation.selectionDelta(for: event(-10 * step, continuous: true, momentum: 1)) == 0,
+                     "trackpad momentum does not change the selection")
+        suite.expect(navigation.selectionDelta(for: event(0, horizontal: step, continuous: true, phase: .began)) == -1,
+                     "a horizontal trackpad gesture changes the selection")
+        _ = navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .began))
+        suite.expect(navigation.selectionDelta(for: event(step / 2, continuous: true, phase: .changed)) == 0
+                     && navigation.selectionDelta(for: event(step / 2, continuous: true, phase: .changed)) == -1,
+                     "reversing direction resets accumulated movement")
+        _ = navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .began))
+        suite.expect(navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .began)) == 0,
+                     "a new gesture does not inherit the previous remainder")
+        for phase in [CGScrollPhase.ended, .cancelled] {
+            for terminalDelta in [Int32(0), -step] {
+                navigation = SwitcherScrollNavigation()
+                _ = navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .began))
+                suite.expect(navigation.selectionDelta(for: event(terminalDelta, continuous: true, phase: phase)) == 0,
+                             "terminal Core Graphics phase \(phase) with delta \(terminalDelta) preserves selection")
+                suite.expect(navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .changed)) == 0,
+                             "terminal Core Graphics phase \(phase) clears the previous remainder")
+                suite.expect(navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .changed)) == 1,
+                             "scrolling after Core Graphics phase \(phase) accumulates from zero")
+            }
+        }
+        _ = navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .began))
+        suite.expect(navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .changed,
+                                                        timestamp: 2_000_000_000)) == 0,
+                     "a pause resets the trackpad remainder")
+        suite.expect(navigation.selectionDelta(for: event(-10 * step, continuous: true, phase: .changed)) == 1,
+                     "a large trackpad sample does not skip multiple apps")
+        let synthetic = event(-10 * step, continuous: true)
+        synthetic.setIntegerValueField(.eventSourceUserData, value: ScrollWheelSupport.syntheticTag)
+        suite.expect(navigation.selectionDelta(for: synthetic) == 0,
+                     "a remaining smooth-scroll frame does not change the selection")
+
+        func wheel(line: Int64 = 0, fixed: Double, point: Int64 = 0, continuous: Bool = false,
+                   horizontal: Bool = false, timestamp: CGEventTimestamp = 1_000_000_000) -> CGEvent {
+            let sample = event(0, continuous: continuous, timestamp: timestamp)
+            sample.setIntegerValueField(horizontal ? .scrollWheelEventDeltaAxis2 : .scrollWheelEventDeltaAxis1,
+                                        value: line)
+            sample.setDoubleValueField(horizontal ? .scrollWheelEventFixedPtDeltaAxis2 : .scrollWheelEventFixedPtDeltaAxis1,
+                                       value: fixed)
+            sample.setIntegerValueField(horizontal ? .scrollWheelEventPointDeltaAxis2 : .scrollWheelEventPointDeltaAxis1,
+                                        value: point)
+            return sample
+        }
+        for continuous in [false, true] {
+            for horizontal in [false, true] {
+                for inverted in [false, true] {
+                    navigation = SwitcherScrollNavigation()
+                    let fractions = [-0.25, -0.5, -0.5, -0.75]
+                    let expected = [0, 0, inverted ? -1 : 1, inverted ? -1 : 1]
+                    for index in fractions.indices {
+                        let sample = wheel(fixed: fractions[index], continuous: continuous, horizontal: horizontal,
+                                           timestamp: 1_000_000_000 + UInt64(index) * 500_000_000)
+                        ScrollWheelSupport.applyDirection(to: sample, isContinuous: continuous,
+                            invertVertical: inverted, invertHorizontal: inverted, horizontalModifier: nil)
+                        suite.expect(navigation.selectionDelta(for: sample) == expected[index],
+                            "fractional wheel movement retains its remainder across pauses and inversion: continuous=\(continuous), horizontal=\(horizontal), inverted=\(inverted), sample=\(index)")
+                    }
+                }
+                navigation = SwitcherScrollNavigation()
+                suite.expect(navigation.selectionDelta(for: wheel(line: -1, fixed: 0, continuous: continuous,
+                                                                  horizontal: horizontal)) == 1,
+                             "a whole-line wheel notch advances once in either representation")
+                navigation = SwitcherScrollNavigation()
+                _ = navigation.selectionDelta(for: wheel(fixed: -0.75, continuous: continuous, horizontal: horizontal))
+                suite.expect(navigation.selectionDelta(for: wheel(fixed: 0.5, continuous: continuous, horizontal: horizontal)) == 0
+                    && navigation.selectionDelta(for: wheel(fixed: 0.5, continuous: continuous, horizontal: horizontal)) == -1,
+                    "reversing a fractional wheel resets the previous direction's remainder")
+            }
+        }
+        navigation = SwitcherScrollNavigation()
+        suite.expect(navigation.selectionDelta(for: wheel(fixed: 0, point: -5, continuous: true)) == 0
+            && navigation.selectionDelta(for: wheel(fixed: 0, point: -5, continuous: true,
+                                                    timestamp: 2_000_000_000)) == 1,
+            "a slow point-only continuous wheel notch advances once without the trackpad threshold")
+        navigation = SwitcherScrollNavigation()
+        _ = navigation.selectionDelta(for: wheel(fixed: -0.75))
+        suite.expect(navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .began)) == 0
+            && navigation.selectionDelta(for: wheel(fixed: -0.25)) == 0,
+            "switching between wheel lines and trackpad points clears the other device's remainder")
+        navigation = SwitcherScrollNavigation()
+        _ = navigation.selectionDelta(for: event(-step / 2, continuous: true, phase: .began, scrollCount: 1))
+        _ = navigation.selectionDelta(for: event(0, continuous: true, phase: .ended, scrollCount: 1))
+        suite.expect(navigation.selectionDelta(for: event(-step / 2, continuous: true, scrollCount: 1)) == 0,
+                     "a phaseless trackpad transition is not treated as a mouse notch")
+
+        func code(_ path: String) -> String {
+            ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "")
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+        }
+        let switcher = code("Sources/Vorssaint/Services/Switcher/AppSwitcher.swift")
+        suite.expect(switcher.contains("CGEventType.scrollWheel.rawValue") && switcher.contains("case .scrollWheel:"),
+                     "the switcher subscribes to and handles scroll-wheel events")
+        for path in ["Sources/Vorssaint/Services/SmoothScrollService.swift",
+                     "Sources/Vorssaint/Services/MouseButtons/MouseButtonShortcutService.swift"] {
+            suite.expect(code(path).contains("AppSwitcher.shared.scrollNavigationActive"),
+                         "\(path) yields scrolling to the open switcher")
+        }
+        suite.expect(!code("Sources/Vorssaint/Services/ScrollInverter.swift").contains("AppSwitcher.shared.scrollNavigationActive"),
+                     "scroll direction still transforms wheel events before they reach the open switcher")
+    }
+
     static func run(_ suite: TestSuite) {
         ScrollingTitleMotionTests.run(suite)
+        scrollNavigationChecks(suite)
         func expectEqual(_ actual: String, _ expected: String, _ label: String,
                          file: StaticString = #filePath, line: UInt = #line) {
             suite.expect(actual == expected, "\(label): got \(actual), expected \(expected)",
@@ -868,6 +1001,51 @@ enum SwitcherModelFeatureTests {
             hasNormalWindowLevel: true,
             acceptsUndescribedSubroles: false),
                "App Switcher keeps a described floating panel filtered at the normal window level")
+
+        // MARK: Ordinary windows that read as dialogs (issue #2279)
+        suite.expect(SwitcherSupport.isSwitchableNonstandardWindow(
+            role: "AXWindow",
+            subrole: "AXDialog",
+            fillsScreen: false,
+            hasNormalWindowLevel: true,
+            acceptsUndescribedSubroles: false,
+            canMinimize: true),
+               "a normal-level window that reads as a dialog but can be minimized stays listed")
+        suite.expect(!SwitcherSupport.isSwitchableNonstandardWindow(
+            role: "AXWindow",
+            subrole: "AXDialog",
+            fillsScreen: false,
+            hasNormalWindowLevel: true,
+            acceptsUndescribedSubroles: false),
+               "a normal-level dialog that cannot be minimized stays filtered")
+        suite.expect(!SwitcherSupport.isSwitchableNonstandardWindow(
+            role: "AXWindow",
+            subrole: "AXDialog",
+            fillsScreen: true,
+            hasNormalWindowLevel: false,
+            acceptsUndescribedSubroles: true,
+            canMinimize: true),
+               "a dialog above the normal window level stays filtered even when it can be minimized")
+        suite.expect(!SwitcherSupport.isSwitchableNonstandardWindow(
+            role: "AXWindow",
+            subrole: "AXDialog",
+            fillsScreen: false,
+            hasNormalWindowLevel: true,
+            acceptsUndescribedSubroles: false,
+            canMinimize: true,
+            isExcludedFromWindowCycle: true),
+               "a minimizable dialog that opts out of window cycling stays filtered")
+        suite.expect(!SwitcherSupport.isSwitchableNonstandardWindow(
+            role: "AXWindow",
+            subrole: "AXFloatingWindow",
+            fillsScreen: false,
+            hasNormalWindowLevel: true,
+            acceptsUndescribedSubroles: false,
+            canMinimize: true),
+               "a minimize button vouches only for a dialog, not for a floating panel")
+        suite.expect(placementCode.contains("let canMinimize = subrole == \"AXDialog\" && hasNormalWindowLevel")
+               && placementCode.contains("canMinimize: canMinimize"),
+               "window enumeration reads the minimize button only for a normal-level dialog and passes it on")
         suite.expect(SwitcherSupport.sessionSourceItem(frontmostPID: nil,
                                                  focusedWindowID: nil,
                                                  items: [embeddedWindow]) == nil,
@@ -1713,6 +1891,11 @@ enum SwitcherModelFeatureTests {
         suite.expect(registeredDefaults[DefaultsKey.mouseAccelerationDisabled] as? Bool == false
                 && registeredDefaults[DefaultsKey.panelControlMouseAcceleration] as? Bool == true,
                "mouse acceleration control is opt-in and visible in the panel when installed")
+        suite.expect(registeredDefaults[DefaultsKey.linearScrollEnabled] as? Bool == false
+                && registeredDefaults[DefaultsKey.linearScrollLines] as? Int
+                    == ScrollWheelSupport.defaultLinesPerNotch
+                && registeredDefaults[DefaultsKey.panelControlLinearScroll] as? Bool == true,
+               "linear scrolling is opt-in, starts at the default notch and shows in the panel when installed")
         suite.expect(registeredDefaults[DefaultsKey.mouseClickDebounceEnabled] as? Bool == false,
                "mouse click debounce is opt-in")
         suite.expect(registeredDefaults[DefaultsKey.mouseClickDebounceWindowMs] as? Int
@@ -1898,7 +2081,72 @@ enum SwitcherModelFeatureTests {
         suite.expect(StatusItemAnchorSupport.anchorDriftX(clickX: 1240, reportedMidX: 1144, buttonWidth: 197) == nil,
                "clicks near the edge of a wide metrics item stay anchored to the item")
 
+        suite.expect(StatusItemAnchorSupport.shouldReturnActivation(to: 501, ownPID: 900, frontmostPID: 900,
+                                                                    ownWindowIsKey: false, closeReason: .escape),
+               "closing the panel hands activation back to the app that was in front before it")
+        suite.expect(!StatusItemAnchorSupport.shouldReturnActivation(to: 501, ownPID: 900, frontmostPID: 777,
+                                                                     ownWindowIsKey: false, closeReason: .escape),
+               "an app the person switched to while the panel was open keeps activation")
+        suite.expect(!StatusItemAnchorSupport.shouldReturnActivation(to: 501, ownPID: 900, frontmostPID: 900,
+                                                                     ownWindowIsKey: true, closeReason: .escape),
+               "a Vorssaint window that took focus from the panel keeps Vorssaint active")
+        suite.expect(!StatusItemAnchorSupport.shouldReturnActivation(to: nil, ownPID: 900, frontmostPID: 900,
+                                                                     ownWindowIsKey: false, closeReason: .escape),
+               "a panel opened while Vorssaint was already in front has nothing to hand back")
+        suite.expect(!StatusItemAnchorSupport.shouldReturnActivation(to: 900, ownPID: 900, frontmostPID: 900,
+                                                                     ownWindowIsKey: false, closeReason: .escape),
+               "Vorssaint never hands activation back to itself")
+        suite.expect(!StatusItemAnchorSupport.shouldReturnActivation(to: 501, ownPID: 900, frontmostPID: nil,
+                                                                     ownWindowIsKey: false, closeReason: .escape),
+               "no known frontmost app means nothing is taken from anyone")
+        for (reason, returns) in [(PanelCloseReason.escape, true), (.statusItem, true),
+                                  (.outsideClick, false), (.action, false)] {
+            suite.expect(StatusItemAnchorSupport.shouldReturnActivation(to: 501, ownPID: 900, frontmostPID: 900,
+                                                                        ownWindowIsKey: false,
+                                                                        closeReason: reason) == returns,
+                   returns ? "a \(reason) dismissal with nothing taking over hands activation back"
+                           : "a \(reason) close leaves activation to whatever takes over")
+        }
+        suite.expect(!StatusItemAnchorSupport.shouldReturnActivation(to: 501, ownPID: 900, frontmostPID: 900,
+                                                                     ownWindowIsKey: false, closeReason: nil),
+               "a close Vorssaint did not ask for leaves activation alone")
+
+        let showing: Set<UInt64> = [3, 7]
+        suite.expect(StatusItemAnchorSupport.handbackWouldSwitchDesktop(windowSpaces: [[1], [2]],
+                                                                        visibleSpaces: showing),
+               "an app whose windows are all on a desktop that is not showing is not handed activation")
+        suite.expect(!StatusItemAnchorSupport.handbackWouldSwitchDesktop(windowSpaces: [[1], [2, 7]],
+                                                                         visibleSpaces: showing),
+               "an app with a window on a desktop that is showing gets activation back")
+        suite.expect(!StatusItemAnchorSupport.handbackWouldSwitchDesktop(windowSpaces: [],
+                                                                         visibleSpaces: showing),
+               "an app with no windows open gets activation back")
+        suite.expect(!StatusItemAnchorSupport.handbackWouldSwitchDesktop(windowSpaces: [[]],
+                                                                         visibleSpaces: showing),
+               "a leftover surface on no desktop does not count as a window")
+        suite.expect(StatusItemAnchorSupport.handbackWouldSwitchDesktop(windowSpaces: [[], [1]],
+                                                                        visibleSpaces: showing),
+               "a leftover surface does not keep a window on a hidden desktop from counting")
+        suite.expect(!StatusItemAnchorSupport.handbackWouldSwitchDesktop(windowSpaces: [[1]],
+                                                                         visibleSpaces: nil),
+               "unknown desktops keep handing activation back")
+
+        let ownApp: (Int) -> Bool = { $0 == 900 }
+        suite.expect(StatusItemAnchorSupport.panelActivationSource(after: .appActivated(777), current: 501,
+                                                                   isOwnApp: ownApp) == 777,
+               "another app becoming active while the panel is open replaces the remembered app")
+        suite.expect(StatusItemAnchorSupport.panelActivationSource(after: .appActivated(900), current: 501,
+                                                                   isOwnApp: ownApp) == 501,
+               "Vorssaint taking activation back from the panel keeps the remembered app")
+        suite.expect(StatusItemAnchorSupport.panelActivationSource(after: .appActivated(777), current: nil,
+                                                                   isOwnApp: ownApp) == 777,
+               "an app activated after the remembered one was dropped becomes the one to return to")
+        suite.expect(StatusItemAnchorSupport.panelActivationSource(after: PanelActivationChange<Int>.activeSpaceChanged,
+                                                                   current: 501, isOwnApp: ownApp) == nil,
+               "a desktop switch while the panel is open drops the remembered app")
+
         MenuPanelRecoveryTests.run { suite.expect($0, $1) }
+        MenuPanelKeyTests.run(suite)
 
         // The built-in display and a taller one placed to its left.
         let builtInScreen = CGRect(x: 0, y: 0, width: 1470, height: 956)
@@ -1973,23 +2221,39 @@ enum SwitcherModelFeatureTests {
         let popoverSetUpCode = stripCommentLines((statusAnchorAppDelegateSource
             .components(separatedBy: "private func setUpPopover() {").last ?? "")
             .components(separatedBy: "\n    }").first ?? "")
-        suite.expect(popoverSetUpCode.contains("popover.hasFullSizeContent = true"),
-               "the panel is hosted across the whole popover, arrow band included")
+        suite.expect(popoverSetUpCode.contains("popover.hasFullSizeContent = PanelSurface.popoverHostsFullSizeContent"),
+               "the panel is hosted across the whole popover, arrow band included, where AppKit supports it")
         let panelThemeSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/UI/Theme.swift",
             encoding: .utf8)) ?? ""
+        // macOS 15 publishes the full-size safe area but leaves the view at its
+        // content size in the frame's corner, so the popover grows and shows a
+        // band of system material along its top and right edges.
+        let fullSizeGateCode = stripCommentLines((panelThemeSource
+            .components(separatedBy: "static var popoverHostsFullSizeContent: Bool {").last ?? "")
+            .components(separatedBy: "\n    }").first ?? "")
+        suite.expect(fullSizeGateCode.contains("if #available(macOS 26.0, *) { return true }")
+                   && fullSizeGateCode.contains("return false"),
+               "full-size popover content is limited to macOS 26, where AppKit fills the balloon with it")
         let panelGlassCode = stripCommentLines((panelThemeSource
             .components(separatedBy: "private struct PanelGlassSurface: View {").last ?? "")
             .components(separatedBy: "\n}").first ?? "")
-        suite.expect(panelGlassCode.contains("surface.ignoresSafeArea()"),
-               "the panel surface paints past the safe area, up into the arrow")
-        suite.expect(!panelGlassCode.isEmpty
-                   && !panelGlassCode.contains("RoundedRectangle")
-                   && !panelGlassCode.contains("cornerRadius"),
-               "the panel surface leaves the rounding to the popover balloon that clips it")
-        suite.expect(panelGlassCode.contains(".glassEffect(.regular, in: Rectangle())")
-                   && panelGlassCode.contains("Rectangle()\n            .fill(.regularMaterial)"),
+        suite.expect(panelGlassCode.contains("} else if PanelSurface.popoverHostsFullSizeContent {\n            surface.ignoresSafeArea()\n        } else {\n            insetSurface"),
+               "the panel surface paints past the safe area, up into the arrow, only in a full-size popover")
+        let fullSizeSurfaceCode = panelGlassCode
+            .components(separatedBy: "private var insetSurface: some View {").first ?? ""
+        let insetSurfaceCode = panelGlassCode
+            .components(separatedBy: "private var insetSurface: some View {").dropFirst().first ?? ""
+        suite.expect(!fullSizeSurfaceCode.isEmpty
+                   && !fullSizeSurfaceCode.contains("RoundedRectangle")
+                   && !fullSizeSurfaceCode.contains("cornerRadius"),
+               "the full-size surface leaves the rounding to the popover balloon that clips it")
+        suite.expect(fullSizeSurfaceCode.contains(".glassEffect(.regular, in: Rectangle())")
+                   && fullSizeSurfaceCode.contains("Rectangle()\n            .fill(.regularMaterial)"),
                "both the standard and the Liquid Glass surface fill the whole balloon, no shape of their own")
+        suite.expect(insetSurfaceCode.contains("RoundedRectangle(cornerRadius: 18, style: .continuous)")
+                   && insetSurfaceCode.contains(".strokeBorder(PanelSurface.border(for: colorScheme)"),
+               "an inset panel is a rounded, rimmed card inside the balloon")
         let panelViewSource = (try? String(
             contentsOfFile: "Sources/Vorssaint/UI/MenuPanel/MenuPanelView.swift",
             encoding: .utf8)) ?? ""
@@ -2000,6 +2264,15 @@ enum SwitcherModelFeatureTests {
         suite.expect(panelBodyCode("private var navigablePanel: some View {").contains(".panelGlassSurface()")
                    && panelBodyCode("private var metricPanel: some View {").contains(".panelGlassSurface()"),
                "both the navigable panel and the metric panel wear that surface")
+
+        // The popover window is the panel plus 13 pt for the arrow and 13 pt
+        // below it. A window taller than the usable height opens beside the
+        // icon (issue #2225), so the height cap has to leave at least 26 pt.
+        let panelCapMargin = panelBodyCode("private var maxHeight: CGFloat {")
+            .components(separatedBy: "?? 760) - ").dropFirst().first
+            .flatMap { Int($0.prefix(while: \.isNumber)) } ?? 0
+        suite.expect(panelCapMargin >= 26,
+               "a panel at its height cap still fits under its icon, arrow and bottom margin included")
 
         // The panel keeps its top edge and its center while its content resizes.
         let panelArea = CGRect(x: 0, y: 0, width: 1470, height: 932)
@@ -2289,6 +2562,79 @@ enum SwitcherModelFeatureTests {
             .components(separatedBy: "\n    }").first ?? "")
         suite.expect(reopenCode.contains("mainItemHiddenByChoice != true, !iconIsOnScreen()"),
                "reopening the app leaves an item hidden by choice alone and opens Settings")
+        // macOS 27's Siri app reopens running apps on almost every interaction;
+        // only a reopen the person asked for may rebuild the icon or open anything.
+        let reopenJudged = reopenCode.range(of: "guard ReopenRequestSupport.isPersonOpeningApp(")
+        let reopenRebuild = reopenCode.range(of: "recreateStatusItem()")
+        suite.expect(reopenJudged != nil && reopenRebuild != nil
+                     && reopenJudged!.lowerBound < reopenRebuild!.lowerBound
+                     && reopenCode.contains("ReopenRequestSupport.currentSender()"),
+               "reopening judges who asked before it touches the icon, the panel or Settings")
+        typealias ReopenSender = ReopenRequestSupport.Sender
+        let personReopens: [(ReopenSender?, String)] = [
+            (ReopenSender(bundleIdentifier: "com.apple.finder",
+                          executablePath: "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder",
+                          isApplication: true), "Finder"),
+            (ReopenSender(bundleIdentifier: "com.apple.dock",
+                          executablePath: "/System/Library/CoreServices/Dock.app/Contents/MacOS/Dock",
+                          isApplication: true), "the Dock"),
+            (ReopenSender(bundleIdentifier: "com.apple.Spotlight", executablePath: nil,
+                          isApplication: true), "Spotlight"),
+            // On macOS 27 the search field opened with Command-Space lives in the Siri app.
+            (ReopenSender(bundleIdentifier: "com.apple.campo",
+                          executablePath: "/System/Applications/Siri AI.app/Contents/MacOS/Siri AI",
+                          isApplication: true), "the macOS 27 search field"),
+            (ReopenSender(bundleIdentifier: "com.apple.apps.launcher", executablePath: nil,
+                          isApplication: true), "the Apps launcher"),
+            (ReopenSender(bundleIdentifier: "com.example.launcher",
+                          executablePath: "/Applications/Launcher.app/Contents/MacOS/Launcher",
+                          isApplication: true), "a third-party launcher"),
+            (ReopenSender(bundleIdentifier: "com.example.ShortcutLauncher", executablePath: nil,
+                          isApplication: true), "another developer's app named after shortcuts"),
+            (ReopenSender(bundleIdentifier: nil, executablePath: nil, isApplication: false),
+             "open(1), gone by the time the event is read"),
+            (ReopenSender(bundleIdentifier: nil, executablePath: "/usr/bin/osascript", isApplication: false),
+             "a script run in Terminal"),
+            (nil, "an event without a sender"),
+        ]
+        for (sender, source) in personReopens {
+            suite.expect(ReopenRequestSupport.isPersonOpeningApp(sender),
+                         "reopening from \(source) still brings the app back")
+        }
+        let automaticReopens: [(ReopenSender, String)] = [
+            (ReopenSender(bundleIdentifier: "com.apple.WorkflowKit.BackgroundShortcutRunner",
+                          executablePath: "/System/Library/PrivateFrameworks/WorkflowKit.framework/XPCServices/"
+                              + "BackgroundShortcutRunner.xpc/Contents/MacOS/BackgroundShortcutRunner",
+                          isApplication: true), "the Shortcuts action runner"),
+            (ReopenSender(bundleIdentifier: nil,
+                          executablePath: "/System/Library/PrivateFrameworks/WorkflowKit.framework/XPCServices/"
+                              + "BackgroundShortcutRunner.xpc/Contents/MacOS/BackgroundShortcutRunner",
+                          isApplication: false), "the same runner before LaunchServices lists it"),
+            (ReopenSender(bundleIdentifier: "com.apple.shortcuts", executablePath: nil,
+                          isApplication: true), "the Shortcuts app"),
+            (ReopenSender(bundleIdentifier: "com.apple.Siri", executablePath: nil,
+                          isApplication: true), "Siri"),
+            (ReopenSender(bundleIdentifier: nil, executablePath: "/usr/libexec/linkd",
+                          isApplication: false), "the App Intents daemon"),
+            (ReopenSender(bundleIdentifier: nil,
+                          executablePath: "/System/Library/PrivateFrameworks/VoiceShortcuts.framework/Versions/A/"
+                              + "Support/siriactionsd",
+                          isApplication: false), "Siri's actions daemon"),
+            (ReopenSender(bundleIdentifier: nil,
+                          executablePath: "/System/Library/PrivateFrameworks/IntelligenceFlowRuntime.framework/"
+                              + "Versions/A/intelligenceflowd",
+                          isApplication: false), "an Apple Intelligence service"),
+        ]
+        for (sender, source) in automaticReopens {
+            suite.expect(!ReopenRequestSupport.isPersonOpeningApp(sender),
+                         "a reopen sent by \(source) opens nothing")
+        }
+        suite.expect(ReopenRequestSupport.logName(ReopenSender(bundleIdentifier: nil, executablePath: "/usr/libexec/linkd",
+                                                               isApplication: false)) == "linkd"
+                     && ReopenRequestSupport.logName(ReopenSender(bundleIdentifier: "com.apple.finder",
+                                                                  executablePath: "/System/Library/CoreServices/Finder.app",
+                                                                  isApplication: true)) == "com.apple.finder",
+               "the log names the sender by bundle identifier, or by executable without its path")
         let reshowCode = stripCommentLines((statusAnchorAppDelegateSource
             .components(separatedBy: "func reshowStatusItem() {").last ?? "")
             .components(separatedBy: "\n    }").first ?? "")
@@ -2541,6 +2887,7 @@ enum SwitcherModelFeatureTests {
             DefaultsKey.windowLayoutShortcutLeftTwoThirds,
             DefaultsKey.windowLayoutShortcutRightTwoThirds,
             DefaultsKey.windowLayoutShortcutNextDisplay,
+            DefaultsKey.windowDirectionalShortcut,
         ]
         let assignedLayoutShortcutValues = assignedLayoutShortcutKeys.compactMap {
             registeredDefaults[$0] as? String
