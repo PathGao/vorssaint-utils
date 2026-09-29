@@ -247,7 +247,6 @@ enum MetricFormat {
 
     // MARK: Watts & percentages
 
-    /// Power, e.g. "8.5 W" / "23 W" (one decimal under 10, none above).
     /// The top of an auto-scaled graph: the peak rounded up to 1, 2 or 5 of a
     /// unit, so its label reads "2.0 MB/s" and it only moves when the traffic
     /// crosses a step. `unitStep` is 1024 for byte rates and 1000 for watts.
@@ -261,6 +260,7 @@ enum MetricFormat {
         return peak
     }
 
+    /// Power, e.g. "8.5 W" / "23 W" (one decimal under 10, none above).
     static func watts(_ value: Double) -> String {
         let magnitude = abs(value)
         return magnitude < 10 ? String(format: "%.1f W", locale: Self.locale, value) : String(format: "%.0f W", locale: Self.locale, value)
