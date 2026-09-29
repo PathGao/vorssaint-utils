@@ -248,44 +248,53 @@ enum DockPreviewSupport {
         )
     }
 
-    // Card metrics. The preview size setting picks the picture and nothing
-    // else. Everything around it is fixed: the title band holds the same text
-    // at every size, and gaps that scaled with the card came out as 7.5pt or
-    // 11.2pt, which put card edges between pixels. The picture itself is 16:10
-    // in whole points, so every card lands on the pixel grid at every size.
-    static let cardPadding: CGFloat = 10
-    static let cardTitleSpacing: CGFloat = 6
+    // Card metrics. The preview size setting picks the picture. The title
+    // band holds the same text at every size, so it is fixed. The gaps hold
+    // nothing, so they stay at their Normal size above it and tighten with
+    // Small, rounded to whole points. With the picture 16:10 in whole points
+    // too, every card edge lands on the pixel grid at every size.
+    static var cardPadding: CGFloat { cardPadding(scale: PreviewSizing.scale) }
+    static var cardTitleSpacing: CGFloat { cardTitleSpacing(scale: PreviewSizing.scale) }
     /// A 13pt name over a 10.5pt subtitle, beside the two 16pt window controls
     /// -- the App Switcher's title block, to the point.
     static let cardTitleHeight: CGFloat = 29
-    static let cardSpacing: CGFloat = 8
-    static let panelPadding: CGFloat = 10
+    static var cardSpacing: CGFloat { gap(8, scale: PreviewSizing.scale) }
+    static var panelPadding: CGFloat { gap(10, scale: PreviewSizing.scale) }
     static let panelHeaderHeight: CGFloat = 28
-    static let cardThumbnailInset: CGFloat = 5
+    static var cardThumbnailInset: CGFloat { cardThumbnailInset(scale: PreviewSizing.scale) }
+
+    private static func gap(_ normal: CGFloat, scale: CGFloat) -> CGFloat {
+        (normal * min(scale, 1)).rounded()
+    }
+    static func cardPadding(scale: CGFloat) -> CGFloat { gap(10, scale: scale) }
+    static func cardTitleSpacing(scale: CGFloat) -> CGFloat { gap(7, scale: scale) }
+    static func cardThumbnailInset(scale: CGFloat) -> CGFloat { gap(5, scale: scale) }
 
     /// 16:10, the shape of the screen the captured window came from, so a
     /// full-height window fills the well instead of sitting between two bars.
-    /// The width is a multiple of 40, which keeps the height whole: 160x100,
+    /// The width is a multiple of 8, which keeps the height whole: 144x90,
     /// 200x125, 280x175 and 360x225 across the four sizes.
     static func cardPictureSize(scale: CGFloat) -> CGSize {
-        let width = (200 * scale / 40).rounded() * 40
+        let width = (200 * scale / 8).rounded(.down) * 8
         return CGSize(width: width, height: width * 5 / 8)
     }
 
     /// The well the picture sits in, one inset wider on every side.
     static func cardThumbnailSize(scale: CGFloat) -> CGSize {
         let picture = cardPictureSize(scale: scale)
-        return CGSize(width: picture.width + cardThumbnailInset * 2,
-                      height: picture.height + cardThumbnailInset * 2)
+        let inset = cardThumbnailInset(scale: scale)
+        return CGSize(width: picture.width + inset * 2,
+                      height: picture.height + inset * 2)
     }
 
     /// Minimal previews have no title band, so the card drops its height
     /// instead of padding the width-bound picture with space it cannot fill.
     static func cardSize(scale: CGFloat, minimal: Bool = false) -> CGSize {
         let thumbnail = cardThumbnailSize(scale: scale)
-        return CGSize(width: thumbnail.width + cardPadding * 2,
-                      height: thumbnail.height + cardPadding * 2
-                          + (minimal ? 0 : cardTitleSpacing + cardTitleHeight))
+        let padding = cardPadding(scale: scale)
+        return CGSize(width: thumbnail.width + padding * 2,
+                      height: thumbnail.height + padding * 2
+                          + (minimal ? 0 : cardTitleSpacing(scale: scale) + cardTitleHeight))
     }
 
     /// The app's icon along the bottom edge of the picture, the size the App

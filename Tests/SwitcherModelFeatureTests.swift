@@ -1668,21 +1668,20 @@ enum SwitcherModelFeatureTests {
                "an entry without a window has nothing to move")
         // The preview size setting sizes the picture, not the writing around
         // it. The picture follows the setting in whole 16:10 steps, and every
-        // card edge is a multiple of 5pt, so nothing lands between pixels.
+        // card edge is a whole point, so nothing lands between pixels.
         let previewScales = Defaults.allowedPreviewSizes.map { PreviewSizing.scale(for: $0) }
         suite.expect(previewScales.count == 4 && previewScales.contains(1.0),
                "every preview size on offer has a scale, including the unscaled one")
         suite.expect(Set(previewScales.map { DockPreviewSupport.cardPictureSize(scale: $0).width })
-                   == [160, 200, 280, 360],
-               "the four preview sizes are 160, 200, 280 and 360pt wide")
+                   == [144, 200, 280, 360],
+               "the four preview sizes are 144, 200, 280 and 360pt wide")
         suite.expect(previewScales.allSatisfy { scale in
                    [false, true].allSatisfy { minimal in
                        let card = DockPreviewSupport.cardSize(scale: scale, minimal: minimal)
-                       return card.width.truncatingRemainder(dividingBy: 5) == 0
-                           && card.height.truncatingRemainder(dividingBy: 5) == 0
+                       return card.width == card.width.rounded() && card.height == card.height.rounded()
                    }
                },
-               "a Dock Preview card is a multiple of 5pt on both sides at every size, minimal or not")
+               "a Dock Preview card is whole points on both sides at every size, minimal or not")
         suite.expect(previewScales.allSatisfy { scale in
                    let card = DockPreviewSupport.cardSize(scale: scale)
                    let thumbnail = DockPreviewSupport.cardThumbnailSize(scale: scale)
@@ -3383,8 +3382,16 @@ enum SwitcherModelFeatureTests {
         suite.expectClose(Double(SwitcherIconRowLayout.rowHeight - selectedIconTileHeight),
                     Double(SwitcherIconRowLayout.iconTileVerticalMargin * 2),
                     "App Switcher Small keeps the selection outline inside its icon row")
-        suite.expect(DockPreviewSupport.cardSize(scale: PreviewSizing.scale) == CGSize(width: 190, height: 165),
-               "Dock Preview Small keeps a 190x165 card, so it cannot drift toward the default one")
+        // Small is for smaller previews with less space between them, so its
+        // card stays no bigger than the 172.5x150.5 it was before whole points
+        // and every gap stays under the Normal one.
+        let smallCard = DockPreviewSupport.cardSize(scale: PreviewSizing.scale)
+        suite.expect(smallCard.width <= 172.5 && smallCard.height <= 150.5,
+               "Dock Preview Small keeps its card no bigger than before")
+        suite.expect(DockPreviewSupport.cardSpacing < 8 && DockPreviewSupport.panelPadding < 10
+                   && DockPreviewSupport.cardPadding < 10 && DockPreviewSupport.cardTitleSpacing < 7
+                   && DockPreviewSupport.cardThumbnailInset < 5,
+               "Dock Preview Small keeps every gap under the Normal one")
         // The grid card's chrome is two lines of text that do not change with
         // the preview size. The card does, so the thumbnail has to take every
         // point the chrome leaves, at whichever size is stored.
@@ -3394,7 +3401,7 @@ enum SwitcherModelFeatureTests {
         suite.expect(SwitcherGridCard.fallbackIconSize < SwitcherGridCard.thumbnailHeight,
                "App Switcher Small keeps the stand-in app icon inside its grid card thumbnail")
         UserDefaults.standard.set("xlarge", forKey: DefaultsKey.switcherPreviewSize)
-        suite.expect(SwitcherIconRowLayout.scale > 1 && DockPreviewSupport.cardWidth == 190,
+        suite.expect(SwitcherIconRowLayout.scale > 1 && DockPreviewSupport.cardWidth == smallCard.width,
                "the switcher and Dock Preview each follow their own preview size")
         suite.expectClose(Double(SwitcherGridCard.height / smallGridCardHeight),
                     Double(PreviewSizing.switcherScale / smallGridScale),
