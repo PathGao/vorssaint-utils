@@ -100,6 +100,7 @@ struct MetricsTests {
                 SettingsFeatureTests.run(suite)
                 SettingsWindowTests.run { suite.expect($0, $1) }
                 NotchSettingsChoiceTests.run(suite)
+                MonitorTokenTests.run(suite)
             }),
             ("display-restoration", {
                 DisplayRestorationTests.run(suite)

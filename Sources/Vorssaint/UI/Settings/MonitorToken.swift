@@ -21,6 +21,7 @@ struct MonitorToken: View {
     /// the checkmark always shows or hides it.
     var select: (() -> Void)? = nil
     @State private var showsOptions = false
+    @Environment(\.isEnabled) private var isEnabled
 
     private var on: Bool { included && available }
 
@@ -54,6 +55,11 @@ struct MonitorToken: View {
         .help(title)
     }
 
+    private func activate() {
+        guard available && isEnabled else { return }
+        if let select { select() } else { included.toggle() }
+    }
+
     private func row(showsSummary: Bool) -> some View {
         HStack(spacing: 0) {
             HStack(spacing: 4) {
@@ -64,7 +70,7 @@ struct MonitorToken: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(title)
                 .accessibilityAddTraits(included ? .isSelected : [])
-                Button { if let select { select() } else { included.toggle() } } label: {
+                Button(action: activate) {
                     Label(title, systemImage: symbol)
                         .lineLimit(showsSummary ? 1 : 2)
                         .minimumScaleFactor(showsSummary ? 1 : 0.8)
@@ -79,6 +85,13 @@ struct MonitorToken: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
+            .background {
+                // The padding follows the name's action. Buttons above this
+                // background keep their own clicks, including the checkmark.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: activate)
+            }
             if options != nil {
                 Divider().frame(height: 14)
                 Button { showsOptions = true } label: {
