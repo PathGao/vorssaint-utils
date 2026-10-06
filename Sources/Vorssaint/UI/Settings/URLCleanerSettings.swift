@@ -3,6 +3,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct URLCleanerSettings: View {
     @ObservedObject private var l10n = L10n.shared
@@ -11,6 +12,13 @@ struct URLCleanerSettings: View {
     @AppStorage(DefaultsKey.urlCleanerCustomParameters) private var globalNames = ""
     @AppStorage(DefaultsKey.urlCleanerSiteParameters) private var siteNames = ""
     @AppStorage(DefaultsKey.urlCleanerDisabledParameters) private var disabledNames = ""
+    @AppStorage(DefaultsKey.urlCleanerImportedParameters) private var importedNames = ""
+    /// `file name|ISO 8601 date`, only to say which file the imported rules came from.
+    @AppStorage(DefaultsKey.urlCleanerImportedSource) private var importedSource = ""
+    @State private var pendingImport: (file: String, rules: URLCleaning.ClearURLsImport)?
+    @State private var importError: String?
+    @State private var confirmingRemoval = false
+    @State private var siteFilter = ""
     @State private var parameterDrafts: [String: String] = [:]
     @State private var siteDraft = ""
     @State private var siteParameterDraft = ""
@@ -25,8 +33,11 @@ struct URLCleanerSettings: View {
     private var rules: URLCleaning.Rules {
         URLCleaning.rules(globalNames: globalNames,
                           siteNames: siteNames,
-                          disabledNames: disabledNames)
+                          disabledNames: disabledNames,
+                          importedNames: importedNames)
     }
+
+    private var importText: URLCleanerImportStrings { FeatureStrings.urlCleanerImport(l10n.language) }
 
     var body: some View {
         Form {
@@ -56,39 +67,9 @@ struct URLCleanerSettings: View {
                 }
             }
 
-            Section(l10n.s.urlCleanerRulesTitle) {
-                ForEach(URLCleaning.ruleGroups(rules: rules)) { group in
-                    DisclosureGroup {
-                        parameterGrid(for: group)
-                        addParameterRow(site: group.site)
-                    } label: {
-                        HStack {
-                            Text(title(for: group.site))
-                            Spacer()
-                            Text(countLabel(group.enabledCount))
-                                .foregroundStyle(.secondary)
-                            siteSwitch(for: group)
-                        }
-                    }
-                }
-                DisclosureHeaderRow(isExpanded: $showingAddSite) {
-                    Text(l10n.s.urlCleanerRulesAddSite)
-                    Spacer()
-                }
-                if showingAddSite {
-                    addSiteRow
-                        .disclosureIndent()
-                }
-                Text(l10n.s.urlCleanerRulesCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                // Why the list is as long as it is. Without this the length
-                // reads as "we delete a lot from your links", when a real link
-                // only ever carries a handful of these.
-                Text(l10n.s.urlCleanerRulesCoverageCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            rulesSection
+
+            importSection
 
             Section(l10n.s.urlCleanerManualTitle) {
                 HStack(spacing: 8) {
@@ -131,6 +112,183 @@ struct URLCleanerSettings: View {
             }
         }
         .formStyle(.grouped)
+        .alert(importTitle, isPresented: showingImport, presenting: pendingImport) { pending in
+            Button(importText.cancel, role: .cancel) {}
+            Button(importedNames.isEmpty ? importText.importConfirm : importText.replaceConfirm) {
+                importedNames = URLCleaning.storageValue(forTokens: pending.rules.parameters)
+                importedSource = pending.file + "|" + Date.now.formatted(.iso8601)
+            }
+        } message: { pending in
+            Text(importSummary(pending.rules))
+        }
+        .alert(importText.removeTitle, isPresented: $confirmingRemoval) {
+            Button(importText.cancel, role: .cancel) {}
+            Button(importText.removeConfirm, role: .destructive) {
+                importedNames = ""
+                importedSource = ""
+            }
+        } message: {
+            Text(String(format: importText.removeMessageFormat, importedSiteCount) + "\n\n" + importText.keepsChoices)
+        }
+    }
+
+    private var rulesSection: some View {
+        Section(l10n.s.urlCleanerRulesTitle) {
+            let groups = URLCleaning.ruleGroups(rules: rules)
+            // Only an imported table makes the list long enough to search.
+            if groups.count > 15 {
+                TextField("", text: $siteFilter, prompt: Text(importText.filterPlaceholder))
+                    .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+                    .accessibilityLabel(importText.filterPlaceholder)
+            }
+            ForEach(groups.filter(matchesFilter)) { group in
+                DisclosureGroup {
+                    parameterGrid(for: group)
+                    addParameterRow(site: group.site)
+                } label: {
+                    HStack {
+                        Text(title(for: group.site))
+                        if group.entries.allSatisfy({ $0.source == .imported }) {
+                            importedTag
+                        }
+                        Spacer()
+                        Text(countLabel(group.enabledCount))
+                            .foregroundStyle(.secondary)
+                        siteSwitch(for: group)
+                    }
+                }
+            }
+            DisclosureHeaderRow(isExpanded: $showingAddSite) {
+                Text(l10n.s.urlCleanerRulesAddSite)
+                Spacer()
+            }
+            if showingAddSite {
+                addSiteRow
+                    .disclosureIndent()
+            }
+            Text(l10n.s.urlCleanerRulesCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            // Why the list is as long as it is. Without this the length
+            // reads as "we delete a lot from your links", when a real link
+            // only ever carries a handful of these.
+            Text(l10n.s.urlCleanerRulesCoverageCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func matchesFilter(_ group: URLCleaning.RuleGroup) -> Bool {
+        siteFilter.isEmpty || title(for: group.site).localizedCaseInsensitiveContains(siteFilter)
+    }
+
+    /// The imported layer can be replaced as a whole or removed. Remove sits
+    /// on its own row, away from Replace, so one slip cannot take the rules
+    /// out when someone meant to update them.
+    private var importSection: some View {
+        Section(importText.sectionTitle) {
+            Text(importedStatus)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let importError {
+                Label(importError, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+            HStack {
+                Button(importedNames.isEmpty ? importText.importButton : importText.replaceButton) {
+                    chooseRulesFile()
+                }
+                Spacer()
+                Link(importText.openRules, destination: URL(string: "https://github.com/ClearURLs/Rules")!)
+            }
+            Text(importText.fileCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if !importedNames.isEmpty {
+                Button(importText.removeButton, role: .destructive) { confirmingRemoval = true }
+            }
+        }
+    }
+
+    private var importedTag: some View {
+        Text(importText.importedTag)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+    }
+
+    private var importedSiteCount: Int {
+        rules.imported.keys.filter { $0 != URLCleaning.allSites }.count
+    }
+
+    private var importedStatus: String {
+        guard !importedNames.isEmpty else { return importText.emptyCaption }
+        let separator = importedSource.lastIndex(of: "|") ?? importedSource.endIndex
+        let date = (try? Date(String(importedSource[separator...].dropFirst()), strategy: .iso8601))
+            .map { $0.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted)
+                .locale(l10n.language.formattingLocale())) } ?? ""
+        return String(format: importText.summaryFormat, String(importedSource[..<separator]), date,
+                      importedSiteCount, rules.imported.values.reduce(0) { $0 + $1.count })
+    }
+
+    private var showingImport: Binding<Bool> {
+        Binding { pendingImport != nil } set: { if !$0 { pendingImport = nil } }
+    }
+
+    private var importTitle: String {
+        let file = pendingImport?.file ?? ""
+        return String(format: importedNames.isEmpty ? importText.importTitleFormat : importText.replaceTitleFormat, file)
+    }
+
+    /// What the file adds, or what it changes about the rules already
+    /// imported, then what it leaves out.
+    private func importSummary(_ rules: URLCleaning.ClearURLsImport) -> String {
+        let before = Set(importedNames.split(separator: ","))
+        let after = Set(URLCleaning.storageValue(forTokens: rules.parameters).split(separator: ","))
+        var lines = [before.isEmpty
+            ? String(format: importText.addsFormat, after.count,
+                     rules.parameters.keys.filter { $0 != URLCleaning.allSites }.count)
+            : String(format: importText.changesFormat, after.subtracting(before).count,
+                     before.subtracting(after).count, after.intersection(before).count)]
+        if rules.skipped > 0 { lines.append(String(format: importText.skippedFormat, rules.skipped)) }
+        if rules.exceptions > 0 { lines.append(String(format: importText.exceptionsFormat, rules.exceptions)) }
+        lines.append(importText.keepsChoices)
+        return lines.joined(separator: "\n\n")
+    }
+
+    /// Reads at most a little over the limit, like the lyrics import, so a
+    /// huge file is refused without being loaded. ClearURLs' file is about
+    /// 100 KB.
+    private func chooseRulesFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importError = nil
+        let limit = 1 << 20
+        guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+              let handle = try? FileHandle(forReadingFrom: url),
+              let data = try? handle.read(upToCount: limit + 1) else {
+            importError = importText.errorUnreadable
+            return
+        }
+        try? handle.close()
+        guard data.count <= limit else {
+            importError = importText.errorTooLarge
+            return
+        }
+        do {
+            pendingImport = (url.lastPathComponent, try URLCleaning.clearURLsImport(from: data))
+        } catch URLCleaning.ClearURLsImportError.tooManyNames {
+            importError = importText.errorTooMany
+        } catch URLCleaning.ClearURLsImportError.nothingUsable {
+            importError = importText.errorNothingUsable
+        } catch {
+            importError = importText.errorNotClearURLs
+        }
     }
 
     /// Two dozen names for one site is a lot of clicking to say "not this
@@ -162,7 +320,10 @@ struct URLCleanerSettings: View {
                         .toggleStyle(.checkbox)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    if !entry.isBuiltIn {
+                    if entry.source == .imported {
+                        importedTag
+                    }
+                    if entry.source == .custom {
                         Button {
                             remove(entry.name, from: group.site)
                         } label: {

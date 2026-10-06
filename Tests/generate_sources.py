@@ -305,6 +305,11 @@ def main():
           + declaration("Sources/Vorssaint/UI/Settings/URLCleanerSettings.swift",
                         "    private func setSite(").replace("private ", "", 1)
           + "}\n")
+    write("URLCleanerImportSummary.swift", "import Foundation\n"
+          + "extension RepositoryFeatureTests.URLCleanerImportSummaryHost {\n"
+          + declaration("Sources/Vorssaint/UI/Settings/URLCleanerSettings.swift",
+                        "    private func importSummary(").replace("private ", "", 1)
+          + "}\n")
     write("CommandBarCopyAnswer.swift", "import Foundation\n"
           + "extension CommandBarFeatureTests.CopyAnswerHost {\n"
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
