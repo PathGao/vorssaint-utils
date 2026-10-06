@@ -34,7 +34,16 @@ final class CPUCoreSampler {
     /// One value per logical core, in Mach processor order; nil until a core
     /// has a fresh interval. After a gap the old ticks only become a baseline.
     func sample(now: TimeInterval) -> [Double?] {
-        guard let ticks = Self.readTicks() else {
+        let stride = Int(CPU_STATE_MAX)
+        guard let ticks = processorInfo(PROCESSOR_CPU_LOAD_INFO, stride: stride, { info, processors in
+            (0..<processors).map { index in
+                let base = index * stride
+                return CPUCoreTicks(user: UInt32(bitPattern: info[base + Int(CPU_STATE_USER)]),
+                                    system: UInt32(bitPattern: info[base + Int(CPU_STATE_SYSTEM)]),
+                                    idle: UInt32(bitPattern: info[base + Int(CPU_STATE_IDLE)]),
+                                    nice: UInt32(bitPattern: info[base + Int(CPU_STATE_NICE)]))
+            }
+        }) else {
             previous = nil
             return []
         }
@@ -45,29 +54,24 @@ final class CPUCoreSampler {
         }
         return zip(ticks, previous.ticks).map { $0.usage(since: $1) }
     }
+}
 
-    private static func readTicks() -> [CPUCoreTicks]? {
-        var processorCount: natural_t = 0
-        var info: processor_info_array_t?
-        var count: mach_msg_type_number_t = 0
-        let host = mach_host_self()
-        defer { mach_port_deallocate(mach_task_self_, host) }
-        guard host_processor_info(host, PROCESSOR_CPU_LOAD_INFO, &processorCount, &info, &count) == KERN_SUCCESS,
-              let info else { return nil }
-        defer {
-            vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: info)),
-                          vm_size_t(count) * vm_size_t(MemoryLayout<integer_t>.stride))
-        }
-        let stride = Int(CPU_STATE_MAX)
-        guard processorCount > 0, Int(processorCount) <= Int(count) / stride else { return nil }
-        return (0..<Int(processorCount)).map { index in
-            let base = index * stride
-            return CPUCoreTicks(user: UInt32(bitPattern: info[base + Int(CPU_STATE_USER)]),
-                                system: UInt32(bitPattern: info[base + Int(CPU_STATE_SYSTEM)]),
-                                idle: UInt32(bitPattern: info[base + Int(CPU_STATE_IDLE)]),
-                                nice: UInt32(bitPattern: info[base + Int(CPU_STATE_NICE)]))
-        }
+/// Runs `host_processor_info` and hands `read` the records, `stride` integers
+/// per processor, and the processor count.
+private func processorInfo<T>(_ flavor: processor_flavor_t, stride: Int,
+                              _ read: (processor_info_array_t, Int) -> T) -> T? {
+    var processors: natural_t = 0
+    var info: processor_info_array_t?
+    var count: mach_msg_type_number_t = 0
+    let host = mach_host_self()
+    defer { mach_port_deallocate(mach_task_self_, host) }
+    guard host_processor_info(host, flavor, &processors, &info, &count) == KERN_SUCCESS, let info else { return nil }
+    defer {
+        vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: info)),
+                      vm_size_t(count) * vm_size_t(MemoryLayout<integer_t>.stride))
     }
+    guard processors > 0, Int(processors) <= Int(count) / stride else { return nil }
+    return read(info, Int(processors))
 }
 
 /// A core class (sysctl perflevel name, such as "Performance") and the
@@ -155,10 +159,7 @@ enum CPUCoreTopology {
                        cores: [(id: Int, type: String)],
                        slots: [Int]) -> [CPUCoreGroup] {
         let fallback = slots.isEmpty ? [] : [CPUCoreGroup(name: "CPU", indices: Array(slots.indices))]
-        guard !levels.isEmpty, levels.allSatisfy({ $0.count > 0 }),
-              Set(levels.map(\.name)).count == levels.count,
-              levels.reduce(0, { $0 + $1.count }) == slots.count,
-              Set(slots).count == slots.count,
+        guard Set(levels.map(\.name)).count == levels.count, Set(slots).count == slots.count,
               cores.count == slots.count, Set(cores.map(\.id)) == Set(slots)
         else { return fallback }
         // XNU orders perflevels by cluster performance, not by logical CPU ID.
@@ -178,21 +179,11 @@ enum CPUCoreTopology {
     private static func read() -> [CPUCoreGroup] {
         #if arch(arm64)
         guard let levelCount = integer("hw.nperflevels"), (1...8).contains(levelCount) else { return [] }
-        var processors: natural_t = 0
-        var info: processor_info_array_t?
-        var count: mach_msg_type_number_t = 0
-        let host = mach_host_self()
-        defer { mach_port_deallocate(mach_task_self_, host) }
-        guard host_processor_info(host, PROCESSOR_BASIC_INFO, &processors, &info, &count) == KERN_SUCCESS,
-              let info else { return [] }
-        defer {
-            vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: info)),
-                          vm_size_t(count) * vm_size_t(MemoryLayout<integer_t>.stride))
-        }
         let recordStride = MemoryLayout<processor_basic_info>.stride / MemoryLayout<integer_t>.stride
-        guard processors > 0, Int(processors) <= Int(count) / recordStride else { return [] }
-        let records = UnsafeRawPointer(info).assumingMemoryBound(to: processor_basic_info.self)
-        let slots = (0..<Int(processors)).map { Int(records[$0].slot_num) }
+        guard let slots = processorInfo(PROCESSOR_BASIC_INFO, stride: recordStride, { info, processors in
+            let records = UnsafeRawPointer(info).assumingMemoryBound(to: processor_basic_info.self)
+            return (0..<processors).map { Int(records[$0].slot_num) }
+        }) else { return [] }
         var levels: [(name: String, count: Int)] = []
         for level in 0..<levelCount {
             guard let name = string("hw.perflevel\(level).name"),

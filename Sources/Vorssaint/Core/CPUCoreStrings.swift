@@ -31,8 +31,7 @@ extension FeatureStrings {
         case .ko: return .ko
         case .uk: return .uk
         case .zhHans: return .zhHans
-        case .zhTW: return .zhTW
-        case .zhHK: return .zhHK
+        case .zhTW, .zhHK: return .zhTW
         }
     }
 }
@@ -180,17 +179,6 @@ extension CPUCoreFeatureStrings {
     )
 
     static let zhTW = CPUCoreFeatureStrings(
-        title: "CPU 邏輯核心",
-        coreFormat: "核心 %d",
-        hint: "每條代表一個邏輯核心，填充高度表示使用率，不表示剩餘效能。",
-        superCores: "超級核心",
-        performanceCores: "效能核心",
-        efficiencyCores: "節能核心",
-        apps: "正使用 CPU 的 App",
-        perCore: "每個核心"
-    )
-
-    static let zhHK = CPUCoreFeatureStrings(
         title: "CPU 邏輯核心",
         coreFormat: "核心 %d",
         hint: "每條代表一個邏輯核心，填充高度表示使用率，不表示剩餘效能。",

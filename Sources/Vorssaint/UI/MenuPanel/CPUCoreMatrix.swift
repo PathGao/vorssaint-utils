@@ -12,13 +12,10 @@ struct CPUCoreMatrix: View {
     @State private var width: CGFloat = 280
     let usage: [Double?]
 
-    private var rows: [[CPUCoreSegment]] {
-        CPUCoreLayout.rows(groups: CPUCoreTopology.groups(for: usage.count), width: max(70, width - 16))
-    }
-
     var body: some View {
         let strings = FeatureStrings.cpuCores(l10n.language)
-        let layout = rows
+        let layout: [[CPUCoreSegment]] = CPUCoreLayout.rows(groups: CPUCoreTopology.groups(for: usage.count),
+                                                            width: max(70, width - 16))
         let rowCount = CGFloat(layout.count)
         let height: CGFloat = rowCount * 88 + max(0, rowCount - 1) * 12 + 16
         GeometryReader { proxy in
@@ -72,8 +69,7 @@ struct CPUCoreMatrix: View {
     }
 
     private func coreBar(_ index: Int, strings: CPUCoreFeatureStrings) -> some View {
-        let raw: Double? = usage.indices.contains(index) ? usage[index] : nil
-        let value: Double? = raw.flatMap { $0.isFinite ? min(1, max(0, $0)) : nil }
+        let value: Double? = usage[index]
         let increasedContrast = contrast == .increased
         return GeometryReader { proxy in
             ZStack(alignment: .bottom) {
