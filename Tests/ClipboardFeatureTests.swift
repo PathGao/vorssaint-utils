@@ -1076,6 +1076,24 @@ enum ClipboardFeatureTests {
             encoding: .utf8)) ?? ""
         suite.expect(pastePlainSource.contains("GeneralPasteboardAccess.shared.async"),
                "paste as plain text reads the clipboard on the lane, not on the main thread")
+        // Ordering out keeps a sheet attached, so a Clear unpinned question
+        // left open would come back with its old count on the next opening.
+        let historySource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/Services/Clipboard/ClipboardHistoryService.swift",
+            encoding: .utf8)) ?? ""
+        let hideBody = historySource.components(separatedBy: "    func hideHistoryWindow() {").dropFirst().first?
+            .components(separatedBy: "\n    }\n").first ?? ""
+        suite.expect(hideBody.contains("panel.endSheet(sheet)")
+                     && (hideBody.range(of: "endSheet")?.lowerBound ?? hideBody.endIndex)
+                        < (hideBody.range(of: "orderOut")?.lowerBound ?? hideBody.startIndex)
+                     && historySource.contains("event.window === panel, panel.attachedSheet == nil"),
+               "the history window ends an open confirmation before hiding and leaves its keys to it")
+        let panelClipboardSource = (try? String(
+            contentsOfFile: "Sources/Vorssaint/UI/MenuPanel/PanelClipboardView.swift",
+            encoding: .utf8)) ?? ""
+        suite.expect(panelClipboardSource.contains("if inNotch { confirmClearAboveIsland(ids) } else { clearingIDs = ids }")
+                     && panelClipboardSource.contains("NSAlert.confirmAboveIsland("),
+               "inside the island the clipboard panel asks above it instead of hanging a sheet from it")
         for (terminated, trusted, expected) in [
             (true, true, ["beep"]),
             (false, false, ["activate", "prompt", "activate", "beep"]),
@@ -1119,7 +1137,6 @@ enum ClipboardPreviewContract {
         func save() {}
         var quickQuery = ""
         var quickSelectionID: UUID?
-        var quickSelectionIndex = 0
         var quickSelectionIsVisible = false
         var quickBatchEntryIDs: Set<UUID> = []
         var keyboardSelectionPointer: NSPoint?

@@ -344,6 +344,20 @@ enum CommandBarFeatureTests {
                             query: split.text),
                          "\(query) still finds the display brightness row with its value")
         }
+        let clipboardActionsCode = commandBarCatalogLines.firstIndex {
+            isCodeLine($0) && $0.contains("if AppFeature.clipboardHistory.isAvailable {")
+        }.map {
+            commandBarCatalogLines[$0...]
+                .prefix { !$0.contains("if AppFeature.textSnippets.isAvailable {") }
+                .filter(isCodeLine)
+                .joined(separator: "\n")
+        } ?? ""
+        suite.expect(clipboardActionsCode.contains("id: \"action.clipboardClearRecent\"")
+                && clipboardActionsCode.contains("title: clipboard.clearRecent")
+                && clipboardActionsCode.contains(
+                    "confirmationPrompt: String(format: clipboard.clearRecentConfirmFormat, recentIDs.count)")
+                && clipboardActionsCode.contains("ClipboardHistoryService.shared.clearRecent(recentIDs)"),
+               "the Command Bar clears only the unpinned clipboard items it counted, after confirmation")
         for accepts in [true, false] {
             CopyAnswerHost.Pasteboard.general.accepts = accepts
             CopyAnswerHost.HUD.shown = []
