@@ -4,38 +4,6 @@
 import AppKit
 import SwiftUI
 
-enum ClipboardHistoryWindowSizing {
-    static let compactDefault = NSSize(width: 560, height: 420)
-    static let compactMinimum = NSSize(width: 560, height: 300)
-    static let previewExtra = NSSize(width: 280, height: 80)
-
-    static func minimumSize(preview: Bool) -> NSSize {
-        NSSize(width: compactMinimum.width + (preview ? previewExtra.width : 0),
-               height: compactMinimum.height + (preview ? previewExtra.height : 0))
-    }
-
-    static func contentSize(preview: Bool, savedWidth: Double, savedHeight: Double,
-                            visibleFrame: NSRect) -> NSSize {
-        let minimum = minimumSize(preview: preview)
-        let width = savedWidth.isFinite && savedWidth >= compactMinimum.width
-            ? CGFloat(savedWidth) : compactDefault.width
-        let height = savedHeight.isFinite && savedHeight >= compactMinimum.height
-            ? CGFloat(savedHeight) : compactDefault.height
-        let requested = NSSize(width: width + (preview ? previewExtra.width : 0),
-                               height: height + (preview ? previewExtra.height : 0))
-        return NSSize(width: max(minimum.width, min(requested.width, visibleFrame.width - 32)),
-                      height: max(minimum.height, min(requested.height, visibleFrame.height - 32)))
-    }
-
-    static func savedCompactSize(from contentSize: NSSize, preview: Bool) -> NSSize? {
-        let width = contentSize.width - (preview ? previewExtra.width : 0)
-        let height = contentSize.height - (preview ? previewExtra.height : 0)
-        guard width.isFinite, height.isFinite,
-              width >= compactMinimum.width, height >= compactMinimum.height else { return nil }
-        return NSSize(width: width, height: height)
-    }
-}
-
 /// Main-thread capture admission. Expiring a result does not release the
 /// actual queued read; stop/start must not release it either.
 struct ClipboardHistoryCaptureState {
@@ -122,6 +90,10 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
     let imageHash: String?
     let imageWidth: Int?
     let imageHeight: Int?
+    /// The app the copy came from, when the history could tell. Optional, so
+    /// a history written before it existed still decodes, and an older
+    /// version reading this file skips the key.
+    var sourceBundleID: String?
 
     init(id: UUID = UUID(),
          text: String,
@@ -225,6 +197,7 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, text, copiedAt, pinnedAt, kind, filePaths, imageFile, imageHash, imageWidth, imageHeight
+        case sourceBundleID
     }
 
     init(from decoder: Decoder) throws {
@@ -240,6 +213,7 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
         imageHash = try container.decodeIfPresent(String.self, forKey: .imageHash)
         imageWidth = try container.decodeIfPresent(Int.self, forKey: .imageWidth)
         imageHeight = try container.decodeIfPresent(Int.self, forKey: .imageHeight)
+        sourceBundleID = try container.decodeIfPresent(String.self, forKey: .sourceBundleID)
     }
 }
 
@@ -834,6 +808,23 @@ enum ClipboardHistoryPasteboardText {
         guard let raw else { return nil }
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? nil : text
+    }
+}
+
+extension NSPasteboard.PasteboardType {
+    /// The nspasteboard.org mark naming the app that wrote the pasteboard,
+    /// read beside the concealed mark below.
+    static let source = NSPasteboard.PasteboardType("org.nspasteboard.source")
+}
+
+extension NSPasteboard {
+    /// Signs a write Vorssaint makes for itself (copied OCR text, a Command
+    /// Bar answer, a color), so the clipboard history does not credit it to
+    /// whichever app happens to be in front. Called after the content is
+    /// written: it joins the first item instead of adding one.
+    func declareVorssaintSource() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        setString(bundleID, forType: .source)
     }
 }
 

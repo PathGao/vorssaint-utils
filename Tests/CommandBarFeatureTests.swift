@@ -20,6 +20,7 @@ enum CommandBarFeatureTests {
             static let general = Pasteboard()
             var accepts = true
             func clearContents() {}
+            func declareVorssaintSource() {}
             func setString(_ value: String, forType: Kind) -> Bool { accepts }
         }
         typealias NSPasteboard = Pasteboard

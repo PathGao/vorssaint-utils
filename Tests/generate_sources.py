@@ -296,6 +296,11 @@ def main():
           + declaration("Sources/Vorssaint/Services/Clipboard/ClipboardHistoryService.swift",
                         "    private func pasteIntoPreviousApp(").replace("private func", "func", 1)
           + "}\n")
+    write("ClipboardSource.swift", "import Foundation\n"
+          + "extension ClipboardFeatureTests.SourceHost {\n"
+          + declaration("Sources/Vorssaint/Services/Clipboard/ClipboardIgnoredApps.swift",
+                        "    func sourceSinceLastCheck(")
+          + "}\n")
     write("CommandBarCopyAnswer.swift", "import Foundation\n"
           + "extension CommandBarFeatureTests.CopyAnswerHost {\n"
           + declaration("Sources/Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
