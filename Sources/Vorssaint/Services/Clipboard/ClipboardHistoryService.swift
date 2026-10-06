@@ -57,7 +57,10 @@ final class ClipboardHistoryService: ObservableObject {
             }
         }
     }
-    @Published private(set) var quickSelectionIndex = 0
+    /// The highlighted entry itself, not its row: a copy arriving while the
+    /// window is open inserts above it, and a position would then point at
+    /// a different entry than the one Return is about to paste.
+    @Published private(set) var quickSelectionID: UUID?
     @Published private(set) var quickSelectionIsVisible = false
     @Published private(set) var quickWindowPresentationID = UUID()
     @Published private(set) var quickPreviewPresented = UserDefaults.standard.bool(
@@ -362,8 +365,11 @@ final class ClipboardHistoryService: ObservableObject {
         return true
     }
 
-    func clearRecent() {
-        entries.removeAll { !$0.isPinned }
+    /// Deletes only the unpinned entries the confirmation counted, so a copy
+    /// that lands while it is open survives and the count shown is the count
+    /// removed.
+    func clearRecent(_ confirmedIDs: Set<UUID>) {
+        entries.removeAll { !$0.isPinned && confirmedIDs.contains($0.id) }
         pruneQuickBatchSelection()
         save()
     }
@@ -402,8 +408,7 @@ final class ClipboardHistoryService: ObservableObject {
 
     var selectedQuickEntry: ClipboardHistoryEntry? {
         let matches = filteredQuickEntries
-        guard !matches.isEmpty else { return nil }
-        return matches[clampedQuickSelectionIndex(for: matches.count)]
+        return matches.first { $0.id == quickSelectionID } ?? matches.first
     }
 
     func isQuickBatchSelected(_ entry: ClipboardHistoryEntry) -> Bool {
@@ -411,9 +416,7 @@ final class ClipboardHistoryService: ObservableObject {
     }
 
     func toggleQuickBatchSelection(_ entry: ClipboardHistoryEntry) {
-        if let index = filteredQuickEntries.firstIndex(where: { $0.id == entry.id }) {
-            quickSelectionIndex = index
-        }
+        quickSelectionID = entry.id
         var selected = quickBatchEntryIDs
         if selected.contains(entry.id) {
             selected.remove(entry.id)
@@ -428,12 +431,12 @@ final class ClipboardHistoryService: ObservableObject {
     func extendQuickBatchSelection(to entry: ClipboardHistoryEntry) {
         let matches = filteredQuickEntries
         guard let target = matches.firstIndex(where: { $0.id == entry.id }) else { return }
-        let anchor = clampedQuickSelectionIndex(for: matches.count)
+        let anchor = selectedQuickIndex(in: matches)
         let ids = ClipboardHistoryBatch.rangeSelectionIDs(allIDs: matches.map(\.id),
                                                           anchor: anchor,
                                                           target: target)
         quickBatchEntryIDs = quickBatchEntryIDs.union(ids)
-        quickSelectionIndex = target
+        quickSelectionID = entry.id
         quickSelectionIsVisible = true
     }
 
@@ -518,18 +521,20 @@ final class ClipboardHistoryService: ObservableObject {
     func togglePinSelectedQuickEntry() {
         guard let entry = selectedQuickEntry else { return }
         togglePin(entry)
-        quickSelectionIndex = clampedQuickSelectionIndex(for: filteredQuickEntries.count)
     }
 
     func removeSelectedQuickEntries() {
         let selectedEntries = quickEntriesForPrimaryAction()
         guard !selectedEntries.isEmpty else { return }
         let idsToRemove = Set(selectedEntries.map(\.id))
+        let position = selectedQuickIndex(in: filteredQuickEntries)
         entries.removeAll { idsToRemove.contains($0.id) }
         var selected = quickBatchEntryIDs
         selected.subtract(idsToRemove)
         quickBatchEntryIDs = selected
-        quickSelectionIndex = clampedQuickSelectionIndex(for: filteredQuickEntries.count)
+        // The highlight stays where the removed entry was.
+        let remaining = filteredQuickEntries
+        quickSelectionID = remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)].id
         save()
     }
 
@@ -542,18 +547,16 @@ final class ClipboardHistoryService: ObservableObject {
         // Out of the way while the keys drive, back at the first real move.
         NSCursor.setHiddenUntilMouseMoves(true)
         keyboardSelectionPointer = NSEvent.mouseLocation
-        let count = filteredQuickEntries.count
-        guard count > 0 else {
-            quickSelectionIndex = 0
+        let matches = filteredQuickEntries
+        guard !matches.isEmpty else {
+            quickSelectionID = nil
             quickSelectionIsVisible = false
             return
         }
-        if !quickSelectionIsVisible {
-            quickSelectionIndex = clampedQuickSelectionIndex(for: count)
-            quickSelectionIsVisible = true
-            return
-        }
-        quickSelectionIndex = min(max(quickSelectionIndex + delta, 0), count - 1)
+        let current = selectedQuickIndex(in: matches)
+        let index = quickSelectionIsVisible ? min(max(current + delta, 0), matches.count - 1) : current
+        quickSelectionID = matches[index].id
+        quickSelectionIsVisible = true
     }
 
     /// The window leaves the screen at once; the paste waits for the write,
@@ -1485,7 +1488,7 @@ final class ClipboardHistoryService: ObservableObject {
     }
 
     private func resetQuickSelection() {
-        quickSelectionIndex = ClipboardHistorySelection.initialIndex(totalCount: filteredQuickEntries.count)
+        quickSelectionID = nil
         quickSelectionIsVisible = false
     }
 
@@ -1523,8 +1526,9 @@ final class ClipboardHistoryService: ObservableObject {
         }
     }
 
-    private func clampedQuickSelectionIndex(for count: Int) -> Int {
-        min(max(quickSelectionIndex, 0), max(count - 1, 0))
+    /// A highlighted entry that left the results falls back to the first.
+    private func selectedQuickIndex(in matches: [ClipboardHistoryEntry]) -> Int {
+        matches.firstIndex { $0.id == quickSelectionID } ?? 0
     }
 }
 

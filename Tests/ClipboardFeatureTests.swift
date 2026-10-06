@@ -578,6 +578,8 @@ enum ClipboardFeatureTests {
                          "\(language.rawValue) paste-selected button format")
             expectFormat(clipboardStrings.copySelectedFormat, ["d"],
                          "\(language.rawValue) copy-selected button format")
+            expectFormat(clipboardStrings.clearRecentConfirmFormat, ["d"],
+                         "\(language.rawValue) clear-unpinned confirmation format")
             suite.expect(!clipboardStrings.autoClearEnable.isEmpty
                    && !clipboardStrings.autoClearSecondsSuffix.isEmpty
                    && !clipboardStrings.autoClearOnSleep.isEmpty
@@ -629,10 +631,6 @@ enum ClipboardFeatureTests {
                "English monitor repeat control is explicit")
         suite.expect(FeatureStrings.monitorAlerts(.ptBR).cooldown == "Repetir o mesmo alerta depois de",
                "Portuguese monitor repeat control is explicit")
-        suite.expect(ClipboardHistorySelection.initialIndex(totalCount: 3) == 0,
-               "clipboard quick window starts keyboard navigation on the first item")
-        suite.expect(ClipboardHistorySelection.initialIndex(totalCount: 0) == 0,
-               "clipboard quick window keeps an empty selection index safe")
 
         // MARK: Settings search navigation
 
@@ -1106,6 +1104,7 @@ enum ClipboardFeatureTests {
 /// pasteboard. A saved-text edit must not claim that the clipboard changed.
 enum ClipboardPreviewContract {
     class Fixture {
+        func pruneQuickBatchSelection() {}
         var latestPasteboardEntry: ClipboardHistoryEntry?
         var entriesStamp = 0
         var searchCache = ClipboardHistorySearchCache()
@@ -1118,6 +1117,14 @@ enum ClipboardPreviewContract {
         var encodedHistoryByteLimit = ClipboardHistoryEditing.maxEncodedHistoryBytes
         func trimToLimit() {}
         func save() {}
+        var quickQuery = ""
+        var quickSelectionID: UUID?
+        var quickSelectionIndex = 0
+        var quickSelectionIsVisible = false
+        var quickBatchEntryIDs: Set<UUID> = []
+        var keyboardSelectionPointer: NSPoint?
+        enum NSCursor { static func setHiddenUntilMouseMoves(_ hidden: Bool) {} }
+        enum NSEvent { static let mouseLocation = NSPoint.zero }
     }
 
     static func run(_ suite: TestSuite) {
@@ -1234,6 +1241,15 @@ enum ClipboardPreviewContract {
         suite.expect(service.entries.first { $0.id == heavy[0].id }?.isPinned == false,
                      "unpinning is never refused by the size of the saved file")
 
+        let counted = ClipboardHistoryEntry(text: "Counted by the confirmation")
+        let copiedLater = ClipboardHistoryEntry(text: "Copied while the confirmation was open")
+        var pinnedLater = ClipboardHistoryEntry(text: "Pinned while the confirmation was open")
+        pinnedLater.pinnedAt = Date()
+        service.setEntries([pinnedLater, copiedLater, counted])
+        service.clearRecent([counted.id, pinnedLater.id])
+        suite.expect(service.entries.map(\.id) == [pinnedLater.id, copiedLater.id],
+                     "clearing deletes only the unpinned items the confirmation counted")
+
         var pinnedItem = ClipboardHistoryEntry(text: "Candidate Alpha")
         pinnedItem.pinnedAt = Date()
         let recentItem = ClipboardHistoryEntry(text: "Candidate Beta")
@@ -1311,6 +1327,29 @@ enum ClipboardPreviewContract {
         suite.expect(editedPass.map(\.text) == ["Beta edited notes"], "search sees the edited text")
         suite.expect(service.searchCache.foldCount == foldsAtStart + 4, "only the edited entry refolds")
         searchFolding(suite)
+        quickSelection(suite)
+    }
+
+    /// The window's highlight is what Return pastes, so it has to stay on the
+    /// entry the arrow keys chose while the history changes under it.
+    private static func quickSelection(_ suite: TestSuite) {
+        let service = Service()
+        let a = ClipboardHistoryEntry(text: "A"), b = ClipboardHistoryEntry(text: "B")
+        let c = ClipboardHistoryEntry(text: "C"), fresh = ClipboardHistoryEntry(text: "Copied while open")
+        service.setEntries([a, b, c])
+        suite.expect(service.selectedQuickEntry == a, "before any arrow key, Return pastes the newest entry")
+        service.moveQuickSelection(1)
+        service.moveQuickSelection(1)
+        suite.expect(service.selectedQuickEntry == b, "the second arrow press highlights the second entry")
+        service.setEntries([fresh, a, b, c])
+        suite.expect(service.selectedQuickEntry == b,
+                     "a copy arriving above the highlight leaves it on the entry Return will paste")
+        service.moveQuickSelection(1)
+        suite.expect(service.selectedQuickEntry == c, "the next arrow press moves on from where the highlight is")
+        service.moveQuickSelection(-1)
+        service.removeSelectedQuickEntries()
+        suite.expect(service.entries == [fresh, a, c] && service.selectedQuickEntry == c,
+                     "deleting the highlighted entry highlights the one that took its place")
     }
 
     /// #1885: typing searches the history once per keystroke, so the folded

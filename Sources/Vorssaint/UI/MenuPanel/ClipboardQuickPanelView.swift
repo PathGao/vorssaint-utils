@@ -9,6 +9,7 @@ struct ClipboardQuickPanelView: View {
     @FocusState private var searchFocused: Bool
     @State private var previewSelection = QuickPreviewSelection()
     @State private var previewIsEditing = false
+    @State private var clearingIDs: Set<UUID>?
 
     private var text: ClipboardFeatureStrings {
         FeatureStrings.clipboard(l10n.language)
@@ -58,7 +59,7 @@ struct ClipboardQuickPanelView: View {
             previewSelection.select(nil)
             previewIsEditing = false
         }
-        .onChange(of: history.quickSelectionIndex) { _, _ in
+        .onChange(of: history.quickSelectionID) { _, _ in
             previewSelection.select(history.selectedQuickEntryID)
         }
         .onChange(of: history.quickQuery) { _, _ in
@@ -127,7 +128,7 @@ struct ClipboardQuickPanelView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .background(ScrollBounceDisabler())
-                .onChange(of: history.quickSelectionIndex) { _, _ in
+                .onChange(of: history.quickSelectionID) { _, _ in
                     scrollSelectedEntry(with: proxy)
                 }
                 .onChange(of: history.quickSelectionIsVisible) { _, _ in
@@ -241,11 +242,12 @@ struct ClipboardQuickPanelView: View {
                 }
             } else {
                 Button {
-                    history.clearRecent()
+                    clearingIDs = Set(history.recentEntries.map(\.id))
                 } label: {
                     Label(text.clearRecent, systemImage: "trash")
                 }
                 .disabled(history.recentEntries.isEmpty)
+                .modifier(ClipboardClearRecentConfirmation(entryIDs: $clearingIDs))
             }
             Spacer()
             HStack(spacing: 5) {

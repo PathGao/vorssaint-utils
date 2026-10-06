@@ -208,7 +208,9 @@ extension ClipboardFeatureStrings {
         menuBarPreview: "메뉴 막대에 최근 복사 항목 표시",
         menuBarPreviewCaption: "아이콘 옆에 최근 복사한 내용의 축약된 미리보기를 표시합니다. 클릭하면 기록이 열립니다.",
         menuBarPreviewLength: "미리보기 길이",
-        menuBarPreviewLengthSuffix: "자"
+        menuBarPreviewLengthSuffix: "자",
+        clearRecentConfirmFormat: "고정되지 않은 항목 %d개를 지울까요?",
+        clearRecentConfirmMessage: "고정된 항목과 이후에 복사한 내용은 유지됩니다. 되돌릴 수 없습니다."
     )
 }
 
@@ -526,6 +528,8 @@ struct ClipboardFeatureStrings {
     let menuBarPreviewCaption: String
     let menuBarPreviewLength: String
     let menuBarPreviewLengthSuffix: String
+    let clearRecentConfirmFormat: String
+    let clearRecentConfirmMessage: String
 
     static let enUS = ClipboardFeatureStrings(
         title: "Clipboard",
@@ -585,7 +589,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Show latest copy in the menu bar",
         menuBarPreviewCaption: "Shows a shortened preview of your last copy next to the icon. Click it to open the history.",
         menuBarPreviewLength: "Preview length",
-        menuBarPreviewLengthSuffix: "characters"
+        menuBarPreviewLengthSuffix: "characters",
+        clearRecentConfirmFormat: "Clear unpinned (%d)?",
+        clearRecentConfirmMessage: "Pinned items stay, and so does anything copied after this. This can’t be undone."
     )
 
     static let ptBR = ClipboardFeatureStrings(
@@ -646,7 +652,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Mostrar a última cópia na barra de menus",
         menuBarPreviewCaption: "Mostra uma prévia resumida da sua última cópia ao lado do ícone. Clique nela para abrir o histórico.",
         menuBarPreviewLength: "Tamanho da prévia",
-        menuBarPreviewLengthSuffix: "caracteres"
+        menuBarPreviewLengthSuffix: "caracteres",
+        clearRecentConfirmFormat: "Limpar não fixados (%d)?",
+        clearRecentConfirmMessage: "Os itens fixados ficam, e o que for copiado depois disso também. Não dá para desfazer."
     )
 
     static let tr = ClipboardFeatureStrings(
@@ -707,7 +715,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Menü çubuğunda son kopyalananı göster",
         menuBarPreviewCaption: "Simgenin yanında son kopyalananın kısaltılmış bir önizlemesini gösterir. Geçmişi açmak için üzerine tıkla.",
         menuBarPreviewLength: "Önizleme uzunluğu",
-        menuBarPreviewLengthSuffix: "karakter"
+        menuBarPreviewLengthSuffix: "karakter",
+        clearRecentConfirmFormat: "%d sabitlenmemiş öğe temizlensin mi?",
+        clearRecentConfirmMessage: "Sabitlenen öğeler ve bundan sonra kopyalananlar kalır. Bu işlem geri alınamaz."
     )
 
     static let ru = ClipboardFeatureStrings(
@@ -768,7 +778,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Показывать последнюю скопированную запись в строке меню",
         menuBarPreviewCaption: "Показывает сокращённый предпросмотр последней скопированной записи рядом со значком. Нажмите на него, чтобы открыть историю.",
         menuBarPreviewLength: "Длина предпросмотра",
-        menuBarPreviewLengthSuffix: "символов"
+        menuBarPreviewLengthSuffix: "символов",
+        clearRecentConfirmFormat: "Очистить незакреплённые (%d)?",
+        clearRecentConfirmMessage: "Закреплённые останутся, как и всё, что скопировано после этого. Отменить нельзя."
     )
 
     static let es = ClipboardFeatureStrings(
@@ -829,7 +841,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Mostrar la última copia en la barra de menús",
         menuBarPreviewCaption: "Muestra una vista previa abreviada de tu última copia junto al icono. Haz clic para abrir el historial.",
         menuBarPreviewLength: "Longitud de la vista previa",
-        menuBarPreviewLengthSuffix: "caracteres"
+        menuBarPreviewLengthSuffix: "caracteres",
+        clearRecentConfirmFormat: "¿Limpiar no fijados (%d)?",
+        clearRecentConfirmMessage: "Los fijados se conservan, y también lo que copies después. No se puede deshacer."
     )
 
     static let sk = ClipboardFeatureStrings(
@@ -890,7 +904,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Zobraziť poslednú kópiu v lište",
         menuBarPreviewCaption: "Zobrazí skrátený náhľad poslednej kópie vedľa ikony. Kliknutím naň otvoríte históriu.",
         menuBarPreviewLength: "Dĺžka náhľadu",
-        menuBarPreviewLengthSuffix: "znakov"
+        menuBarPreviewLengthSuffix: "znakov",
+        clearRecentConfirmFormat: "Vymazať nepripnuté (%d)?",
+        clearRecentConfirmMessage: "Pripnuté položky zostanú, rovnako ako všetko, čo skopírujete potom. Nedá sa to vrátiť späť."
     )
 
     static let de = ClipboardFeatureStrings(
@@ -951,7 +967,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Letzte Kopie in der Menüleiste anzeigen",
         menuBarPreviewCaption: "Zeigt eine gekürzte Vorschau deiner letzten Kopie neben dem Symbol. Klicke darauf, um den Verlauf zu öffnen.",
         menuBarPreviewLength: "Vorschaulänge",
-        menuBarPreviewLengthSuffix: "Zeichen"
+        menuBarPreviewLengthSuffix: "Zeichen",
+        clearRecentConfirmFormat: "Nicht angeheftete löschen (%d)?",
+        clearRecentConfirmMessage: "Angeheftete bleiben, ebenso alles, was du danach kopierst. Das lässt sich nicht widerrufen."
     )
 
     static let fr = ClipboardFeatureStrings(
@@ -1012,7 +1030,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Afficher la dernière copie dans la barre des menus",
         menuBarPreviewCaption: "Affiche un aperçu raccourci de votre dernière copie à côté de l’icône. Cliquez dessus pour ouvrir l’historique.",
         menuBarPreviewLength: "Longueur de l’aperçu",
-        menuBarPreviewLengthSuffix: "caractères"
+        menuBarPreviewLengthSuffix: "caractères",
+        clearRecentConfirmFormat: "Effacer non épinglés (%d)\u{00A0}?",
+        clearRecentConfirmMessage: "Les éléments épinglés restent, comme tout ce qui sera copié ensuite. Action irréversible."
     )
 
     static let it = ClipboardFeatureStrings(
@@ -1073,7 +1093,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Mostra l’ultima copia nella barra dei menu",
         menuBarPreviewCaption: "Mostra un’anteprima abbreviata dell’ultima copia accanto all’icona. Fai clic per aprire la cronologia.",
         menuBarPreviewLength: "Lunghezza dell’anteprima",
-        menuBarPreviewLengthSuffix: "caratteri"
+        menuBarPreviewLengthSuffix: "caratteri",
+        clearRecentConfirmFormat: "Cancellare non fissati (%d)?",
+        clearRecentConfirmMessage: "Gli elementi fissati restano, come tutto ciò che copi dopo. Non si può annullare."
     )
 
     static let ja = ClipboardFeatureStrings(
@@ -1134,7 +1156,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "メニューバーに直前のコピーを表示",
         menuBarPreviewCaption: "アイコンの横に直前のコピーの短縮プレビューを表示します。クリックすると履歴が開きます。",
         menuBarPreviewLength: "プレビューの長さ",
-        menuBarPreviewLengthSuffix: "文字"
+        menuBarPreviewLengthSuffix: "文字",
+        clearRecentConfirmFormat: "未固定の%d件を消去しますか？",
+        clearRecentConfirmMessage: "固定済みの項目と、このあとにコピーした内容は残ります。元に戻せません。"
     )
 
     static let zhHans = ClipboardFeatureStrings(
@@ -1195,7 +1219,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "在菜单栏显示最近拷贝的内容",
         menuBarPreviewCaption: "在图标旁显示最近拷贝内容的简短预览，点击即可打开历史记录。",
         menuBarPreviewLength: "预览长度",
-        menuBarPreviewLengthSuffix: "个字符"
+        menuBarPreviewLengthSuffix: "个字符",
+        clearRecentConfirmFormat: "清除 %d 个未固定项目？",
+        clearRecentConfirmMessage: "已固定的项目和此后拷贝的内容会保留。此操作无法撤销。"
     )
 
     static let zhTW = ClipboardFeatureStrings(
@@ -1256,7 +1282,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "在選單列顯示最近複製的內容",
         menuBarPreviewCaption: "在圖示旁顯示最近複製內容的簡短預覽，點選即可開啟紀錄。",
         menuBarPreviewLength: "預覽長度",
-        menuBarPreviewLengthSuffix: "個字元"
+        menuBarPreviewLengthSuffix: "個字元",
+        clearRecentConfirmFormat: "清除 %d 個未釘選項目？",
+        clearRecentConfirmMessage: "已釘選的項目和之後複製的內容會保留。此動作無法還原。"
     )
 
     static let zhHK = ClipboardFeatureStrings(
@@ -1317,7 +1345,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "在選單列顯示最近複製的內容",
         menuBarPreviewCaption: "在圖示旁顯示最近複製內容的簡短預覽，按一下即可開啟記錄。",
         menuBarPreviewLength: "預覽長度",
-        menuBarPreviewLengthSuffix: "個字元"
+        menuBarPreviewLengthSuffix: "個字元",
+        clearRecentConfirmFormat: "清除 %d 個未釘選項目？",
+        clearRecentConfirmMessage: "已釘選的項目和之後複製的內容會保留。此動作無法還原。"
     )
 }
 
@@ -3141,7 +3171,9 @@ extension ClipboardFeatureStrings {
         menuBarPreview: "Показувати останню копію на смузі меню",
         menuBarPreviewCaption: "Показує скорочений перегляд останнього скопійованого вмісту поруч зі значком. Натисніть, щоб відкрити історію.",
         menuBarPreviewLength: "Довжина перегляду",
-        menuBarPreviewLengthSuffix: "симв."
+        menuBarPreviewLengthSuffix: "симв.",
+        clearRecentConfirmFormat: "Очистити незакріплене (%d)?",
+        clearRecentConfirmMessage: "Закріплені залишаться, як і все, що скопійовано після цього. Скасувати не можна."
     )
 }
 

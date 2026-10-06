@@ -640,11 +640,6 @@ enum SearchHighlightText {
 }
 
 enum ClipboardHistorySelection {
-    static func initialIndex(totalCount: Int) -> Int {
-        guard totalCount > 0 else { return 0 }
-        return 0
-    }
-
     static func previewEntry(preferredID: UUID?,
                              visibleEntries: [ClipboardHistoryEntry],
                              selectedEntry: ClipboardHistoryEntry?) -> ClipboardHistoryEntry? {
