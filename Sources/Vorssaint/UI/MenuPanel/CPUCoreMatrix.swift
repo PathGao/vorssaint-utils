@@ -19,27 +19,33 @@ struct CPUCoreMatrix: View {
     var body: some View {
         let strings = FeatureStrings.cpuCores(l10n.language)
         let layout = rows
+        let rowCount = CGFloat(layout.count)
+        let height: CGFloat = rowCount * 88 + max(0, rowCount - 1) * 12 + 16
         GeometryReader { proxy in
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(layout.indices, id: \.self) { row in
-                    HStack(alignment: .top, spacing: 12) {
-                        ForEach(layout[row].indices, id: \.self) { index in
-                            coreGroup(layout[row][index], strings: strings)
-                        }
-                    }
-                }
-            }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
-            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
-            .onAppear { width = proxy.size.width }
-            .onChange(of: proxy.size.width) { _, value in width = value }
+            grid(layout, strings: strings)
+                .onAppear { width = proxy.size.width }
+                .onChange(of: proxy.size.width) { _, value in width = value }
         }
-        .frame(height: CGFloat(layout.count * 88 + max(0, layout.count - 1) * 12 + 16))
+        .frame(height: height)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(strings.title)
         .accessibilityHint(strings.hint)
+    }
+
+    private func grid(_ layout: [[CPUCoreSegment]], strings: CPUCoreFeatureStrings) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(layout.indices, id: \.self) { row in
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(layout[row].indices, id: \.self) { index in
+                        coreGroup(layout[row][index], strings: strings)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
+        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
     }
 
     private func coreGroup(_ segment: CPUCoreSegment, strings: CPUCoreFeatureStrings) -> some View {
@@ -66,7 +72,8 @@ struct CPUCoreMatrix: View {
     }
 
     private func coreBar(_ index: Int, strings: CPUCoreFeatureStrings) -> some View {
-        let value = usage.indices.contains(index) ? usage[index].flatMap { $0.isFinite ? min(1, max(0, $0)) : nil } : nil
+        let raw: Double? = usage.indices.contains(index) ? usage[index] : nil
+        let value: Double? = raw.flatMap { $0.isFinite ? min(1, max(0, $0)) : nil }
         let increasedContrast = contrast == .increased
         return GeometryReader { proxy in
             ZStack(alignment: .bottom) {
