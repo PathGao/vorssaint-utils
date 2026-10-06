@@ -217,6 +217,51 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
     }
 }
 
+/// What the shelf files an entry under. Worked out on display and never
+/// saved: a new stored kind would make every older version fail to read
+/// the whole history.
+enum ClipboardContentType: CaseIterable {
+    case text, link, code, image, file
+
+    init(_ entry: ClipboardHistoryEntry) {
+        switch entry.kind {
+        case .image:
+            self = .image
+        case .files:
+            let oneImage = entry.filePaths.count == 1
+                && ClipboardHistoryImageSupport.isImageFileName(entry.filePaths[0])
+            self = oneImage ? .image : .file
+        case .text:
+            if ClipboardHistoryPasteboardText.normalizedWebURL(entry.text) != nil {
+                self = .link
+            } else {
+                self = Self.looksLikeCode(entry.text) ? .code : .text
+            }
+        }
+    }
+
+    /// A guess from the shape alone, so the tests pin its cases: JSON, a
+    /// shell command, or lines that mostly indent or end like statements.
+    /// Only the head of a long text is read.
+    private static func looksLikeCode(_ text: String) -> Bool {
+        let lines = text.prefix(20_000).split(whereSeparator: \.isNewline).prefix(200)
+            .filter { !$0.allSatisfy(\.isWhitespace) }
+        let head = text.drop(while: \.isWhitespace)
+        if let first = head.first, let last = text.last(where: { !$0.isWhitespace }),
+           (first == "{" && last == "}") || (first == "[" && last == "]") {
+            return true
+        }
+        if lines.count == 1 {
+            return ["$ ", "git ", "npm ", "brew "].contains { head.hasPrefix($0) }
+        }
+        let statements = lines.filter { line in
+            line.first == " " || line.first == "\t"
+                || ["{", "}", ";", ")", "=>"].contains { line.trimmingCharacters(in: .whitespaces).hasSuffix($0) }
+        }
+        return statements.count * 2 >= lines.count
+    }
+}
+
 enum ClipboardHistoryEditing {
     /// A copied document should stay available, while a pathological
     /// pasteboard payload still has a firm in-memory and on-disk bound.
@@ -775,7 +820,7 @@ enum ClipboardHistoryPasteboardText {
         return plain == stripped.withSlashes || plain == stripped.withoutSlashes
     }
 
-    private static func normalizedWebURL(_ raw: String?) -> String? {
+    static func normalizedWebURL(_ raw: String?) -> String? {
         guard let text = trimmed(raw),
               // A copy of several links keeps them apart with a line break, a
               // spreadsheet cell tab, or a space before the next word, and

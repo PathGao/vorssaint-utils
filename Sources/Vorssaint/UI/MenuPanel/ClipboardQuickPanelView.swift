@@ -75,6 +75,9 @@ struct ClipboardQuickPanelView: View {
             TextField(text.search, text: $history.quickQuery)
                 .textFieldStyle(.roundedBorder)
                 .focused($searchFocused)
+                .frame(maxWidth: 320)
+            typeTabs
+            Spacer()
             Button {
                 history.toggleQuickPreview()
             } label: {
@@ -101,6 +104,44 @@ struct ClipboardQuickPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
+    }
+
+    /// One tab per type, each counting what the search leaves of it. Clicking
+    /// the chosen tab again, or Tab past the last, shows every type.
+    private var typeTabs: some View {
+        let counts = Dictionary(grouping: history.filteredEntries(matching: history.quickQuery),
+                                by: history.contentType(of:)).mapValues(\.count)
+        return HStack(spacing: 4) {
+            ForEach(ClipboardContentType.allCases, id: \.self) { type in
+                typeTab(type, count: counts[type] ?? 0)
+            }
+        }
+    }
+
+    private func typeTab(_ type: ClipboardContentType, count: Int) -> some View {
+        let selected = history.quickContentType == type
+        return Button {
+            history.quickContentType = selected ? nil : type
+        } label: {
+            Text("\(typeTitle(type)) \(count)")
+                .font(.system(size: 11, weight: selected ? .semibold : .regular))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(selected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05),
+                            in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(count == 0 && !selected)
+    }
+
+    private func typeTitle(_ type: ClipboardContentType) -> String {
+        switch type {
+        case .text: return text.textTypeLabel
+        case .link: return text.linkTypeLabel
+        case .code: return text.codeTypeLabel
+        case .image: return text.imageEntryLabel
+        case .file: return text.fileTypeLabel
+        }
     }
 
     @ViewBuilder
@@ -161,11 +202,12 @@ struct ClipboardQuickPanelView: View {
         Color.clear.frame(width: Self.listInset - Self.cardSpacing, height: 1).id(Self.topAnchorID)
     }
 
-    /// Pinned cards first, then a rule, then the recent ones. A search
-    /// lists its matches by relevance with no rule.
+    /// Pinned cards first, then a rule, then the recent ones. A search or a
+    /// type tab lists its matches with no rule.
     @ViewBuilder
     private var sections: some View {
-        if history.quickQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if history.quickQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           history.quickContentType == nil {
             section(entries: history.pinnedEntries)
             if !history.pinnedEntries.isEmpty, !history.recentEntries.isEmpty {
                 Divider().frame(height: QuickEntryCard.size.height - 24)
@@ -445,8 +487,12 @@ private struct QuickEntryCard: View, Equatable {
                 if let color = entry.color {
                     ColorSwatch(color: color, size: 14)
                 }
-                SearchHighlightText.text(entry.preview, tokens: tokens, fontSize: 12)
-                    .font(.system(size: 12))
+                // Code keeps its line breaks and columns; prose folds into lines.
+                let isCode = history.contentType(of: entry) == .code
+                SearchHighlightText.text(isCode ? String(entry.text.prefix(ClipboardHistoryEditing.previewCharacters))
+                                                : entry.preview,
+                                         tokens: tokens, fontSize: isCode ? 11 : 12)
+                    .font(.system(size: isCode ? 11 : 12, design: isCode ? .monospaced : .default))
                     .lineLimit(7)
                     .truncationMode(.tail)
             }

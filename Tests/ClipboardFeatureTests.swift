@@ -839,6 +839,33 @@ enum ClipboardFeatureTests {
                    == "alpha\nbeta",
                "the plain-text fallback of a rich batch keeps only the text parts")
 
+        // MARK: Clipboard content types
+
+        let typeSamples: [(String, ClipboardContentType)] = [
+            ("https://github.com/vorssaintapp/vorssaint-utils", .link),
+            ("https://a.example\nhttps://b.example", .text),
+            ("see https://a.example for the plan", .text),
+            ("Meeting room 4F-B, Thursday at 15:00", .text),
+            ("Dear team,\nthanks for the update (and the notes).\nBest", .text),
+            ("#FF6B35", .text),
+            ("git fetch origin --prune", .code),
+            ("$ brew install swiftlint", .code),
+            ("{\"id\": 2613, \"merged\": true}", .code),
+            ("[1, 2, 3]", .code),
+            ("func greet() {\n    print(\"hi\")\n}", .code),
+            ("const add = (a, b) =>\n  a + b;", .code),
+        ]
+        for (sample, expected) in typeSamples {
+            suite.expect(ClipboardContentType(ClipboardHistoryEntry(text: sample)) == expected,
+                         "\(sample.debugDescription) files under \(expected)")
+        }
+        suite.expect(ClipboardContentType(ClipboardHistoryEntry(text: "", kind: .image, imageFile: "a.png")) == .image
+                     && ClipboardContentType(ClipboardHistoryEntry(text: "", kind: .files,
+                                                                   filePaths: ["/tmp/shot.png"])) == .image
+                     && ClipboardContentType(ClipboardHistoryEntry(text: "", kind: .files,
+                                                                   filePaths: ["/tmp/a.png", "/tmp/b.txt"])) == .file,
+                     "a copied image file counts as an image, several files as files")
+
         let legacyClipboardJSON = Data("""
         [{"text":"hello","copiedAt":700000000}]
         """.utf8)
@@ -1130,6 +1157,8 @@ enum ClipboardPreviewContract {
         var quickSelectionID: UUID?
         var quickSelectionIndex = 0
         var quickSelectionIsVisible = false
+        var quickContentType: ClipboardContentType?
+        var contentTypes: (stamp: Int, byID: [UUID: ClipboardContentType]) = (-1, [:])
         var quickBatchEntryIDs: Set<UUID> = []
         var keyboardSelectionPointer: NSPoint?
         enum NSCursor { static func setHiddenUntilMouseMoves(_ hidden: Bool) {} }
@@ -1359,6 +1388,12 @@ enum ClipboardPreviewContract {
         service.removeSelectedQuickEntries()
         suite.expect(service.entries == [fresh, a, c] && service.selectedQuickEntry == c,
                      "deleting the highlighted entry highlights the one that took its place")
+        let command = ClipboardHistoryEntry(text: "git status")
+        service.setEntries([command, fresh, a])
+        service.quickContentType = .code
+        suite.expect(service.filteredQuickEntries == [command], "the code tab lists only the code")
+        service.setEntries([fresh, command, a])
+        suite.expect(service.filteredQuickEntries == [command], "a history change sorts the entries again")
     }
 
     /// #1885: typing searches the history once per keystroke, so the folded

@@ -61,6 +61,14 @@ final class ClipboardHistoryService: ObservableObject {
     /// window is open inserts above it, and a position would then point at
     /// a different entry than the one Return is about to paste.
     @Published private(set) var quickSelectionID: UUID?
+    /// The shelf's type tab; nil shows every type.
+    @Published var quickContentType: ClipboardContentType? {
+        didSet {
+            if quickContentType != oldValue {
+                resetQuickSelection()
+            }
+        }
+    }
     @Published private(set) var quickSelectionIsVisible = false
     @Published private(set) var quickWindowPresentationID = UUID()
     @Published private(set) var quickPreviewPresented = UserDefaults.standard.bool(
@@ -393,7 +401,20 @@ final class ClipboardHistoryService: ObservableObject {
     }
 
     var filteredQuickEntries: [ClipboardHistoryEntry] {
-        filteredEntries(matching: quickQuery)
+        let matches = filteredEntries(matching: quickQuery)
+        guard let type = quickContentType else { return matches }
+        return matches.filter { contentType(of: $0) == type }
+    }
+
+    /// Worked out once per history change, not once per card per redraw.
+    private var contentTypes: (stamp: Int, byID: [UUID: ClipboardContentType]) = (-1, [:])
+
+    func contentType(of entry: ClipboardHistoryEntry) -> ClipboardContentType {
+        if contentTypes.stamp != entriesStamp { contentTypes = (entriesStamp, [:]) }
+        if let type = contentTypes.byID[entry.id] { return type }
+        let type = ClipboardContentType(entry)
+        contentTypes.byID[entry.id] = type
+        return type
     }
 
     var selectedQuickEntryID: UUID? {
@@ -1176,6 +1197,7 @@ final class ClipboardHistoryService: ObservableObject {
         rememberPasteTarget()
         quickWindowPresentationID = UUID()
         quickQuery = ""
+        quickContentType = nil
         clearQuickBatchSelection()
         resetQuickSelection()
         position(panel)
@@ -1314,6 +1336,12 @@ final class ClipboardHistoryService: ObservableObject {
                ClipboardHistoryPreview.handlesSpace(selectionIsVisible: self.quickSelectionIsVisible,
                                                      hasModifiers: !modifiers.isEmpty) {
                 self.toggleQuickPreview()
+                return nil
+            }
+            if event.keyCode == UInt16(kVK_Tab), modifiers.isEmpty || modifiers == [.shift] {
+                let tabs: [ClipboardContentType?] = [nil] + ClipboardContentType.allCases
+                let index = tabs.firstIndex(of: self.quickContentType) ?? 0
+                self.quickContentType = tabs[(index + (modifiers.isEmpty ? 1 : tabs.count - 1)) % tabs.count]
                 return nil
             }
             if event.keyCode == UInt16(kVK_Return) || event.keyCode == UInt16(kVK_ANSI_KeypadEnter) {
