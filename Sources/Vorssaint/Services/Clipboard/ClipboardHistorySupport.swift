@@ -363,6 +363,75 @@ enum ClipboardHistoryEditing {
     }
 }
 
+/// Lays copied JSON out for reading in the preview. Only the whitespace
+/// between tokens changes: re-encoding through JSONSerialization would also
+/// reorder keys and respell numbers, and the preview has to show what the
+/// paste will give.
+enum ClipboardJSONFormat {
+    static let maxBytes = 256 * 1_024
+
+    static func pretty(_ text: String) -> String? {
+        guard text.utf8.count <= maxBytes,
+              let first = text.first(where: { !$0.isWhitespace }), first == "{" || first == "[",
+              (try? JSONSerialization.jsonObject(with: Data(text.utf8))) != nil
+        else { return nil }
+        let scalars = Array(text.unicodeScalars)
+        let blanks: Set<Unicode.Scalar> = [" ", "\t", "\n", "\r"]
+        var out = String.UnicodeScalarView()
+        var depth = 0, index = 0, inString = false, escaped = false
+        func newline() {
+            out.append("\n")
+            out.append(contentsOf: String(repeating: " ", count: depth * 2).unicodeScalars)
+        }
+        while index < scalars.count {
+            let scalar = scalars[index]
+            index += 1
+            if inString {
+                out.append(scalar)
+                if escaped {
+                    escaped = false
+                } else if scalar == "\\" {
+                    escaped = true
+                } else if scalar == "\"" {
+                    inString = false
+                }
+                continue
+            }
+            switch scalar {
+            case _ where blanks.contains(scalar):
+                continue
+            case "\"":
+                inString = true
+                out.append(scalar)
+            case "{", "[":
+                out.append(scalar)
+                // An empty object or array stays on one line.
+                var next = index
+                while next < scalars.count, blanks.contains(scalars[next]) { next += 1 }
+                if next < scalars.count, scalars[next] == (scalar == "{" ? "}" : "]") {
+                    out.append(scalars[next])
+                    index = next + 1
+                } else {
+                    depth += 1
+                    newline()
+                }
+            case "}", "]":
+                depth -= 1
+                newline()
+                out.append(scalar)
+            case ",":
+                out.append(scalar)
+                newline()
+            case ":":
+                out.append(contentsOf: ": ".unicodeScalars)
+            default:
+                out.append(scalar)
+            }
+        }
+        return String(out)
+    }
+}
+
 struct ClipboardHistorySearchFolded: Equatable {
     let searchableText: String
     let normalizedText: String

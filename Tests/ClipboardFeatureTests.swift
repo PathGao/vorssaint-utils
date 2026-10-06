@@ -78,6 +78,31 @@ enum ClipboardFeatureTests {
                                                     matching: "missing") == [],
                "clipboard search returns no results for unmatched terms")
 
+        // MARK: Clipboard JSON preview
+
+        let copiedJSON = #"{"b":1.50,"a":[1e3,{},[ ]],"s":"x, {y}: \"z\"","n":null}"#
+        let laidOut = #"""
+        {
+          "b": 1.50,
+          "a": [
+            1e3,
+            {},
+            []
+          ],
+          "s": "x, {y}: \"z\"",
+          "n": null
+        }
+        """#
+        expectEqual(ClipboardJSONFormat.pretty(copiedJSON) ?? "nil", laidOut,
+                    "copied JSON is laid out with its key order, numbers and strings untouched")
+        expectEqual(ClipboardJSONFormat.pretty(laidOut) ?? "nil", laidOut,
+                    "laying out JSON twice changes nothing")
+        suite.expect(ClipboardJSONFormat.pretty(#"{"a": }"#) == nil
+                     && ClipboardJSONFormat.pretty("[1] is the first note") == nil
+                     && ClipboardJSONFormat.pretty("42") == nil
+                     && ClipboardJSONFormat.pretty("[" + String(repeating: "1,", count: 140_000) + "1]") == nil,
+                     "text that is not a JSON object or array, or is too large, keeps its own layout")
+
         // MARK: Clipboard history search tokens and highlight ranges
 
         suite.expect(ClipboardHistorySearch.searchTokens(for: "  deploy   final  ") == ["deploy", "final"],
