@@ -12,6 +12,31 @@ import ImageIO
 import VMStatisticsCompat
 
 enum RepositoryFeatureTests {
+    /// Run the production `result` and `copy` of the manual cleaner in
+    /// Settings and in the menu panel, with a cleaner whose rules the test
+    /// changes, recording what reaches the clipboard.
+    final class URLCleanerManualCleaner {
+        var rules = URLCleaning.Rules.none
+        var copied: [String] = []
+        func clean(_ text: String) -> URLCleaning.Result? { URLCleaning.clean(text, rules: rules) }
+        func copy(_ urlString: String) { copied.append(urlString) }
+    }
+    protocol URLCleanerManualSurface: AnyObject {
+        var cleaner: URLCleanerManualCleaner { get }
+        var input: String { get set }
+        func copy()
+    }
+    final class URLCleanerManualSettings: URLCleanerManualSurface {
+        let cleaner = URLCleanerManualCleaner()
+        var input = ""
+        var copied: String?
+    }
+    final class URLCleanerManualPanel: URLCleanerManualSurface {
+        let cleaner = URLCleanerManualCleaner()
+        var input = ""
+        var copied: String?
+    }
+
     private struct SourceRead: Sendable {
         let path: String
         let source: String?
@@ -117,6 +142,12 @@ enum RepositoryFeatureTests {
         }
     }
 
+    /// Runs the production site switch of the rules list against stored
+    /// switched off names the test reads back.
+    final class URLCleanerSiteSwitchHost {
+        var disabledNames = ""
+    }
+
     static func run(_ suite: TestSuite) {
         func expectEqual(_ actual: String, _ expected: String, _ label: String,
                          file: StaticString = #filePath, line: UInt = #line) {
@@ -190,6 +221,23 @@ enum RepositoryFeatureTests {
                 == urlCleanerSettingsSource.components(separatedBy: ".labelsHidden()").count,
                "every Clean URL field hides its label so the field owns the row")
 
+        // The manual result is worked out from the field, so editing the link
+        // or the rules can never leave an older result for Copy to take.
+        let manualSurfaces: [(String, URLCleanerManualSurface)] = [
+            ("Settings", URLCleanerManualSettings()), ("menu panel", URLCleanerManualPanel()),
+        ]
+        for (surface, host) in manualSurfaces {
+            host.input = "https://youtu.be/abc?si=x"
+            host.copy()
+            host.input = "https://example.com/?utm_source=a&keep=1"
+            host.copy()
+            host.cleaner.rules = URLCleaning.rules(globalNames: "keep", siteNames: nil, disabledNames: nil)
+            host.copy()
+            suite.expect(host.cleaner.copied == ["https://youtu.be/abc", "https://example.com/?keep=1",
+                                                 "https://example.com/"],
+                   "\(surface) Copy takes the field's link under the current rules: \(host.cleaner.copied)")
+        }
+
         // Rules are stored as a difference from the built-in tables, never as
         // a copy of them, so names a later version adds still reach someone
         // who has already edited their rules.
@@ -246,6 +294,27 @@ enum RepositoryFeatureTests {
             .flatMap(\.entries).map(\.name).filter { $0 != $0.lowercased() }
         suite.expect(upperCaseBuiltIns.isEmpty,
                "built-in names are lowercase, since matching and switched off names are: \(upperCaseBuiltIns)")
+        let siteSwitch = URLCleanerSiteSwitchHost()
+        siteSwitch.disabledNames = "youtube.com|si"
+        func switchedRules() -> URLCleaning.Rules {
+            URLCleaning.rules(globalNames: nil, siteNames: "weibo.com|sudaref", disabledNames: siteSwitch.disabledNames)
+        }
+        func switchedGroup(_ site: String) -> URLCleaning.RuleGroup? {
+            URLCleaning.ruleGroups(rules: switchedRules()).first { $0.site == site }
+        }
+        for site in ["weibo.com", "youtube.com"] {
+            switchedGroup(site).map { siteSwitch.setSite($0, enabled: false) }
+        }
+        suite.expect(switchedGroup("weibo.com")?.entries.map(\.name) == ["sudaref"]
+                && switchedGroup("weibo.com")?.enabledCount == 0
+                && URLCleaning.clean("https://weibo.com/a?sudaref=x", rules: switchedRules())?.removed == [],
+               "switching a site off keeps the name the user added to it, switched off")
+        for site in ["weibo.com", "youtube.com"] {
+            switchedGroup(site).map { siteSwitch.setSite($0, enabled: true) }
+        }
+        suite.expect(URLCleaning.clean("https://weibo.com/a?sudaref=x", rules: switchedRules())?.removed == ["sudaref"]
+                && URLCleaning.clean("https://youtu.be/a?si=x", rules: switchedRules())?.removed == ["si"],
+               "switching a site back on turns on every name it lists")
         expectEqual(URLCleaning.siteKey(from: " https://WWW.Weibo.com/path?x=1 ") ?? "",
                     "weibo.com", "the site field takes a pasted link and keeps the host")
         suite.expect(URLCleaning.siteKey(from: "not a host") == nil,
