@@ -144,7 +144,8 @@ enum UtilitiesFeatureTests {
                "the terminal PATH is the login shell's exported PATH")
         suite.expect(EnvironmentSupport.loginShellPath(shellPath: "/usr/bin/false") == nil,
                "a login shell that gives no PATH is reported as not answering, not as an empty PATH")
-        let shimmed = EnvironmentSupport.tool(named: "node", in: [envFirst.path, envSecond.path, envFirst.path])
+        let shimmed = EnvironmentSupport.tool(named: "node",
+                                              in: EnvironmentSupport.splitPath("\(envFirst.path):\(envSecond.path):\(envFirst.path)"))
         suite.expect(shimmed.path == envFirst.appendingPathComponent("node").path
                 && shimmed.shadowedPaths == [envSecond.appendingPathComponent("node").path],
                "the first PATH entry wins and each losing copy is listed once, found \(shimmed.shadowedPaths)")
@@ -178,8 +179,7 @@ enum UtilitiesFeatureTests {
         suite.expect(EnvironmentSupport.execTarget(in: "codexec /bin/zsh") == nil,
                "a word that merely ends in exec is not an exec")
 
-        pathReport.tools = [shimmed, EnvironmentTool(command: "uv", path: nil, version: nil, shimTarget: nil,
-                                                     shadowedPaths: [])]
+        pathReport.tools = [shimmed, EnvironmentTool(command: "uv")]
         let reportLines = EnvironmentSupport.reportText(pathReport).components(separatedBy: "\n")
         suite.expect(reportLines.contains("    shadowed: " + envSecond.appendingPathComponent("node").path)
                 && reportLines.contains("  uv: not found")

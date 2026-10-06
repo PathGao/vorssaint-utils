@@ -39,7 +39,7 @@ struct EnvironmentView: View {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 11, weight: .semibold))
                 }
-                .buttonStyle(.plain).help(strings.refresh)
+                .buttonStyle(.plain).help(FeatureStrings.portManager(l10n.language).refresh)
                 .disabled(service.isRefreshing)
             }
             .padding(.horizontal, 14).padding(.top, 10).padding(.bottom, 8)
@@ -51,12 +51,7 @@ struct EnvironmentView: View {
                 }
                 .formStyle(.grouped)
             } else {
-                VStack {
-                    Spacer()
-                    ProgressView().controlSize(.small)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -115,23 +110,17 @@ struct EnvironmentView: View {
                             .font(.caption).foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                    if let path = tool.path {
-                        Text(path)
-                            .font(.system(size: 10, design: .monospaced))
-                            .textSelection(.enabled)
+                    Group {
+                        if let path = tool.path { Text(path) }
+                        if let shim = tool.shimTarget {
+                            Text(String(format: strings.runsFormat, shim)).foregroundStyle(.secondary)
+                        }
+                        ForEach(tool.shadowedPaths, id: \.self) { shadowed in
+                            Text("\(strings.shadowed): \(shadowed)").foregroundStyle(.tertiary)
+                        }
                     }
-                    if let shim = tool.shimTarget {
-                        Text(String(format: strings.runsFormat, shim))
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                    }
-                    ForEach(tool.shadowedPaths, id: \.self) { shadowed in
-                        Text("\(strings.shadowed): \(shadowed)")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                            .textSelection(.enabled)
-                    }
+                    .font(.system(size: 10, design: .monospaced))
+                    .textSelection(.enabled)
                 }
                 .padding(.vertical, 2)
             }

@@ -6,14 +6,14 @@ import Foundation
 
 /// One command name, resolved the way the shell resolves it: the first match
 /// in PATH wins and later ones are shadowed.
-struct EnvironmentTool: Identifiable, Equatable {
+struct EnvironmentTool: Identifiable {
     let command: String
-    let path: String?
-    let version: String?
+    var path: String?
+    var version: String?
     /// Set when the winning file runs something other than the tool it is
     /// named after (a symlink to another name, or a script that execs one).
-    let shimTarget: String?
-    let shadowedPaths: [String]
+    var shimTarget: String?
+    var shadowedPaths: [String] = []
     var id: String { command }
 }
 
@@ -43,9 +43,6 @@ enum EnvironmentSupport {
     /// what apps opened from Finder or the Dock inherit.
     static let launchdDefaultPath = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
 
-    private static let commandTimeout: TimeInterval = 5
-    private static let maxOutputBytes = 64 * 1024
-
     static func inspect(cancellation: BoundedProcessCancellation? = nil) -> EnvironmentReport {
         var report = EnvironmentReport()
         let shellPath = loginShellPath()
@@ -73,67 +70,46 @@ enum EnvironmentSupport {
     static func systemPath() -> [String] {
         let fragments = ((try? FileManager.default.contentsOfDirectory(atPath: "/etc/paths.d")) ?? [])
             .sorted().map { "/etc/paths.d/" + $0 }
-        let lines = (["/etc/paths"] + fragments)
+        return splitPath((["/etc/paths"] + fragments)
             .compactMap { try? String(contentsOfFile: $0, encoding: .utf8) }
-            .joined(separator: "\n")
-            .split(whereSeparator: \.isNewline)
-        return splitPath(lines.joined(separator: ":"))
+            .joined(separator: "\n"))
     }
 
     /// `launchctl getenv PATH` is normally empty, and then launchd's default
     /// is the answer rather than this process's PATH, which depends on how
     /// the app itself was started.
     static func appPath(cancellation: BoundedProcessCancellation? = nil) -> [String] {
-        let result = BoundedProcessRunner.run("/bin/launchctl", ["getenv", "PATH"],
-                                              timeout: commandTimeout,
-                                              maxOutputBytes: maxOutputBytes,
-                                              cancellation: cancellation)
-        let entries = result.status == 0
-            ? splitPath(String(decoding: result.output, as: UTF8.self)) : []
+        let result = Shell.run("/bin/launchctl", ["getenv", "PATH"], cancellation: cancellation)
+        let entries = result.status == 0 ? splitPath(result.output) : []
         return entries.isEmpty ? launchdDefaultPath : entries
     }
 
     /// Without the Command Line Tools, `/usr/bin/python3` is a stub that asks
     /// to install them when run, so its version is not read.
     static func developerToolsInstalled(cancellation: BoundedProcessCancellation? = nil) -> Bool {
-        let result = BoundedProcessRunner.run("/usr/bin/xcode-select", ["-p"],
-                                              timeout: commandTimeout,
-                                              maxOutputBytes: maxOutputBytes,
-                                              cancellation: cancellation)
-        let folder = String(decoding: result.output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        return result.status == 0 && !folder.isEmpty && FileManager.default.fileExists(atPath: folder)
+        let result = Shell.run("/usr/bin/xcode-select", ["-p"], cancellation: cancellation)
+        let folder = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return result.status == 0 && FileManager.default.fileExists(atPath: folder)
     }
 
     static func tool(named command: String, in path: [String], stubDirectories: Set<String> = [],
                      cancellation: BoundedProcessCancellation? = nil) -> EnvironmentTool {
-        let matches = splitPath(path.map { ($0 as NSString).appendingPathComponent(command) }
+        let matches = path.map { ($0 as NSString).appendingPathComponent(command) }
             .filter { FileManager.default.isExecutableFile(atPath: $0) }
-            .joined(separator: ":"))
-        guard let winner = matches.first else {
-            return EnvironmentTool(command: command, path: nil, version: nil, shimTarget: nil,
-                                   shadowedPaths: [])
-        }
-        guard !stubDirectories.contains((winner as NSString).deletingLastPathComponent) else {
-            return EnvironmentTool(command: command, path: winner, version: nil, shimTarget: nil,
-                                   shadowedPaths: Array(matches.dropFirst()))
-        }
+        var tool = EnvironmentTool(command: command, path: matches.first, shadowedPaths: Array(matches.dropFirst()))
+        guard let winner = tool.path,
+              !stubDirectories.contains((winner as NSString).deletingLastPathComponent) else { return tool }
         // `npm` and `npx` start with `#!/usr/bin/env node`, so the version
         // check needs the terminal's PATH rather than this app's.
-        let result = BoundedProcessRunner.run("/usr/bin/env",
-                                              ["PATH=" + path.joined(separator: ":"), winner, "--version"],
-                                              timeout: commandTimeout,
-                                              maxOutputBytes: maxOutputBytes,
-                                              cancellation: cancellation)
+        let result = Shell.run("/usr/bin/env", ["PATH=" + path.joined(separator: ":"), winner, "--version"],
+                               cancellation: cancellation)
         // A wrapper that refuses `--version` exits non-zero with a complaint
         // that is not a version.
-        let firstLine = String(decoding: result.output, as: UTF8.self)
-            .split(whereSeparator: \.isNewline).first
+        let firstLine = result.output.split(whereSeparator: \.isNewline).first
             .map { $0.trimmingCharacters(in: .whitespaces) }
-        return EnvironmentTool(command: command,
-                               path: winner,
-                               version: result.status == 0 && firstLine?.isEmpty == false ? firstLine : nil,
-                               shimTarget: shimTarget(of: winner, command: command),
-                               shadowedPaths: Array(matches.dropFirst()))
+        tool.version = result.status == 0 && firstLine?.isEmpty == false ? firstLine : nil
+        tool.shimTarget = shimTarget(of: winner, command: command)
+        return tool
     }
 
     /// A symlink names its target directly; a wrapper script names it on its
@@ -204,11 +180,11 @@ enum EnvironmentSupport {
         return lines.joined(separator: "\n")
     }
 
-    /// Splits a colon list, dropping empty entries and later repeats.
+    /// Splits a colon or line list, dropping empty entries and later repeats.
     static func splitPath(_ value: String) -> [String] {
         var seen: Set<String> = []
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: ":")
+            .split { $0 == ":" || $0.isNewline }
             .map(String.init)
             .filter { seen.insert($0).inserted }
     }
