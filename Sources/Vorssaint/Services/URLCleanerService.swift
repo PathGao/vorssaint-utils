@@ -157,11 +157,36 @@ final class URLCleanerService: ObservableObject {
         // because writing to the pasteboard discards whatever else the copy
         // carried, and a link the cleaner did not need to touch is the one
         // most likely to come back spelled differently.
-        guard URLCleaning.canRewritePasteboard(types: (pasteboard.types ?? []).map(\.rawValue)),
+        let types = (pasteboard.types ?? []).map(\.rawValue)
+        guard URLCleaning.canRewritePasteboard(types: types),
+              // The rewrite writes one item, so a copy of several is left alone.
+              pasteboard.pasteboardItems?.count == 1,
               let text = pasteboard.string(forType: .string) ?? pasteboard.string(forType: urlType),
               let cleaned = URLCleaning.clean(text, rules: rules),
               !cleaned.removed.isEmpty,
               !token.isCancelled else {
+            return PollResult(changeCount: changeCount, cleaned: nil)
+        }
+        // The rewrite drops the HTML, which is only right when the HTML says
+        // no more than the link. A picture's markup with its address as the
+        // text would otherwise paste as a bare link (#1432).
+        if types.contains("public.html") {
+            let html = (pasteboard.string(forType: .html) ?? "").lowercased()
+                .replacingOccurrences(of: "&amp;", with: "&")
+            let link = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let visible = html.replacingOccurrences(of: "<[^>]*>", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let targets = html.components(separatedBy: "href=").dropFirst()
+                .map { String($0.dropFirst().prefix { $0 != "\"" && $0 != "'" }) }
+            let media = ["<img", "<video", "<audio", "<picture", "<svg", "<iframe", "<object", "<embed"]
+            guard !media.contains(where: html.contains), visible.isEmpty || visible == link,
+                  targets.allSatisfy({ $0 == link }) else {
+                return PollResult(changeCount: changeCount, cleaned: nil)
+            }
+        }
+        // Another app may have copied since the read. Nothing compares and
+        // swaps across processes, so this narrows the window, not closes it.
+        guard pasteboard.changeCount == changeCount else {
             return PollResult(changeCount: changeCount, cleaned: nil)
         }
 

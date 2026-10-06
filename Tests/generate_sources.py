@@ -277,6 +277,11 @@ def main():
           + declaration(ports, "    private static func snapshot(").replace("private static", "static", 1)
           + declaration(ports, "    private static func startTimes(").replace("private static", "static", 1)
           + "}\n}\n")
+    write("URLCleanerPoll.swift", "import Foundation\n"
+          + "extension RepositoryFeatureTests.URLCleanerPollHost {\n"
+          + declaration("Sources/Vorssaint/Services/URLCleanerService.swift",
+                        "    private static func pollPasteboard(").replace("private static", "static", 1)
+          + "}\n")
     write("ProcessName.swift", "import Foundation\n"
           + "extension ProcessNameContract {\nfinal class Lookup: Fixture {\n"
           + declaration("Sources/Vorssaint/Services/ResponsibleProcess.swift", "    static func displayName(")

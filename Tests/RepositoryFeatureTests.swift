@@ -32,6 +32,43 @@ enum RepositoryFeatureTests {
         }
     }
 
+    /// Runs the production `pollPasteboard` against a pasteboard the test
+    /// fills, recording what would be written back.
+    enum URLCleanerPollHost {
+        struct Kind: Equatable {
+            let rawValue: String
+            static let string = Kind(rawValue: "public.utf8-plain-text")
+            static let html = Kind(rawValue: "public.html")
+        }
+        final class Pasteboard {
+            static let general = Pasteboard()
+            var changeCount = 1
+            var types: [Kind]? = []
+            var items = 1
+            var text = ""
+            var html = ""
+            var copiedDuringRead = false
+            var pasteboardItems: [Int]? { Array(repeating: 0, count: items) }
+            func string(forType type: Kind) -> String? {
+                if copiedDuringRead { changeCount += 1 }
+                return type == .string ? text : type == .html ? html : nil
+            }
+        }
+        typealias NSPasteboard = Pasteboard
+        final class PollToken { let isCancelled = false }
+        struct PollResult {
+            let changeCount: Int
+            let cleaned: URLCleaning.Result?
+        }
+        static let urlType = Kind(rawValue: "public.url")
+        static var rules: URLCleaning.Rules { .none }
+        static var written: [String] = []
+        static func writeToPasteboard(_ urlString: String) -> Int {
+            written.append(urlString)
+            return 0
+        }
+    }
+
     private struct RepositorySnapshot {
         let swiftPaths: [String]
         let swiftSources: [String: String]
@@ -405,6 +442,36 @@ enum RepositoryFeatureTests {
         ]) && !URLCleaning.canRewritePasteboard(types: [
             "public.utf8-plain-text", "org.nspasteboard.TransientType",
         ]), "a concealed or transient copy is never rewritten")
+
+        // Automatic cleaning replaces the whole copy, so it only does so when
+        // the copy is this one link and is still on the pasteboard.
+        let pollLink = "https://x.com/a/status/1?s=20&t=x"
+        let chromiumTypes = ["public.html", "Apple HTML pasteboard type", "public.utf8-plain-text",
+                             "NSStringPboardType", "org.chromium.internal.source-rfh-token",
+                             "org.chromium.source-url"]
+        for (types, items, html, copiedDuringRead, expected, copy) in [
+            (["public.utf8-plain-text"], 1, "", false, true, "a plain link"),
+            (["public.utf8-plain-text"], 2, "", false, false, "two copied items"),
+            (["public.utf8-plain-text"], 1, "", true, false, "a link another app replaced during the read"),
+            (chromiumTypes, 1, "<meta charset='utf-8'><a href=\"\(pollLink.replacingOccurrences(of: "&", with: "&amp;"))\">"
+                + "\(pollLink)</a>", false, true, "a Chromium app's link copy (#1643)"),
+            (chromiumTypes, 1, "<meta charset='utf-8'><img src=\"\(pollLink)\">", false, false,
+             "a picture's markup with its address as the text"),
+            (chromiumTypes, 1, "<a href=\"\(pollLink)\">A post on X</a>", false, false, "a link under a title"),
+            (chromiumTypes, 1, "<a href=\"https://example.com/\">\(pollLink)</a>", false, false,
+             "a link pointing somewhere else"),
+        ] {
+            let pasteboard = URLCleanerPollHost.Pasteboard.general
+            pasteboard.types = types.map(URLCleanerPollHost.Kind.init(rawValue:))
+            pasteboard.items = items
+            pasteboard.text = pollLink
+            pasteboard.html = html
+            pasteboard.copiedDuringRead = copiedDuringRead
+            URLCleanerPollHost.written = []
+            _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
+            suite.expect(URLCleanerPollHost.written == (expected ? ["https://x.com/a/status/1"] : []),
+                   "automatic cleaning \(expected ? "rewrites" : "leaves alone") \(copy): \(URLCleanerPollHost.written)")
+        }
 
         // MARK: Homebrew command building and parsing
 
