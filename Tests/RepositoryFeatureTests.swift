@@ -457,7 +457,7 @@ enum RepositoryFeatureTests {
                 + "\(pollLink)</a>", false, true, "a Chromium app's link copy (#1643)"),
             (chromiumTypes, 1, "<meta charset='utf-8'><img src=\"\(pollLink)\">", false, false,
              "a picture's markup with its address as the text"),
-            (chromiumTypes, 1, "<a href=\"\(pollLink)\">A post on X</a>", false, false, "a link under a title"),
+            (chromiumTypes, 1, "<a href=\"\(pollLink)\">A post</a>", false, true, "a link under a title"),
             (chromiumTypes, 1, "<a href=\"https://example.com/\">\(pollLink)</a>", false, false,
              "a link pointing somewhere else"),
         ] {
@@ -471,6 +471,73 @@ enum RepositoryFeatureTests {
             _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
             suite.expect(URLCleanerPollHost.written == (expected ? ["https://x.com/a/status/1"] : []),
                    "automatic cleaning \(expected ? "rewrites" : "leaves alone") \(copy): \(URLCleanerPollHost.written)")
+        }
+
+        // A title over the same link, an href the browser resolved and a
+        // head or text that is never shown all go with the rewrite. Shown
+        // text beyond the link, or far more markup than a link copy needs,
+        // stays.
+        let escapedPollLink = pollLink.replacingOccurrences(of: "&", with: "&amp;")
+        let unicodeLink = "https://example.com/wiki/北京?utm_source=x"
+        let titledCopy = "<meta charset='utf-8'><a href=\"\(escapedPollLink)\">Example page title</a>"
+        let encodedCopy = "<meta charset='utf-8'><a href=\"https://example.com/wiki/%E5%8C%97%E4%BA%AC?utm_source=x\">"
+            + "\(unicodeLink)</a>"
+        let documentCopy = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\">\n<html><head>"
+            + "<meta charset=\"utf-8\" /><title>Untitled</title><style type=\"text/css\">\n"
+            + "p, li { white-space: pre-wrap; }\n</style></head><body style=\" font-family:sans-serif;\">\n"
+            + "<!--StartFragment-->\(escapedPollLink)<!--EndFragment--></body></html>"
+        let linkedDocumentCopy = "<html><head><meta http-equiv=Content-Type content=\"text/html; charset=utf-8\">"
+            + "<link rel=File-List href=\"file:///tmp/clip_filelist.xml\"><style>p { margin: 0; }</style></head>"
+            + "<body><p><a href=\"\(escapedPollLink)\">\(escapedPollLink)</a></p></body></html>"
+        let oversizedCopy = "<meta charset='utf-8'><a href=\"\(escapedPollLink)\">\(escapedPollLink)</a>"
+            + String(repeating: " ", count: 64 * 1024)
+        let markupCases: [(text: String, html: String, expected: [String], copy: String)] = [
+            (pollLink, titledCopy, ["https://x.com/a/status/1"],
+             "an address bar copy that writes the link under the page title"),
+            (unicodeLink, encodedCopy, ["https://example.com/wiki/北京"],
+             "a selected non-ASCII link whose href the browser wrote percent-encoded"),
+            ("https://example.com?utm_source=x",
+             "<a href=\"https://example.com/?utm_source=x\">https://example.com?utm_source=x</a>",
+             ["https://example.com"], "a link to a site's root whose href the browser wrote with a slash"),
+            (pollLink, documentCopy, ["https://x.com/a/status/1"],
+             "a rich-text document copy whose title and stylesheet are not shown"),
+            (pollLink, "<meta charset='utf-8'><style>p { margin: 0; }</style><p>\(escapedPollLink)</p>",
+             ["https://x.com/a/status/1"], "a fragment copy that carries its stylesheet"),
+            (pollLink, linkedDocumentCopy, ["https://x.com/a/status/1"],
+             "a document copy whose head links the document's own files"),
+            (pollLink, "<meta charset='utf-8'><p>Read this: \(escapedPollLink)</p>", [],
+             "formatted text that shows more than the link"),
+            (pollLink, oversizedCopy, [], "a link copy with far more markup than one link needs"),
+        ]
+        for markupCase in markupCases {
+            let pasteboard = URLCleanerPollHost.Pasteboard.general
+            pasteboard.types = chromiumTypes.map(URLCleanerPollHost.Kind.init(rawValue:))
+            pasteboard.items = 1
+            pasteboard.text = markupCase.text
+            pasteboard.html = markupCase.html
+            pasteboard.copiedDuringRead = false
+            URLCleanerPollHost.written = []
+            _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
+            suite.expect(URLCleanerPollHost.written == markupCase.expected,
+                   "automatic cleaning \(markupCase.expected.isEmpty ? "leaves alone" : "rewrites") "
+                       + "\(markupCase.copy): \(URLCleanerPollHost.written)")
+        }
+
+        // The poll holds the queue every pasteboard feature shares, so markup
+        // that never closes is read once rather than once per '<'.
+        for (html, shape) in [(String(repeating: "<", count: 20_000), "unclosed tags"),
+                              (String(repeating: "<style>", count: 6_000), "unclosed elements")] {
+            let pasteboard = URLCleanerPollHost.Pasteboard.general
+            pasteboard.types = chromiumTypes.map(URLCleanerPollHost.Kind.init(rawValue:))
+            pasteboard.items = 1
+            pasteboard.text = pollLink
+            pasteboard.html = html
+            pasteboard.copiedDuringRead = false
+            URLCleanerPollHost.written = []
+            let started = Date()
+            _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
+            let elapsed = Date().timeIntervalSince(started)
+            suite.expect(elapsed < 0.25, "automatic cleaning reads a copy of \(shape) in one pass: \(elapsed) s")
         }
 
         // MARK: Homebrew command building and parsing
