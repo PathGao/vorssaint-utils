@@ -60,6 +60,8 @@ struct SettingsView: View {
     @State private var directoryCache = SettingsDirectoryCache()
     @State private var collapsedSectionIDs: Set<Int> = []
     @State private var navigationFromSidebar = false
+    /// The row just picked in the sidebar, until the router has taken it.
+    @State private var sidebarPick: SettingsSidebarItem.ID?
     @FocusState private var sidebarSearchFocused: Bool
 
     private struct SearchResultsSnapshot: Equatable {
@@ -99,22 +101,32 @@ struct SettingsView: View {
     private var sidebarSelection: Binding<SettingsSidebarItem.ID?> {
         Binding(
             get: {
-                SettingsSidebarSupport.selection(for: router.destination, in: sidebarItems,
-                                                 preferredID: router.sidebarFeature.map { .feature($0) })
+                sidebarPick ?? SettingsSidebarSupport.selection(
+                    for: router.destination, in: sidebarItems,
+                    preferredID: router.sidebarFeature.map { .feature($0) })
             },
+            // The list sets its selection during a view update, where the
+            // router must not publish, so the pick is routed once it ends.
             set: { selectedID in
                 guard let selectedID,
-                      let item = sidebarItems.first(where: { $0.id == selectedID }) else { return }
-                let feature: AppFeature?
-                if case .feature(let selectedFeature) = selectedID {
-                    feature = selectedFeature
-                } else {
-                    feature = nil
-                }
-                navigationFromSidebar = true
-                router.request(item.destination, sidebarFeature: feature)
+                      sidebarItems.contains(where: { $0.id == selectedID }) else { return }
+                sidebarPick = selectedID
             }
         )
+    }
+
+    private func routeSidebarPick(_ selectedID: SettingsSidebarItem.ID?) {
+        guard let selectedID else { return }
+        sidebarPick = nil
+        guard let item = sidebarItems.first(where: { $0.id == selectedID }) else { return }
+        let feature: AppFeature?
+        if case .feature(let selectedFeature) = selectedID {
+            feature = selectedFeature
+        } else {
+            feature = nil
+        }
+        navigationFromSidebar = true
+        router.request(item.destination, sidebarFeature: feature)
     }
 
     var body: some View {
@@ -237,6 +249,7 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
+            .onChange(of: sidebarPick) { _, selectedID in routeSidebarPick(selectedID) }
             .onChange(of: activeSearchIndex) { _, index in
                 guard let index, searchResults.items.indices.contains(index) else { return }
                 let id = searchResults.items[index].id

@@ -82,9 +82,9 @@ struct NotchWatchView: View {
         if case .finished = watch.state {
             HStack(spacing: 8) {
                 if watch.canWatchAgain {
-                    NotchWatchPillButton(title: text.watchAgain, prominent: true) { watch.watchAgain() }
+                    NotchPillButton(title: text.watchAgain, prominent: true) { watch.watchAgain() }
                 }
-                NotchWatchPillButton(title: text.chooseAgain, prominent: !watch.canWatchAgain) {
+                NotchPillButton(title: text.chooseAgain, prominent: !watch.canWatchAgain) {
                     NotchService.shared.perform { NotchWatchService.shared.chooseArea() }
                 }
                 Spacer(minLength: 0)
@@ -311,34 +311,14 @@ private struct NotchWatchSetupView: View {
                     .onChange(of: enabled) { NotchService.shared.syncWithPreferences() }
             }
         } else if !permissions.screenRecording {
-            NotchWatchPillButton(title: text.allowAccess, prominent: true) {
+            NotchPillButton(title: text.allowAccess, prominent: true) {
                 Permissions.shared.requestScreenRecording()
             }
         } else {
-            NotchWatchPillButton(title: text.choose, prominent: true) {
+            NotchPillButton(title: text.choose, prominent: true) {
                 NotchService.shared.perform { NotchWatchService.shared.chooseArea() }
             }
         }
-    }
-}
-
-private struct NotchWatchPillButton: View {
-    let title: String
-    var prominent = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 12, weight: prominent ? .semibold : .medium))
-                .foregroundStyle(.white.opacity(prominent ? 1 : 0.7))
-                .lineLimit(1)
-                .padding(.horizontal, 14)
-                .frame(height: 28)
-                .background(.white.opacity(prominent ? 0.14 : 0), in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(NotchButtonStyle(cornerRadius: 14))
     }
 }
 
@@ -359,7 +339,7 @@ struct NotchWatchThumbnail: View {
 
 /// The watching eye, breathing like a working agent's mark while the area
 /// is read, and still, crossed out, while its window is hidden. The motion
-/// runs in the compositor and stops whenever the island is not on screen.
+/// is stepped at a limited rate and stops whenever the island is not on screen.
 struct NotchWatchEye: View {
     let size: CGFloat
     var hidden = false

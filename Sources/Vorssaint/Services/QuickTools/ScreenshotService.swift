@@ -21,8 +21,12 @@ final class ScreenshotService: ObservableObject {
     private let uploadHotkey = QuickToolHotkey(id: 61)
     private var uploadingCaptureID: UUID?
     private var latestCaptureID = UUID()
+    /// Names the latest capture itself. Turning the shortcut off renews
+    /// `latestCaptureID` but not this, so a later Discard still finds it.
+    private var latestCaptureToken = UUID()
     /// Set once the latest capture went through an editor or was discarded:
-    /// the stored original is then no longer what the person kept.
+    /// the stored original is then no longer what the person kept. The store
+    /// keeps the same answer for the next launch.
     private var latestCaptureWithheld = false
     private var linkCopyRetry = ScreenshotLinkCopyRetry()
 
@@ -461,14 +465,19 @@ final class ScreenshotService: ObservableObject {
                        initialSaved: result.saved,
                        completedActions: result.performed,
                        dismissInterval: dismissInterval,
-                       latestCapture: latestCaptureID)
+                       latestCapture: latestCaptureToken)
     }
 
     /// Thrown away, the latest capture is no longer one the upload shortcut
     /// may publish. A capture reopened from history makes no such claim.
     private func discardLatestCapture(_ latestCapture: UUID?) {
-        guard let latestCapture, latestCapture == latestCaptureID else { return }
+        guard let latestCapture, latestCapture == latestCaptureToken else { return }
+        withholdLatestCapture()
+    }
+
+    private func withholdLatestCapture() {
         latestCaptureWithheld = true
+        ScreenshotLastCaptureStore.withhold()
     }
 
     /// A new capture becomes the latest one: a pending shortcut upload of the
@@ -476,6 +485,7 @@ final class ScreenshotService: ObservableObject {
     /// for the shortcuts that reopen or upload it.
     private func beginLatestCapture(_ capture: ScreenshotSelectionController.Capture) {
         invalidateLatestCaptureUploads()
+        latestCaptureToken = UUID()
         latestCaptureWithheld = false
         if ScreenshotSharingSupport.retainsLatestCapture() {
             ScreenshotLastCaptureStore.save(capture)
@@ -590,7 +600,7 @@ final class ScreenshotService: ObservableObject {
         // Any editor may be showing the latest capture, and what it exports
         // is no longer the stored original, so the shortcut keeps that
         // original back until a newer capture arrives.
-        latestCaptureWithheld = true
+        withholdLatestCapture()
         let editor = ScreenshotEditorController(capture: capture)
         editors.append(editor)
         editor.show()
@@ -604,7 +614,7 @@ final class ScreenshotService: ObservableObject {
             preview.shareLink()
             return
         }
-        guard editors.isEmpty, !latestCaptureWithheld else {
+        guard editors.isEmpty, !latestCaptureWithheld, !ScreenshotLastCaptureStore.isWithheld else {
             NSSound.beep()
             return
         }
@@ -888,7 +898,7 @@ final class ScreenshotService: ObservableObject {
         ScreenshotRenderer.renderExport(
             baseImage: capture.image,
             annotations: [],
-            pixelated: [:],
+            blurSources: .none,
             scale: capture.scale,
             annotationShadowsEnabled: false,
             watermark: ScreenshotSupport.WatermarkStyle(),
@@ -1025,8 +1035,28 @@ enum ScreenshotLastCaptureStore {
             .appendingPathComponent("LatestScreenshot.png")
     }
 
+    /// Present while the stored capture was discarded or went through an
+    /// editor, so the upload shortcut keeps it back after a relaunch too.
+    private static var withheldURL: URL? {
+        fileURL?.deletingLastPathComponent().appendingPathComponent("LatestScreenshot.withheld")
+    }
+
+    static var isWithheld: Bool {
+        guard let withheldURL else { return false }
+        return FileManager.default.fileExists(atPath: withheldURL.path)
+    }
+
+    static func withhold() {
+        guard let withheldURL else { return }
+        try? FileManager.default.createDirectory(at: withheldURL.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: withheldURL.path, contents: nil)
+    }
+
     static func save(_ capture: ScreenshotSelectionController.Capture) {
         guard let fileURL else { return }
+        // A new capture starts out as the one the person kept.
+        if let withheldURL { try? FileManager.default.removeItem(at: withheldURL) }
         stateLock.lock()
         generation += 1
         let operation = generation
@@ -1080,6 +1110,7 @@ enum ScreenshotLastCaptureStore {
         generation += 1
         pendingCapture = nil
         stateLock.unlock()
+        if let withheldURL { try? FileManager.default.removeItem(at: withheldURL) }
         guard let fileURL else { return }
         try? FileManager.default.removeItem(at: fileURL)
     }

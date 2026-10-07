@@ -76,6 +76,68 @@ enum MetricsFeatureTests {
         expectEqual(MetricFormat.bytesPerSecCompact(1023.6 * 1024), "1.0M", "compact promotes rounded megabyte edge")
         expectEqual(MetricFormat.bytesPerSecCompact(9.96 * 1024 * 1024), "10M", "compact drops redundant decimal at 10M")
 
+        expectEqual(MetricFormat.bitsPerSec(0), "0 bps", "bit rate zero")
+        expectEqual(MetricFormat.bitsPerSec(100), "800 bps", "bit rate sub-kilobit")
+        expectEqual(MetricFormat.bitsPerSec(1_500), "12 Kbps", "bit rate 12 Kbps")
+        expectEqual(MetricFormat.bitsPerSec(1_200_000), "9.6 Mbps", "bit rate 9.6 Mbps")
+        expectEqual(MetricFormat.bitsPerSec(125_000_000), "1.0 Gbps", "bit rate gigabit")
+        expectEqual(MetricFormat.bitsPerSec(124.9), "999 bps", "bit rate keeps 999 bps")
+        expectEqual(MetricFormat.bitsPerSec(124.95), "1.0 Kbps", "bit rate promotes the rounded kilobit edge")
+        expectEqual(MetricFormat.bitsPerSec(124_950), "1.0 Mbps", "bit rate promotes the rounded megabit edge")
+        expectEqual(MetricFormat.bitsPerSec(.infinity), "0 bps", "bit rate non-finite")
+
+        expectEqual(MetricFormat.networkRate(1_500, inBits: true), "12 Kbps", "network rate in bits")
+        expectEqual(MetricFormat.networkRate(1_500 * 1024, inBits: false), "1.5 MB/s", "network rate in bytes")
+        expectEqual(MetricFormat.networkRateCompact(40_000, inBits: true), "320Kb", "compact network rate in bits")
+        expectEqual(MetricFormat.networkRateCompact(320 * 1024, inBits: false), "320K", "compact network rate in bytes")
+
+        // Someone who never picked a unit keeps the bytes they always saw,
+        // and a stray value does not switch them to bits either.
+        let savedSpeedUnit = UserDefaults.standard.object(forKey: DefaultsKey.networkSpeedUnit)
+        UserDefaults.standard.removeObject(forKey: DefaultsKey.networkSpeedUnit)
+        expectEqual(MetricFormat.networkRateCompact(320 * 1024), "320K", "network rate keeps bytes with no unit saved")
+        UserDefaults.standard.set("bit", forKey: DefaultsKey.networkSpeedUnit)
+        expectEqual(MetricFormat.networkRate(1_500 * 1024), "1.5 MB/s", "an unknown network unit reads as bytes")
+        UserDefaults.standard.set(NetworkSpeedUnit.bits.rawValue, forKey: DefaultsKey.networkSpeedUnit)
+        expectEqual(MetricFormat.networkRateCompact(40_000), "320Kb", "network rate follows a saved choice of bits")
+        if let savedSpeedUnit {
+            UserDefaults.standard.set(savedSpeedUnit, forKey: DefaultsKey.networkSpeedUnit)
+        } else {
+            UserDefaults.standard.removeObject(forKey: DefaultsKey.networkSpeedUnit)
+        }
+
+        // The menu bar sizes the rate block from five monospaced characters
+        // after the arrow, the same in both units, so no compact rate may
+        // print longer in either one.
+        var widestRate = ""
+        var sweptRate = 0.1
+        while sweptRate < 1e14 {
+            for inBits in [false, true] {
+                let text = MetricFormat.networkRateCompact(sweptRate, inBits: inBits)
+                if text.count > widestRate.count { widestRate = text }
+            }
+            sweptRate *= 1.01
+        }
+        suite.expect(widestRate.count == 5, "compact network rates fit the reserved menu bar block, widest \(widestRate)")
+
+        let bitsCeiling = MetricFormat.networkGraphCeiling(2_000, inBits: true)
+        suite.expect(bitsCeiling == 2_500, "bit graph ceiling rounds in bits and plots in bytes")
+        expectEqual(MetricFormat.networkRate(bitsCeiling, inBits: true), "20 Kbps", "bit graph ceiling label")
+        let bytesCeiling = MetricFormat.networkGraphCeiling(1_500, inBits: false)
+        suite.expect(bytesCeiling == 2_048, "byte graph ceiling keeps the 1024 steps")
+        expectEqual(MetricFormat.networkRate(bytesCeiling, inBits: false), "2.0 KB/s", "byte graph ceiling label")
+
+        expectEqual(MetricFormat.bitsPerSecCompact(0), "0b", "bits zero")
+        expectEqual(MetricFormat.bitsPerSecCompact(.nan), "0b", "bits non-finite")
+        expectEqual(MetricFormat.bitsPerSecCompact(100), "800b", "bits sub-kilobit")
+        expectEqual(MetricFormat.bitsPerSecCompact(124.9), "999b", "bits keeps 999b")
+        expectEqual(MetricFormat.bitsPerSecCompact(124.95), "1.0Kb", "bits promotes rounded kilobit edge")
+        expectEqual(MetricFormat.bitsPerSecCompact(40_000), "320Kb", "bits 320Kb")
+        expectEqual(MetricFormat.bitsPerSecCompact(1_200_000), "9.6Mb", "bits 9.6Mb")
+        expectEqual(MetricFormat.bitsPerSecCompact(1_245_000), "10Mb", "bits drops redundant decimal at 10Mb")
+        expectEqual(MetricFormat.bitsPerSecCompact(124_950), "1.0Mb", "bits promotes rounded megabit edge")
+        expectEqual(MetricFormat.bitsPerSecCompact(1_000_000_000), "8.0Gb", "bits gigabit")
+
         // MARK: Disk helpers
 
         suite.expect(DiskSupport.nvmeBytes(low: 2, high: nil) == 1_024_000,
@@ -257,6 +319,58 @@ enum MetricsFeatureTests {
         suite.expect(BatteryTimeSupport.formatted(seconds: 1e21) == nil,
                "battery time returns nil rather than trapping on an absurd input")
 
+        expectEqual(BatteryPowerSupport.menuBarSymbol(percent: 80,
+                                                      isCharging: false,
+                                                      externalConnected: true),
+                    "battery.100.bolt",
+                    "a charge held at a limit still reads as external power")
+        expectEqual(BatteryPowerSupport.menuBarSymbol(percent: 100,
+                                                      isCharging: false,
+                                                      externalConnected: true),
+                    "battery.100.bolt",
+                    "a full battery on its adapter still reads as external power")
+        expectEqual(BatteryPowerSupport.menuBarSymbol(percent: 42,
+                                                      isCharging: true,
+                                                      externalConnected: true),
+                    "battery.100.bolt",
+                    "a charge in progress keeps the bolt")
+        expectEqual(BatteryPowerSupport.menuBarSymbol(percent: 42,
+                                                      isCharging: true,
+                                                      externalConnected: false),
+                    "battery.100.bolt",
+                    "a charge reported before its adapter keeps the bolt")
+        expectEqual(BatteryPowerSupport.menuBarSymbol(percent: 42,
+                                                      isCharging: false,
+                                                      externalConnected: false),
+                    "battery.50",
+                    "an unplugged Mac shows its charge level, never the bolt")
+        expectEqual(BatteryPowerSupport.menuBarSymbol(percent: 5,
+                                                      isCharging: false,
+                                                      externalConnected: false),
+                    "battery.0",
+                    "an unplugged Mac keeps the level thresholds it always had")
+
+        suite.expect(BatteryPowerSupport.state(isCharging: false,
+                                               externalConnected: true,
+                                               hasBattery: true) == .externalPower,
+               "a stopped charge on the adapter is external power, not battery power")
+        suite.expect(BatteryPowerSupport.state(isCharging: true,
+                                               externalConnected: true,
+                                               hasBattery: true) == .charging,
+               "a charge in progress is named as charging")
+        suite.expect(BatteryPowerSupport.state(isCharging: false,
+                                               externalConnected: false,
+                                               hasBattery: true) == .onBattery,
+               "an unplugged Mac with a battery is on battery power")
+        suite.expect(BatteryPowerSupport.state(isCharging: false,
+                                               externalConnected: false,
+                                               hasBattery: false) == .unavailable,
+               "a Mac with no battery and no adapter reading has nothing to report")
+        suite.expect(BatteryPowerSupport.state(isCharging: true,
+                                               externalConnected: false,
+                                               hasBattery: true) == .charging,
+               "a charge claimed without an adapter flag is still never battery power")
+
         suite.expect(MetricFormat.systemPowerWatts(measured: 3,
                                              batteryWatts: 10,
                                              externalConnected: true) == 3,
@@ -282,6 +396,32 @@ enum MetricsFeatureTests {
                "peripheral battery rounds numeric values")
         suite.expect(PeripheralBatterySupport.percent(from: 140) == nil,
                "peripheral battery ignores invalid percentages")
+        suite.expect(PeripheralBatterySupport.percent(from: NSNumber(value: UInt64.max)) == nil,
+               "peripheral battery returns nil rather than trapping on a huge device number")
+        suite.expect(PeripheralBatterySupport.percent(from: NSNumber(value: Double.greatestFiniteMagnitude)) == nil,
+               "peripheral battery returns nil rather than trapping on the largest finite number")
+        suite.expect(PeripheralBatterySupport.percent(from: "1e300") == nil,
+               "peripheral battery returns nil rather than trapping on an absurd percentage string")
+        suite.expect(PeripheralBatterySupport.percent(from: 55) == 55,
+               "peripheral battery keeps an integer percentage")
+        suite.expect(PeripheralBatterySupport.percent(from: "80") == 80,
+               "peripheral battery parses a bare percentage string")
+        suite.expect(PeripheralBatterySupport.percent(from: NSNumber(value: 42.6)) == 43,
+               "peripheral battery rounds a fractional percentage up")
+        suite.expect(PeripheralBatterySupport.percent(from: NSNumber(value: 42.4)) == 42,
+               "peripheral battery rounds a fractional percentage down")
+        suite.expect(PeripheralBatterySupport.percent(from: -5) == nil,
+               "peripheral battery ignores a negative percentage")
+        suite.expect(PeripheralBatterySupport.percent(from: 0) == 0,
+               "peripheral battery keeps an empty battery as zero rather than nil")
+        suite.expect(PeripheralBatterySupport.percent(from: 100) == 100,
+               "peripheral battery keeps a full battery")
+        suite.expect(PeripheralBatterySupport.percent(from: Double.nan) == nil,
+               "peripheral battery ignores a not-a-number reading")
+        suite.expect(PeripheralBatterySupport.percent(from: "abc") == nil,
+               "peripheral battery ignores unreadable text")
+        suite.expect(PeripheralBatterySupport.percent(from: nil) == nil,
+               "peripheral battery ignores a missing value")
         let usageMouse = [["DeviceUsagePage": 1, "DeviceUsage": 2]]
         suite.expect(PeripheralBatterySupport.kind(product: "Wireless Device",
                                              primaryUsagePage: nil,

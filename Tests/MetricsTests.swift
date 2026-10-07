@@ -18,6 +18,7 @@ struct MetricsTests {
                 MetricsFeatureTests.run(suite)
                 ProcessNameContract.run(suite)
                 SystemMonitorCPUTests.run(suite)
+                SystemMonitorPlanTests.run(suite)
                 SystemSectionBreakdownTests.run(suite)
             }),
             ("clipboard", { ClipboardFeatureTests.run(suite) }),
@@ -154,6 +155,7 @@ struct MetricsTests {
             ("force-quit", { ProcessForceQuitTests.run(suite) }),
             ("launcher", { QuickLauncherContract.run(suite) }),
             ("dock-autohide", {
+                DockPreviewPositionTests.run(suite)
                 DockAutohideHoldTests.run(suite)
                 DockPreviewFrameRestorationTests.run(suite)
             }),

@@ -21,13 +21,23 @@ enum NotchTests {
         suite.expect(NotchModule.system.isAvailable(in: defaults)
                      && NotchSupport.systemCardCount(hasBattery: false, fans: 0, in: defaults) == 0,
                      "System remains reachable while waiting for the first fan sample")
+        defaults.set(false, forKey: AppFeature.fanControl.availabilityKey)
+        defaults.set(true, forKey: AppFeature.connectedDevices.availabilityKey)
+        defaults.set(false, forKey: DefaultsKey.menuBarConnectedDevices)
+        suite.expect(NotchModule.system.isAvailable(in: defaults)
+                     && NotchSupport.systemCardCount(hasBattery: false, in: defaults) == 1,
+                     "connected devices alone keeps its System page and card reachable with the menu bar widget off")
+        defaults.set(false, forKey: AppFeature.connectedDevices.availabilityKey)
+        suite.expect(!NotchModule.system.isAvailable(in: defaults)
+                     && NotchSupport.systemCardCount(hasBattery: false, in: defaults) == 0,
+                     "uninstalling connected devices removes its System page and card")
 
         suite.expect(NotchLayout.systemRowRanges(count: 7, width: 504) == [0..<3, 3..<5, 5..<7],
                      "seven System metrics fill balanced rows instead of leaving a nearly empty column")
         suite.expect(NotchLayout.systemRowRanges(count: 7, width: 304) == [0..<2, 2..<4, 4..<6, 6..<7],
                      "narrow System rows keep readable cards and a full-width last card")
         for width: CGFloat in [20, 304, 424, 504, 744] {
-            for count in 0...8 {
+            for count in 0...9 {
                 let rows = NotchLayout.systemRowRanges(count: count, width: width)
                 suite.expect(rows.flatMap { Array($0) } == Array(0..<count),
                              "System preserves every metric exactly once in reading order")
@@ -116,6 +126,39 @@ enum NotchTests {
         suite.expect(NotchLayout.timer(mode: .pomodoro, hasSession: true, width: 424, height: 180) == 118
                && NotchLayout.timer(mode: .timer, hasSession: true, width: 304, height: tight) == 96,
                "a running session keeps its control row in every layout")
+        // Lyrics and the queue grow the island; the player keeps the height it had.
+        let musicRow = NotchLayout.musicControlsRowHeight + NotchLayout.rowSpacing
+        let extras: CGFloat = 216, resting: CGFloat = 148
+        let grown = NotchLayout.musicSplit(height: resting + musicRow + extras, controlsRow: musicRow, extras: extras,
+                                           resting: resting, keepsPlayer: true)
+        suite.expect(grown.player == resting && grown.showsPlayer && grown.extra == extras - NotchLayout.rowSpacing,
+                     "opening the queue leaves the player as tall as it was and gives the list the rest")
+        for height in stride(from: resting + musicRow, through: resting + musicRow + extras, by: 12) {
+            let growing = NotchLayout.musicSplit(height: height, controlsRow: musicRow, extras: extras, resting: resting, keepsPlayer: true)
+            suite.expect(growing.player == resting && growing.showsPlayer, "the player does not change size while the island grows")
+        }
+        let short = NotchLayout.musicSplit(height: 200, controlsRow: musicRow, extras: extras, resting: resting, keepsPlayer: false)
+        suite.expect(short.extra == 158 && !short.showsPlayer,
+                     "where the island cannot hold both, the player still yields to the list")
+        let closed = NotchLayout.musicSplit(height: resting + musicRow, controlsRow: musicRow, extras: extras, resting: resting, keepsPlayer: false, extraOpen: false)
+        suite.expect(closed.player == resting && closed.extra == 0 && closed.showsPlayer, "with nothing open the player takes the page above the controls row")
+        // The page reads the player's height from the geometry; it must be
+        // the room the island keeps for it at rest, under a notch or in a capsule.
+        for layout: NotchSize in [.compact, .spacious] {
+            for notched in [true, false] {
+                let geometry = NotchGeometry(screen: CGRect(x: 0, y: 0, width: 1440, height: 900), safeAreaTop: notched ? 32 : 0,
+                                             cameraWidth: notched ? 210 : 0, layout: layout, silhouette: .capsule)
+                let player = geometry.musicPlayerHeight
+                let rest = geometry.contentSize(for: geometry.expandedSize(module: .music)).height
+                let open = geometry.contentSize(for: geometry.expandedSize(module: .music, musicExtraHeight: geometry.musicExtrasHeight)).height
+                let split = NotchLayout.musicSplit(height: open, controlsRow: musicRow, extras: geometry.musicExtrasHeight,
+                                                   resting: player, keepsPlayer: true)
+                suite.expect(geometry.floats != notched && player == (layout == .spacious ? 148 : 120)
+                             && rest - musicRow == player && split.player == player && split.showsPlayer
+                             && split.extra == geometry.musicExtrasHeight - NotchLayout.rowSpacing,
+                             "the island grows by the list and the player keeps the height it has at rest: \(layout), notched \(notched)")
+            }
+        }
         suite.expect(NotchLayout.musicPlayerHeight(layout: .compact, height: 180) == 120
                && NotchLayout.musicPlayerHeight(layout: .spacious, height: 264) == 148
                && NotchLayout.musicPlayerHeight(layout: .custom, height: 154) == 112
@@ -424,7 +467,7 @@ enum NotchTests {
         }
         // Issue: a one-word reply beside a long sender left a band of empty
         // black after the word; each side now takes only what it shows.
-        let reply = banner(app: "WhatsApp", "+55 11 98945-8910", "Oi")
+        let reply = banner("+55 11 90000-0000", "Oi")
         suite.expect(reply.preferredWings.trailing == max(layout.wingRange.lowerBound,
                                                           width("Oi", layout.messageFont).rounded(.up) + layout.inset + layout.air)
                      && reply.preferredWings.trailing < reply.preferredWings.leading
@@ -928,21 +971,6 @@ enum NotchTests {
         }
         suite.expect(stripIsBlack(islandHeight: previewStrip + 62) && stripIsBlack(islandHeight: 400),
                "the strip stays black at every island height, tall or at the preview's")
-        // Liquid Glass is clear, not blurred: the page keeps black over it and
-        // only the margin below the page opens into the lip.
-        for height: CGFloat in [96, 180, 210, 284, 400, 640] {
-            let stops = NotchGlassLip.stops(height: height, openness: 1, increasedContrast: false)
-            let pageEnd = Double((height - NotchLayout.bottomInset) / height)
-            suite.expect(stops.filter { $0.location <= pageEnd + 1e-9 }.allSatisfy { $0.opacity == 1 }
-                         && abs(stops.last!.opacity - (1 - NotchGlassLip.transparency)) < 1e-9
-                         && zip(stops, stops.dropFirst()).allSatisfy { $1.opacity <= $0.opacity + 1e-12 },
-                         "a \(Int(height))-point glass island keeps its page over black and opens only the margin below it")
-        }
-        suite.expect(NotchGlassLip.stops(height: 284, openness: 0, increasedContrast: false).allSatisfy { $0.opacity == 1 }
-                     && abs(NotchGlassLip.opacity(atDepth: 284, height: 284, openness: 1, increasedContrast: true)
-                            - (1 - NotchGlassLip.increasedContrastTransparency)) < 1e-9
-                     && NotchGlassLip.increasedContrastTransparency < NotchGlassLip.transparency,
-                     "a closing glass island is black throughout, and Increase Contrast keeps its lip darker")
 
         NotchMissionControlPollingTests.run(suite)
         activitySelectionContracts(suite)
@@ -1031,8 +1059,8 @@ enum NotchTests {
                      "installed island sections and activity indicators start enabled")
         suite.expect(firstDefaults[DefaultsKey.notchLiveEqualizer] as? Bool == false,
                      "the live equalizer starts off because it asks for system audio recording")
-        suite.expect(firstDefaults[DefaultsKey.notchIncludeOtherPlayers] as? Bool == false,
-                     "new island setups follow music apps only unless broader playback is enabled")
+        suite.expect(firstDefaults[DefaultsKey.notchIncludeOtherPlayers] as? Bool == true,
+                     "new island setups follow every player unless limited to music apps")
 
         let priorInstall = "com.vorssaint.tests.notch-existing-\(UUID().uuidString)"
         let existing = UserDefaults(suiteName: priorInstall)!
@@ -1256,6 +1284,46 @@ enum NotchTests {
         defaults.set(true, forKey: AppFeature.mixer.availabilityKey)
         suite.expect(NotchControlItem.allCases.filter { $0.setupRequirement == .none } == [.panel],
                      "every unavailable island control with a setup path has a navigation target")
+        suite.expect(NotchControlItem.allCases.filter(\.isLevel) == [.volume, .brightness, .keyboardLight]
+                     && !NotchQuickAction.optionalActions.contains(.control(.keyboardLight)),
+                     "levels draw as sliders in the card row and are not offered as shortcuts")
+        let savedHiddenControls = defaults.string(forKey: DefaultsKey.notchHiddenControls)
+        let savedBrightness = defaults.object(forKey: AppFeature.brightness.availabilityKey)
+        defaults.set(true, forKey: AppFeature.brightness.availabilityKey)
+        defaults.removeObject(forKey: DefaultsKey.notchHiddenControls)
+        let lightHiddenByDefault = !NotchSupport.controls(in: defaults).contains(.keyboardLight)
+        defaults.set("", forKey: DefaultsKey.notchHiddenControls)
+        let lightShown = NotchSupport.controls(in: defaults).contains(.keyboardLight)
+        let supportsKeyboardLight = NotchControlItem.keyboardLightIsSupported
+        NotchControlItem.keyboardLightIsSupported = { false }
+        let lightNeedsHardware = !NotchSupport.controls(in: defaults).contains(.keyboardLight)
+            && NotchSupport.controls(in: defaults).contains(.brightness)
+        NotchControlItem.keyboardLightIsSupported = supportsKeyboardLight
+        defaults.set(false, forKey: AppFeature.brightness.availabilityKey)
+        let lightGated = !NotchSupport.controls(in: defaults).contains(.keyboardLight)
+        suite.expect(lightHiddenByDefault && lightShown && lightGated
+                     && NotchControlItem.keyboardLight.setupRequirement == .feature(.brightness),
+                     "the keyboard light level is opt-in and follows the brightness feature")
+        suite.expect(lightNeedsHardware,
+                     "a level restored from a Mac with a keyboard light stays out of an island without one")
+        let launch = (try? String(contentsOfFile: "Sources/Vorssaint/main.swift", encoding: .utf8)) ?? ""
+        suite.expect(launch.contains("NotchControlItem.keyboardLightIsSupported = { BrightnessService.keyboardLightIsSupported }"),
+                     "launch asks the brightness service whether this Mac has a keyboard light")
+        suite.expect(NotchLayout.levelCardsShowDetails([.volume, .brightness], height: 96)
+                     && NotchLayout.levelCardsShowDetails([.keyboardLight], height: 96)
+                     && !NotchLayout.levelCardsShowDetails([.volume, .brightness], height: 80)
+                     && !NotchLayout.levelCardsShowDetails([.brightness, .keyboardLight], height: 96)
+                     && !NotchLayout.levelCardsShowDetails([.volume, .brightness, .keyboardLight], height: 96),
+                     "level cards fold to their readouts beside the keyboard light and three across")
+        let controlsView = (try? String(contentsOfFile: "Sources/Vorssaint/UI/Notch/NotchControlsView.swift", encoding: .utf8)) ?? ""
+        let layoutEditor = (try? String(contentsOfFile: "Sources/Vorssaint/UI/Settings/NotchLayoutEditor.swift", encoding: .utf8)) ?? ""
+        suite.expect(controlsView.contains("let details = NotchLayout.levelCardsShowDetails(levels, height: height)")
+                     && controlsView.contains("level(item, style: .card, showsDevice: details)")
+                     && layoutEditor.contains("let details = NotchLayout.levelCardsShowDetails(levels, height: height)")
+                     && layoutEditor.contains("levelCard($0, height: height, details: details)"),
+                     "the island and its Settings preview fold level cards by the same rule")
+        defaults.set(savedHiddenControls, forKey: DefaultsKey.notchHiddenControls)
+        defaults.set(savedBrightness, forKey: AppFeature.brightness.availabilityKey)
         suite.expect(NotchControlItem.brightness.setupRequirement == .feature(.brightness)
                      && NotchControlItem.recording.setupRequirement == .feature(.screenRecorder)
                      && NotchControlItem.scratchpad.setupRequirement == .feature(.scratchpad),
@@ -2376,6 +2444,7 @@ enum NotchTests {
         suite.expect(SettingsBackupSupport.exportKeys().isSuperset(of: [DefaultsKey.notchCalendarEnabled,
                                                                  DefaultsKey.notchCalendarCountdown,
                                                                  DefaultsKey.notchCalendarTimeLeft,
+                                                                 DefaultsKey.notchCalendarWeekNumbers,
                                                                  AppFeature.notchCalendar.availabilityKey]),
                "calendar preferences travel in backup")
         suite.expect(SettingsBackupSupport.exportKeys().contains(DefaultsKey.notchCalendarExcluded),
@@ -2643,6 +2712,48 @@ enum NotchTests {
             suite.expect(row >= 16 && row <= 30 && row == row.rounded() && grid <= height,
                    "the strip's month grid keeps six readable rows inside every preset and the lowest custom height")
         }
+        for (firstWeekday, minimumDays) in [(1, 1), (2, 4), (7, 1)] {
+            calendar.firstWeekday = firstWeekday
+            calendar.minimumDaysInFirstWeek = minimumDays
+            for month in [date(2026, 12, 15), date(2027, 1, 15), leapDay] {
+                let days = NotchCalendarSupport.monthDays(containing: month, calendar: calendar)
+                let rows = stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
+                suite.expect(days.filter { NotchCalendarSupport.startsWeek($0, calendar: calendar) } == rows.compactMap(\.first),
+                       "a week number is drawn once per row, ahead of the row's first day")
+                suite.expect(rows.allSatisfy { row in
+                    Set(row.map { NotchCalendarSupport.weekNumber(of: $0, calendar: calendar) }).count == 1
+                }, "every day of a row shares the row's week number, whatever day the week starts on")
+            }
+        }
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 4
+        suite.expect(NotchCalendarSupport.weekNumber(of: date(2026, 12, 31), calendar: calendar) == 53
+               && NotchCalendarSupport.weekNumber(of: date(2027, 1, 3), calendar: calendar) == 53
+               && NotchCalendarSupport.weekNumber(of: date(2027, 1, 4), calendar: calendar) == 1,
+               "a Monday-first calendar numbers the turn of the year as ISO weeks do")
+        calendar.firstWeekday = 1
+        calendar.minimumDaysInFirstWeek = 1
+        suite.expect(NotchCalendarSupport.weekNumber(of: date(2026, 12, 26), calendar: calendar) == 52
+               && NotchCalendarSupport.weekNumber(of: date(2027, 1, 1), calendar: calendar) == 1
+               && NotchCalendarSupport.weekNumber(of: date(2026, 12, 27), calendar: calendar) == 1,
+               "a Sunday-first calendar starts week 1 with the row that holds January 1")
+        for language in AppLanguage.allCases {
+            let text = FeatureStrings.notchCalendar(language)
+            let label = NotchCalendarSupport.weekNumberLabel(of: date(2026, 12, 26), text: text, calendar: calendar)
+            let words = label.replacingOccurrences(of: "52", with: "")
+                .trimmingCharacters(in: CharacterSet.whitespaces.union(.punctuationCharacters))
+            suite.expect(TestFormat.parse(text.weekNumber)?.conversions == ["d"]
+                   && text.weekNumber.components(separatedBy: "%d").count == 2
+                   && label.contains("52") && !words.isEmpty,
+                   "VoiceOver reads a row's week number as that week in \(language.rawValue)")
+        }
+        let monthView = (try? String(contentsOfFile: "Sources/Vorssaint/UI/Notch/NotchCalendarMonthView.swift",
+                                     encoding: .utf8)) ?? ""
+        let weekNumberView = monthView.components(separatedBy: "struct NotchCalendarWeekNumber: View {").last ?? ""
+        suite.expect(monthView.components(separatedBy: "NotchCalendarWeekNumber(date: date, text: text,").count == 3
+               && weekNumberView.contains(".accessibilityLabel(NotchCalendarSupport.weekNumberLabel(of: date, text: text))")
+               && !weekNumberView.contains(".accessibilityHidden(true)"),
+               "both month grids give VoiceOver each row's week number")
         let march = NotchCalendarSupport.monthDays(containing: date(2026, 3, 15), calendar: calendar)
         suite.expect(march.contains(date(2026, 3, 8)) && march.contains(date(2026, 3, 9))
                && date(2026, 3, 9).timeIntervalSince(date(2026, 3, 8)) == 23 * 3600,

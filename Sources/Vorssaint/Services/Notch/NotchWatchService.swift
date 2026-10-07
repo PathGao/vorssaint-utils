@@ -127,9 +127,11 @@ final class NotchWatchService: ObservableObject {
         } else {
             // Nothing but the desktop or the menu bar under it: read that
             // part of the display as it is.
+            // Beside the camera the island would read itself opening and
+            // closing as a change, so it stays out whatever captures show.
             guard let capture = await ScreenshotCaptureEngine.prepareDisplayRegion(
                 displayID: region.displayID, pixelRect: region.pixelRect, includePointer: false,
-                hideVorssaintWindows: true, protectedWindowIDs: protected) else { return }
+                hideVorssaintWindows: true, protectedWindowIDs: protected, keepsIslandOut: true) else { return }
             regionCapture = capture
             target = NotchWatchTarget(windowID: nil, displayID: region.displayID, crop: region.pixelRect,
                                       appName: FeatureStrings.notchWatch(L10n.shared.language).title,
@@ -272,9 +274,14 @@ final class NotchWatchService: ObservableObject {
         if permissionMissing { permissionMissing = false }
         let image: CGImage?
         if let windowID = target.windowID, let info = window {
+            // The window server returns only the part of a window inside a
+            // display, and Stage Manager its tilted strip; cropping either at
+            // the window's proportions would read other pixels.
             var captured = await WindowPreviewProvider.captureViaWindowServer(windowID)
+                .flatMap { Self.wholeWindow($0, size: info.bounds.size) }
             if captured == nil, info.onScreen {
-                captured = await ScreenshotCaptureEngine.captureWindow(windowID, scale: 2)?.image
+                captured = await ScreenshotCaptureEngine.captureWindow(windowID, scale: 2)
+                    .flatMap { Self.wholeWindow($0.image, size: info.bounds.size) }
             }
             image = captured.flatMap { full in
                 NotchWatchSupport.pixelCrop(target.crop, windowSize: info.bounds.size,
@@ -345,6 +352,13 @@ final class NotchWatchService: ObservableObject {
     }
 
     // MARK: Helpers
+
+    private static func wholeWindow(_ image: CGImage, size: CGSize) -> CGImage? {
+        if let grid = SwitcherSupport.alphaGrid(of: image),
+           SwitcherSupport.captureLooksTransformed(alphaGrid: grid) { return nil }
+        return SwitcherSupport.captureCoversWindow(imageWidth: image.width, imageHeight: image.height,
+                                                   windowSize: size) ? image : nil
+    }
 
     private struct WindowInfo {
         let bounds: CGRect

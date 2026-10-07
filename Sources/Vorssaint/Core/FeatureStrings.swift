@@ -186,7 +186,6 @@ extension ClipboardFeatureStrings {
         moveUp: "위로 이동",
         moveDown: "아래로 이동",
         noResults: "결과 없음",
-        newestFirst: "최신순",
         active: "새 텍스트 저장 중",
         includeImagesFiles: "복사한 이미지와 파일도 저장",
         includeImagesFilesCaption: "이미지는 기록에 추가되고 파일은 위치 링크로 저장됩니다. 텍스트 항목처럼 고정하고 붙여넣을 수 있습니다.",
@@ -208,7 +207,9 @@ extension ClipboardFeatureStrings {
         menuBarPreview: "메뉴 막대에 최근 복사 항목 표시",
         menuBarPreviewCaption: "아이콘 옆에 최근 복사한 내용의 축약된 미리보기를 표시합니다. 클릭하면 기록이 열립니다.",
         menuBarPreviewLength: "미리보기 길이",
-        menuBarPreviewLengthSuffix: "자"
+        menuBarPreviewLengthSuffix: "자",
+        clearRecentConfirmFormat: "고정되지 않은 항목 %d개를 지울까요?",
+        clearRecentConfirmMessage: "고정된 항목과 이후에 복사한 내용은 유지됩니다. 되돌릴 수 없습니다."
     )
 }
 
@@ -503,7 +504,6 @@ struct ClipboardFeatureStrings {
     let moveUp: String
     let moveDown: String
     let noResults: String
-    let newestFirst: String
     let active: String
     let includeImagesFiles: String
     let includeImagesFilesCaption: String
@@ -526,6 +526,8 @@ struct ClipboardFeatureStrings {
     let menuBarPreviewCaption: String
     let menuBarPreviewLength: String
     let menuBarPreviewLengthSuffix: String
+    let clearRecentConfirmFormat: String
+    let clearRecentConfirmMessage: String
 
     static let enUS = ClipboardFeatureStrings(
         title: "Clipboard",
@@ -563,7 +565,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Move up",
         moveDown: "Move down",
         noResults: "No results",
-        newestFirst: "Newest first",
         active: "Saving new text",
         includeImagesFiles: "Also save copied images and files",
         includeImagesFilesCaption: "Images join the history and files are remembered as links to their location. Pin and paste them like any text item.",
@@ -585,7 +586,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Show latest copy in the menu bar",
         menuBarPreviewCaption: "Shows a shortened preview of your last copy next to the icon. Click it to open the history.",
         menuBarPreviewLength: "Preview length",
-        menuBarPreviewLengthSuffix: "characters"
+        menuBarPreviewLengthSuffix: "characters",
+        clearRecentConfirmFormat: "Clear unpinned (%d)?",
+        clearRecentConfirmMessage: "Pinned items stay, and so does anything copied after this. This can’t be undone."
     )
 
     static let ptBR = ClipboardFeatureStrings(
@@ -624,7 +627,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Mover para cima",
         moveDown: "Mover para baixo",
         noResults: "Nenhum resultado",
-        newestFirst: "Mais recentes primeiro",
         active: "Guardando novos textos",
         includeImagesFiles: "Guardar também imagens e arquivos copiados",
         includeImagesFilesCaption: "Imagens entram no histórico e arquivos são lembrados como links para o local deles. Fixe e cole como qualquer texto.",
@@ -646,7 +648,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Mostrar a última cópia na barra de menus",
         menuBarPreviewCaption: "Mostra uma prévia resumida da sua última cópia ao lado do ícone. Clique nela para abrir o histórico.",
         menuBarPreviewLength: "Tamanho da prévia",
-        menuBarPreviewLengthSuffix: "caracteres"
+        menuBarPreviewLengthSuffix: "caracteres",
+        clearRecentConfirmFormat: "Limpar não fixados (%d)?",
+        clearRecentConfirmMessage: "Os itens fixados ficam, e o que for copiado depois disso também. Não dá para desfazer."
     )
 
     static let tr = ClipboardFeatureStrings(
@@ -685,7 +689,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Yukarı taşı",
         moveDown: "Aşağı taşı",
         noResults: "Sonuç yok",
-        newestFirst: "En yeniler önce",
         active: "Yeni metinler kaydediliyor",
         includeImagesFiles: "Kopyalanan görselleri ve dosyaları da kaydet",
         includeImagesFilesCaption: "Görseller geçmişe eklenir, dosyalar konumlarına bağlantı olarak hatırlanır. Metin gibi sabitle ve yapıştır.",
@@ -707,7 +710,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Menü çubuğunda son kopyalananı göster",
         menuBarPreviewCaption: "Simgenin yanında son kopyalananın kısaltılmış bir önizlemesini gösterir. Geçmişi açmak için üzerine tıkla.",
         menuBarPreviewLength: "Önizleme uzunluğu",
-        menuBarPreviewLengthSuffix: "karakter"
+        menuBarPreviewLengthSuffix: "karakter",
+        clearRecentConfirmFormat: "%d sabitlenmemiş öğe temizlensin mi?",
+        clearRecentConfirmMessage: "Sabitlenen öğeler ve bundan sonra kopyalananlar kalır. Bu işlem geri alınamaz."
     )
 
     static let ru = ClipboardFeatureStrings(
@@ -746,7 +751,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Вверх",
         moveDown: "Вниз",
         noResults: "Ничего не найдено",
-        newestFirst: "Сначала новые",
         active: "Сохраняет новые элементы",
         includeImagesFiles: "Сохранять также изображения и файлы",
         includeImagesFilesCaption: "Изображения попадают в историю, а файлы запоминаются как ссылки на их расположение. Закрепляйте и вставляйте их как текст.",
@@ -768,7 +772,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Показывать последнюю скопированную запись в строке меню",
         menuBarPreviewCaption: "Показывает сокращённый предпросмотр последней скопированной записи рядом со значком. Нажмите на него, чтобы открыть историю.",
         menuBarPreviewLength: "Длина предпросмотра",
-        menuBarPreviewLengthSuffix: "символов"
+        menuBarPreviewLengthSuffix: "символов",
+        clearRecentConfirmFormat: "Очистить незакреплённые (%d)?",
+        clearRecentConfirmMessage: "Закреплённые останутся, как и всё, что скопировано после этого. Отменить нельзя."
     )
 
     static let es = ClipboardFeatureStrings(
@@ -807,7 +813,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Subir",
         moveDown: "Bajar",
         noResults: "Sin resultados",
-        newestFirst: "Más recientes primero",
         active: "Guardando nuevo texto",
         includeImagesFiles: "Guardar también imágenes y archivos copiados",
         includeImagesFilesCaption: "Las imágenes entran en el historial y los archivos se recuerdan como enlaces a su ubicación. Fíjalos y pégalos como cualquier texto.",
@@ -829,7 +834,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Mostrar la última copia en la barra de menús",
         menuBarPreviewCaption: "Muestra una vista previa abreviada de tu última copia junto al icono. Haz clic para abrir el historial.",
         menuBarPreviewLength: "Longitud de la vista previa",
-        menuBarPreviewLengthSuffix: "caracteres"
+        menuBarPreviewLengthSuffix: "caracteres",
+        clearRecentConfirmFormat: "¿Limpiar no fijados (%d)?",
+        clearRecentConfirmMessage: "Los fijados se conservan, y también lo que copies después. No se puede deshacer."
     )
 
     static let sk = ClipboardFeatureStrings(
@@ -868,7 +875,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Presunúť nahor",
         moveDown: "Presunúť nadol",
         noResults: "Žiadne výsledky",
-        newestFirst: "Najnovšie ako prvé",
         active: "Ukladá sa nový text",
         includeImagesFiles: "Ukladať aj skopírované obrázky a súbory",
         includeImagesFilesCaption: "Obrázky sa pridajú do histórie a súbory sa zapamätajú ako odkazy na ich umiestnenie. Pripínajte a prilepujte ich ako hocijaký text.",
@@ -890,7 +896,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Zobraziť poslednú kópiu v lište",
         menuBarPreviewCaption: "Zobrazí skrátený náhľad poslednej kópie vedľa ikony. Kliknutím naň otvoríte históriu.",
         menuBarPreviewLength: "Dĺžka náhľadu",
-        menuBarPreviewLengthSuffix: "znakov"
+        menuBarPreviewLengthSuffix: "znakov",
+        clearRecentConfirmFormat: "Vymazať nepripnuté (%d)?",
+        clearRecentConfirmMessage: "Pripnuté položky zostanú, rovnako ako všetko, čo skopírujete potom. Nedá sa to vrátiť späť."
     )
 
     static let de = ClipboardFeatureStrings(
@@ -929,7 +937,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Nach oben",
         moveDown: "Nach unten",
         noResults: "Keine Ergebnisse",
-        newestFirst: "Neueste zuerst",
         active: "Speichert neuen Text",
         includeImagesFiles: "Auch kopierte Bilder und Dateien speichern",
         includeImagesFilesCaption: "Bilder wandern in den Verlauf, Dateien werden als Verweise auf ihren Ort gemerkt. Anheften und Einsetzen wie bei Text.",
@@ -951,7 +958,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Letzte Kopie in der Menüleiste anzeigen",
         menuBarPreviewCaption: "Zeigt eine gekürzte Vorschau deiner letzten Kopie neben dem Symbol. Klicke darauf, um den Verlauf zu öffnen.",
         menuBarPreviewLength: "Vorschaulänge",
-        menuBarPreviewLengthSuffix: "Zeichen"
+        menuBarPreviewLengthSuffix: "Zeichen",
+        clearRecentConfirmFormat: "Nicht angeheftete löschen (%d)?",
+        clearRecentConfirmMessage: "Angeheftete bleiben, ebenso alles, was du danach kopierst. Das lässt sich nicht widerrufen."
     )
 
     static let fr = ClipboardFeatureStrings(
@@ -990,7 +999,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Monter",
         moveDown: "Descendre",
         noResults: "Aucun résultat",
-        newestFirst: "Plus récents d’abord",
         active: "Enregistre le nouveau texte",
         includeImagesFiles: "Enregistrer aussi les images et fichiers copiés",
         includeImagesFilesCaption: "Les images rejoignent l’historique et les fichiers sont mémorisés comme des liens vers leur emplacement. Épinglez-les et collez-les comme du texte.",
@@ -1012,7 +1020,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Afficher la dernière copie dans la barre des menus",
         menuBarPreviewCaption: "Affiche un aperçu raccourci de votre dernière copie à côté de l’icône. Cliquez dessus pour ouvrir l’historique.",
         menuBarPreviewLength: "Longueur de l’aperçu",
-        menuBarPreviewLengthSuffix: "caractères"
+        menuBarPreviewLengthSuffix: "caractères",
+        clearRecentConfirmFormat: "Effacer non épinglés (%d)\u{00A0}?",
+        clearRecentConfirmMessage: "Les éléments épinglés restent, comme tout ce qui sera copié ensuite. Action irréversible."
     )
 
     static let it = ClipboardFeatureStrings(
@@ -1051,7 +1061,6 @@ struct ClipboardFeatureStrings {
         moveUp: "Sposta su",
         moveDown: "Sposta giù",
         noResults: "Nessun risultato",
-        newestFirst: "Più recenti prima",
         active: "Salvataggio nuovo testo",
         includeImagesFiles: "Salva anche immagini e file copiati",
         includeImagesFilesCaption: "Le immagini entrano nella cronologia e i file vengono ricordati come collegamenti alla loro posizione. Fissali e incollali come qualsiasi testo.",
@@ -1073,7 +1082,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "Mostra l’ultima copia nella barra dei menu",
         menuBarPreviewCaption: "Mostra un’anteprima abbreviata dell’ultima copia accanto all’icona. Fai clic per aprire la cronologia.",
         menuBarPreviewLength: "Lunghezza dell’anteprima",
-        menuBarPreviewLengthSuffix: "caratteri"
+        menuBarPreviewLengthSuffix: "caratteri",
+        clearRecentConfirmFormat: "Cancellare non fissati (%d)?",
+        clearRecentConfirmMessage: "Gli elementi fissati restano, come tutto ciò che copi dopo. Non si può annullare."
     )
 
     static let ja = ClipboardFeatureStrings(
@@ -1112,7 +1123,6 @@ struct ClipboardFeatureStrings {
         moveUp: "上へ移動",
         moveDown: "下へ移動",
         noResults: "結果なし",
-        newestFirst: "新しい順",
         active: "新しいテキストを保存中",
         includeImagesFiles: "コピーした画像やファイルも保存",
         includeImagesFilesCaption: "画像は履歴に入り、ファイルは場所へのリンクとして記憶されます。テキストと同じようにピン留めやペーストができます。",
@@ -1134,7 +1144,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "メニューバーに直前のコピーを表示",
         menuBarPreviewCaption: "アイコンの横に直前のコピーの短縮プレビューを表示します。クリックすると履歴が開きます。",
         menuBarPreviewLength: "プレビューの長さ",
-        menuBarPreviewLengthSuffix: "文字"
+        menuBarPreviewLengthSuffix: "文字",
+        clearRecentConfirmFormat: "未固定の%d件を消去しますか？",
+        clearRecentConfirmMessage: "固定済みの項目と、このあとにコピーした内容は残ります。元に戻せません。"
     )
 
     static let zhHans = ClipboardFeatureStrings(
@@ -1173,7 +1185,6 @@ struct ClipboardFeatureStrings {
         moveUp: "上移",
         moveDown: "下移",
         noResults: "没有结果",
-        newestFirst: "最新优先",
         active: "正在保存新文本",
         includeImagesFiles: "同时保存拷贝的图片和文件",
         includeImagesFilesCaption: "图片会进入历史记录，文件会以其位置链接的形式被记住。可以像文本一样固定和粘贴。",
@@ -1195,7 +1206,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "在菜单栏显示最近拷贝的内容",
         menuBarPreviewCaption: "在图标旁显示最近拷贝内容的简短预览，点击即可打开历史记录。",
         menuBarPreviewLength: "预览长度",
-        menuBarPreviewLengthSuffix: "个字符"
+        menuBarPreviewLengthSuffix: "个字符",
+        clearRecentConfirmFormat: "清除 %d 个未固定项目？",
+        clearRecentConfirmMessage: "已固定的项目和此后拷贝的内容会保留。此操作无法撤销。"
     )
 
     static let zhTW = ClipboardFeatureStrings(
@@ -1234,7 +1247,6 @@ struct ClipboardFeatureStrings {
         moveUp: "上移",
         moveDown: "下移",
         noResults: "沒有結果",
-        newestFirst: "最新優先",
         active: "正在儲存新文字",
         includeImagesFiles: "同時保存拷貝的圖片和檔案",
         includeImagesFilesCaption: "圖片會進入歷史記錄，檔案會以其位置連結的形式被記住。可以像文字一樣固定和貼上。",
@@ -1256,7 +1268,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "在選單列顯示最近複製的內容",
         menuBarPreviewCaption: "在圖示旁顯示最近複製內容的簡短預覽，點選即可開啟紀錄。",
         menuBarPreviewLength: "預覽長度",
-        menuBarPreviewLengthSuffix: "個字元"
+        menuBarPreviewLengthSuffix: "個字元",
+        clearRecentConfirmFormat: "清除 %d 個未釘選項目？",
+        clearRecentConfirmMessage: "已釘選的項目和之後複製的內容會保留。此動作無法還原。"
     )
 
     static let zhHK = ClipboardFeatureStrings(
@@ -1295,7 +1309,6 @@ struct ClipboardFeatureStrings {
         moveUp: "上移",
         moveDown: "下移",
         noResults: "沒有結果",
-        newestFirst: "最新優先",
         active: "正在儲存新文字",
         includeImagesFiles: "同時儲存拷貝的圖片和檔案",
         includeImagesFilesCaption: "圖片會加入歷史記錄，檔案會以其位置連結的形式被記住。可以像文字一樣固定和貼上。",
@@ -1317,7 +1330,9 @@ struct ClipboardFeatureStrings {
         menuBarPreview: "在選單列顯示最近複製的內容",
         menuBarPreviewCaption: "在圖示旁顯示最近複製內容的簡短預覽，按一下即可開啟記錄。",
         menuBarPreviewLength: "預覽長度",
-        menuBarPreviewLengthSuffix: "個字元"
+        menuBarPreviewLengthSuffix: "個字元",
+        clearRecentConfirmFormat: "清除 %d 個未釘選項目？",
+        clearRecentConfirmMessage: "已釘選的項目和之後複製的內容會保留。此動作無法還原。"
     )
 }
 
@@ -3119,7 +3134,6 @@ extension ClipboardFeatureStrings {
         moveUp: "Вгору",
         moveDown: "Вниз",
         noResults: "Немає результатів",
-        newestFirst: "Спочатку нові",
         active: "Збереження нового тексту",
         includeImagesFiles: "Також зберігати скопійовані зображення та файли",
         includeImagesFilesCaption: "Зображення потрапляють в історію, а файли запам’ятовуються як посилання на їхнє розташування. Закріплюйте та вставляйте їх як будь-який текстовий елемент.",
@@ -3141,7 +3155,9 @@ extension ClipboardFeatureStrings {
         menuBarPreview: "Показувати останню копію на смузі меню",
         menuBarPreviewCaption: "Показує скорочений перегляд останнього скопійованого вмісту поруч зі значком. Натисніть, щоб відкрити історію.",
         menuBarPreviewLength: "Довжина перегляду",
-        menuBarPreviewLengthSuffix: "симв."
+        menuBarPreviewLengthSuffix: "симв.",
+        clearRecentConfirmFormat: "Очистити незакріплене (%d)?",
+        clearRecentConfirmMessage: "Закріплені залишаться, як і все, що скопійовано після цього. Скасувати не можна."
     )
 }
 

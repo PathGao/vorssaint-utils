@@ -1102,7 +1102,9 @@ final class NotchMascotHostView: NSView {
     func configure(look: NotchMascotLook, size: CGFloat, mood: NotchMascotMood, idles: Bool,
                    reduceMotion: Bool, animated: Bool) {
         mascot.reduceMotion = reduceMotion
+        let shift = figureShift
         mascot.configure(look: look, size: size, contentsScale: backingScale)
+        if figureShift != shift { applyPlacement() }
         if mood != requestedMood {
             requestedMood = mood
             mascot.setMood(mood, animated: animated && window != nil)
@@ -1142,8 +1144,13 @@ final class NotchMascotHostView: NSView {
         applyPlacement()
     }
 
+    /// Its box's offset from the figure's own middle, so that what a caller
+    /// centres, at rest or on a visit, is the body that shows.
+    private var figureShift: CGFloat { NotchMascotGeometry.figureOffset(mascot.look) * mascot.size }
+
     private func applyPlacement() {
-        let center = placement.center ?? CGPoint(x: bounds.midX, y: bounds.midY)
+        let placed = placement.center ?? CGPoint(x: bounds.midX, y: bounds.midY)
+        let center = CGPoint(x: placed.x, y: placed.y - figureShift)
         let visible = placement.visible
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -1173,6 +1180,9 @@ final class NotchMascotHostView: NSView {
     /// being how high a hop may take it there.
     func playVisit(_ visit: NotchMascotVisit?, path: @autoclosure () -> NotchMascotPath, baseline: CGFloat,
                    stand: CGPoint, lift: CGFloat) {
+        let shift = figureShift
+        let baseline = baseline - shift
+        let stand = CGPoint(x: stand.x, y: stand.y - shift)
         guard let visit else {
             // Ended early while it stands in its place, as when what it
             // reacted over went away: it stays there rather than leave.
@@ -1305,7 +1315,11 @@ struct NotchMascotActivityVisit: ViewModifier {
     func body(content: Content) -> some View {
         // A lap or a homecoming ends where it rests, which an activity's
         // strip has no place for, so only what ends out of sight comes over it.
-        let visit = track == nil ? nil : service.mascotVisit.flatMap { $0.kind.endsOutOfSight ? $0 : nil }
+        // A countdown is watched from beside a camera; a capsule copy has
+        // none, and stepping its timer aside there would only blank it.
+        let visit = track == nil ? nil : service.mascotVisit.flatMap {
+            $0.kind.endsOutOfSight && !($0.kind.watchesTimer && track?.hidden == nil) ? $0 : nil
+        }
         // Reacting or watching a countdown beside a camera, it covers only
         // the wing it stands in, as the black of the closed island, and the
         // other side stays in view. A capsule has no wings, so what it shows

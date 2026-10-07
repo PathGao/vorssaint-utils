@@ -248,6 +248,7 @@ final class AppUninstaller: ObservableObject {
 
         let allowedPaths = allowedRemovalPaths
         let targetURL = target?.url
+        let targetBundleID = target?.bundleID
         let expectedTargetIdentity = targetFileIdentity
         let expectedInfoIdentity = targetInfoIdentity
         let candidateBundleIDs = Set(chosen.compactMap(\.ownerBundleID))
@@ -376,6 +377,9 @@ final class AppUninstaller: ObservableObject {
                 guard let self, self.phase == .removing else { return }
                 self.items = []
                 self.phase = .done(freed: freed, failed: failed)
+                if let targetURL {
+                    Self.releaseCommandBarShortcut(ofRemovedAppAt: targetURL, bundleID: targetBundleID)
+                }
             }
         }
     }
@@ -442,6 +446,31 @@ final class AppUninstaller: ObservableObject {
             removeSelected()
         } else {
             phase = .done(freed: homebrewRemovalSize, failed: [])
+            Self.releaseCommandBarShortcut(ofRemovedAppAt: targetURL, bundleID: target?.bundleID)
+        }
+    }
+
+    /// A removed app's own Command Bar shortcut goes with it, so the keys can
+    /// be given to another app. Checked off the main thread, since finding
+    /// another copy the bar still lists reads every application folder and
+    /// asks Spotlight for the ones in the home folder.
+    private static func releaseCommandBarShortcut(ofRemovedAppAt url: URL, bundleID: String?) {
+        // Almost no removed app has a shortcut, so a removal without one never
+        // pays for the search below.
+        let path = url.standardizedFileURL.path
+        guard AppFeature.commandBar.isAvailable,
+              CommandBarService.shared.rowShortcuts[
+                  CommandBarRowShortcuts.appKey(bundleID: bundleID, path: path)] != nil else { return }
+        DispatchQueue.global(qos: .utility).async {
+            guard UninstallerSupport.isConfirmedAbsent(at: url) else { return }
+            let remaining = Set(InstalledApps.installedApplications(
+                includeSystemApplications: true,
+                spotlightPaths: CommandBarService.spotlightApplicationPaths())
+                .compactMap(\.bundleID))
+            guard let key = CommandBarRowShortcuts.keyFreed(
+                byRemovingAppAt: path, bundleID: bundleID,
+                remainingBundleIDs: remaining) else { return }
+            DispatchQueue.main.async { CommandBarService.shared.forgetRowShortcut(forKey: key) }
         }
     }
 

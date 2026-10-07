@@ -246,6 +246,9 @@ final class NotchService: ObservableObject {
     private var volumeDeviceUID: String?
     /// System uptime until which an output change counts as the island's own.
     private var ownVolumeAdjustmentUntil: TimeInterval = 0
+    /// When the output last moved its own level, so the rest of that ramp
+    /// stays quiet with it.
+    private var lastVolumeRide: TimeInterval = -.infinity
     private var notchNeedsMonitor = false
     private var menuSpaceTimer: Timer?
     private var menuSpaceReading = false
@@ -404,7 +407,7 @@ final class NotchService: ObservableObject {
     private var mascotWantsRoom: Bool { NotchMascotSupport.isEnabled() }
 
     var hasTimerActivity: Bool {
-        NotchTimerSupport.showsActivity(hasSession: NotchTimerService.shared.session.hasSession)
+        NotchTimerSupport.showsActivity(NotchTimerService.shared.session)
     }
 
     var hasWatchActivity: Bool {
@@ -754,8 +757,8 @@ final class NotchService: ObservableObject {
                           detailHeight: CGFloat?, musicExtraHeight: CGFloat, fileMediaHeight: CGFloat?, toolCount: Int?,
                           capturePreviewHeight: CGFloat?) -> CGSize {
         let controls = NotchSupport.controls()
-        let sliders = controls.filter { $0 == .volume || $0 == .brightness }.count
-        let shortcuts = controls.filter { $0 != .volume && $0 != .brightness && $0 != .music }.count
+        let sliders = controls.filter(\.isLevel).count
+        let shortcuts = controls.filter { !$0.isLevel && $0 != .music }.count
         let musicExtras = NotchLyricsSupport.isEnabled() || NotchQueueSupport.isEnabled()
         return geometry.expandedSize(module: module, detail: detail, panel: panel, detailHeight: detailHeight,
                                      shortcutCount: shortcuts,
@@ -1236,6 +1239,16 @@ final class NotchService: ObservableObject {
         if opensActivity { open(module) } else { open() }
     }
 
+    /// Opens the Calendar page scrolled to the countdown's event.
+    func openCountdownEvent() {
+        let calendar = NotchCalendarService.shared
+        calendar.revealing = calendar.countdown?.event.id
+        openActivity(.calendar)
+        // Explore or an app panel opened in the page's place keeps no event
+        // for a later visit to Calendar.
+        if !expanded || selected != .calendar || showingSections || showingAppPanel { calendar.revealing = nil }
+    }
+
     func open(_ module: NotchModule? = nil, pinned: Bool = false, takeFocus: Bool = true,
               appPanel: Bool = false, metric: MetricDetailKind? = nil, feedback: Bool = true, sections: Bool = false) {
         guard NotchSupport.isEnabled(), !suspended else { return }
@@ -1335,6 +1348,16 @@ final class NotchService: ObservableObject {
         mutatePresentation { musicDetailVisible = visible }
     }
 
+    /// The Pomodoro's readouts add a row to the timer's page, so choosing a
+    /// mode can change the open island's height. The new mode fades in as a
+    /// new page does while the island springs to its size. Left to the
+    /// preference sync, the open island jumped there a moment later.
+    func selectTimerMode(_ mode: NotchTimerMode) {
+        guard mode != NotchTimerSupport.savedMode() else { return }
+        UserDefaults.standard.set(mode.rawValue, forKey: DefaultsKey.notchTimerMode)
+        refreshPresentation(transitionContent: .replace)
+    }
+
     @discardableResult
     func showClipboard(toggle: Bool = false) -> Bool {
         guard acceptsUserInteraction, NotchSupport.routesClipboardWindow() else { return false }
@@ -1352,14 +1375,18 @@ final class NotchService: ObservableObject {
             && windowHost?.isConcealedForMissionControl == false
             : windowHost?.containsHover(point) == true || pointerOverChildWindow(point)
         hoverState.update(pointerInside: inside)
+        // A full hover opening goes straight from its resting size to the page.
+        // The activity picker replaces that opening and keeps its hover response.
+        let opensOnHover = UserDefaults.standard.bool(forKey: DefaultsKey.notchOpenOnHover)
+            && UserDefaults.standard.bool(forKey: DefaultsKey.notchHoverExpands) && !showsCompactActivityPicker
         let emphasize = inside && !hiddenInFullscreen && !hiddenUntilHover && !expanded && !peeking && !dragPlaceholder
-            && notice == nil && captureControls == nil
+            && notice == nil && captureControls == nil && !opensOnHover
             && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         if hoverEmphasized != emphasize || showedPicker != showsCompactActivityPicker {
             hoverEmphasized = emphasize
             refreshPresentation()
         }
-        syncHoverExitMonitoring(entered: entered, point: point)
+        defer { syncHoverExitMonitoring(entered: entered, point: point) }
         captureHover?(entered)
         if captureControls != nil {
             updateCaptureControlsHover(wasInside: wasInside)
@@ -1387,6 +1414,9 @@ final class NotchService: ObservableObject {
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.hoverWork = nil
+                // An opening that is no longer eligible keeps any following:
+                // an emphasis or a picker may still show, and the next move
+                // decides whether it is still needed.
                 guard self.running, !self.suspended, self.inside, !self.hoverState.suppressed,
                       !self.expanded, !self.peeking, !self.pinned, !self.heldDrag, !self.keepsWorkingSurface,
                       !self.showsCompactActivityPicker,
@@ -1434,13 +1464,16 @@ final class NotchService: ObservableObject {
     /// The closed island's hover emphasis has the same gap, and worse: a fast
     /// pass up through the top edge to a display above can report its exit
     /// while the pointer still touches the island, or no exit at all. So while
-    /// the emphasis shows, moves are followed from the entry on. A pointer at
-    /// rest costs nothing.
+    /// the emphasis shows or hover waits for an opening or reentry after an
+    /// explicit close, moves are followed. A pointer at rest costs nothing.
     private func syncHoverExitMonitoring(entered: Bool, point: CGPoint) {
         // A timed capture stays attached to the closed island until its timer
         // ends, and each followed move would tell it the pointer left, which
         // restarts its dismissal under a pointer that came back to reopen it.
-        let watching = (hoverEmphasized && captureHover == nil
+        let followsClosedHover = inside && !expanded && !peeking && notice == nil
+            && (hoverWork?.isCancelled == false
+                || hoverState.suppressed && UserDefaults.standard.bool(forKey: DefaultsKey.notchOpenOnHover))
+        let watching = ((hoverEmphasized || followsClosedHover) && captureHover == nil
                 || !entered && NotchSupport.closesOnPointerExit(expanded: expanded, peeking: peeking, openedByHover: openedByHover))
             && captureControls == nil && !pinned && !heldDrag && !hiddenUntilHover && !keepsWorkingSurface
             // Once watching, a pointer that leaves and slips back unreported is still seen.
@@ -1668,7 +1701,7 @@ final class NotchService: ObservableObject {
             case .calendar: select(.calendar)
             case .commandBar: perform { CommandBarService.shared.show() }
             case .scratchpad: openScratchpad()
-            case .volume, .brightness: select(.controls)
+            case .volume, .brightness, .keyboardLight: select(.controls)
             }
         }
     }
@@ -2447,7 +2480,9 @@ final class NotchService: ObservableObject {
             }, activate: { [weak self] in
                 guard let self else { return }
                 if self.captureControls != nil { self.expandCaptureControls() }
-                else { self.toggle() }
+                else if !self.expanded, self.compactActivity == .calendar {
+                    self.openCountdownEvent()
+                } else { self.toggle() }
             })
         if panel?.isVisible != true { panel?.orderFrontRegardless() }
         let music = NotchMusicService.shared
@@ -2701,7 +2736,7 @@ final class NotchService: ObservableObject {
             guard let self, self.running, !self.suspended, self.canFollowPointer,
                   let screen = NSScreen.screens.first(where: { $0.notchDisplayID == id }) else { return }
             self.move(to: screen)
-            self.open()
+            if self.compactActivity == .calendar { self.openCountdownEvent() } else { self.open() }
         }
     }
 
@@ -2761,7 +2796,7 @@ final class NotchService: ObservableObject {
             guard let pressed = pressedArea,
                   NotchSupport.screenEdgeArea(pressed, contains: point) || NotchSupport.screenEdgeArea(area, contains: point),
                   windowHost?.containsDestination(point) == true else { return }
-            open()
+            if compactActivity == .calendar { openCountdownEvent() } else { open() }
         case .leftMouseDragged:
             // A press at the screen's edge reports a drag at once, often without
             // moving. Only a drag that leaves the island cancels the click.
@@ -2991,7 +3026,8 @@ final class NotchService: ObservableObject {
                              customHeight: UserDefaults.standard.double(forKey: DefaultsKey.notchCustomHeight),
                              cameraFit: NotchCameraFit.current(), silhouette: NotchSilhouette.current(),
                              capsuleFit: NotchCapsuleFit.current(),
-                             outline: UserDefaults.standard.bool(forKey: DefaultsKey.notchOutlineEnabled))
+                             outline: UserDefaults.standard.bool(forKey: DefaultsKey.notchOutlineEnabled),
+                             barEdge: 1 / max(1, screen.backingScaleFactor))
     }
 
     private func updateFullscreenVisibility(displayID: CGDirectDisplayID) {
@@ -3157,6 +3193,10 @@ final class NotchService: ObservableObject {
            NotchLockScreenSupport.playsSounds() {
             NotchLockScreenService.shared.playSound(locking: session.locked)
         }
+        // The lock screen starts leaving before the island comes back, since
+        // rebuilding the island holds the main thread for a moment. It stops
+        // none of the sources an island that returns takes back.
+        if wasLocked, !session.locked { NotchLockScreenService.shared.sync(session) }
         if couldPresent != session.canPresent {
             if session.canPresent {
                 syncWithPreferences()
@@ -3603,10 +3643,27 @@ final class NotchService: ObservableObject {
 
     private func volumeChanged(_ volume: Double?, muted: Bool?) {
         defer { volumeBaseline = volume; muteBaseline = muted }
-        guard volumeDeviceUID != nil, let volume, volumeBaseline != nil,
-              volume != volumeBaseline || (muteBaseline != nil && muted != muteBaseline) else { return }
+        guard volumeDeviceUID != nil, let volume, let baseline = volumeBaseline,
+              volume != baseline || (muteBaseline != nil && muted != muteBaseline) else { return }
         // Volume keys still announce themselves through showCurrentVolume.
         guard !expanded || ProcessInfo.processInfo.systemUptime >= ownVolumeAdjustmentUntil else { return }
+        // A level the output set on its own carries no news: adaptive volume
+        // rides the level for as long as the room is noisy, and each step
+        // used to reschedule the indicator's dismissal, so it never left the
+        // screen. Those steps move the state quietly, the way an automatic
+        // brightness change raises no notice of its own. Muting always
+        // reports, and so does a key step.
+        let muteChanged = muteBaseline != nil && muted != muteBaseline
+        if !muteChanged {
+            let origin = NotchSupport.volumeChangeOrigin(
+                from: baseline, to: volume,
+                sinceRide: ProcessInfo.processInfo.systemUptime - lastVolumeRide)
+            guard origin == .announces else {
+                lastVolumeRide = ProcessInfo.processInfo.systemUptime
+                return
+            }
+        }
+        lastVolumeRide = -.infinity
         showVolume(volume, muted: muted)
     }
 
@@ -3692,6 +3749,7 @@ final class NotchService: ObservableObject {
         var detailNeeds = expanded && !showingSections ? selectedMetric?.monitorNeeds ?? .none : .none
         if needs, AppFeature.monitorDisk.isAvailable { detailNeeds.disk = true }
         if needs, AppFeature.fanControl.isAvailable { detailNeeds.fanSpeed = true }
+        if needs, AppFeature.connectedDevices.isAvailable { detailNeeds.connectedDevices = true }
         SystemMonitor.shared.setNotchDetailNeeds(detailNeeds)
         if needs != notchNeedsMonitor {
             notchNeedsMonitor = needs
@@ -3952,7 +4010,8 @@ extension NotchService {
     func commandBarDropSource() -> CGRect? {
         guard acceptsSystemFeedback, !hiddenUntilHover, !fullscreenCompact, !expanded, captureControls == nil,
               panel?.isVisible == true, let frame = windowHost?.visibleFrame, !frame.isEmpty,
-              geometry.screen.contains(NSEvent.mouseLocation) else { return nil }
+              // The top pixel row is the screen's too, where CGRect.contains says no.
+              NSMouseInRect(NSEvent.mouseLocation, geometry.screen, false) else { return nil }
         let gap = geometry.floatingGap ?? 0
         return frame.insetBy(dx: 0, dy: min(gap, frame.height / 2 - 1))
     }
@@ -3961,7 +4020,7 @@ extension NotchService {
     /// which then holds the keyboard. Nil when the island cannot open here.
     func presentCommandBar() -> NSPanel? {
         guard NotchSupport.isEnabled(), acceptsUserInteraction, !hiddenInFullscreen, captureControls == nil,
-              !heldDrag, geometry.screen.contains(NSEvent.mouseLocation), let panel else { return nil }
+              !heldDrag, NSMouseInRect(NSEvent.mouseLocation, geometry.screen, false), let panel else { return nil }
         // The keyboard first, before the island changes shape, so keys typed
         // right after the shortcut wait here for the bar's field.
         panel.acceptsKeyFocus = true

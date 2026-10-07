@@ -303,6 +303,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/Notch/NotchAudioLevelSupport.swift
         Sources/Vorssaint/Services/Notch/NotchVolumeKeyGate.swift
         Sources/Vorssaint/Services/Notch/NotchMusicSupport.swift
+        Sources/Vorssaint/UI/Notch/NotchDecorativeClock.swift
         Sources/Vorssaint/UI/Notch/NotchEqualizerBars.swift
         Sources/Vorssaint/UI/Notch/NotchScrollEdgeFade.swift
         Sources/Vorssaint/UI/Notch/NotchAgentAnimationView.swift
@@ -509,6 +510,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/KeepAwakeAutomationSupport.swift
         Sources/Vorssaint/Services/SudoersSupport.swift
         Sources/Vorssaint/Services/Metrics/BatteryTimeSupport.swift
+        Sources/Vorssaint/Services/Metrics/BatteryPowerSupport.swift
         Sources/Vorssaint/Services/BoundedProcessRunner.swift
         Sources/Vorssaint/Services/DetachedProcess.swift
         Sources/Vorssaint/Services/ShellSupport.swift

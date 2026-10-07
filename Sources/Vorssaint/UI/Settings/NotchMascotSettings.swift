@@ -609,6 +609,7 @@ private struct NotchMascotSleepZs: View {
     /// Toward the camera, where the island has black to spare.
     let toward: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var settingsWindow = SettingsWindowVisibility.shared
 
     private static let period: TimeInterval = 2.7
 
@@ -620,8 +621,9 @@ private struct NotchMascotSleepZs: View {
                     z(phase: 0.7)
                 }
             } else {
-                // Drifting slowly, they need no more than 30 frames a second.
-                TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+                // Drifting slowly, they need no more than 30 frames a second,
+                // and none while Settings is closed or out of sight.
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !settingsWindow.isVisible)) { timeline in
                     let time = timeline.date.timeIntervalSinceReferenceDate / Self.period
                     ZStack(alignment: .topLeading) {
                         ForEach(0..<3, id: \.self) { index in

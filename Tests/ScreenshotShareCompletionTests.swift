@@ -69,9 +69,11 @@ enum ScreenshotShareCompletionTests {
 
     enum ScreenshotLastCaptureStore {
         static var stored: Int? = 1
+        static var isWithheld = false
         static func load() -> Int? { stored }
-        static func save(_ capture: Int) { stored = capture }
-        static func clear() { stored = nil }
+        static func save(_ capture: Int) { stored = capture; isWithheld = false }
+        static func clear() { stored = nil; isWithheld = false }
+        static func withhold() { isWithheld = true }
     }
 
     enum ScreenshotSelectionController {
@@ -108,6 +110,7 @@ enum ScreenshotShareCompletionTests {
         let strings = ScreenshotFeatureStrings.enUS
         var uploadingCaptureID: UUID?
         var latestCaptureID = UUID()
+        var latestCaptureToken = UUID()
         var latestCaptureWithheld = false
         var linkCopyRetry = ScreenshotLinkCopyRetry()
         var editors: [ScreenshotEditorController] = []
@@ -121,6 +124,7 @@ enum ScreenshotShareCompletionTests {
             defaults.set(true, forKey: DefaultsKey.screenshotUploadShortcutEnabled)
             defaults.set(true, forKey: DefaultsKey.screenshotSharingEnabled)
             ScreenshotLastCaptureStore.stored = 1
+            ScreenshotLastCaptureStore.isWithheld = false
         }
         deinit {
             UserDefaults(suiteName: defaultsName)?.removePersistentDomain(forName: defaultsName)
@@ -371,11 +375,37 @@ enum ScreenshotShareCompletionTests {
                      "discarding an older capture or one reopened from history leaves the latest one shareable")
         let discardedLatest = Uploader()
         discardedLatest.beginLatestCapture(7)
-        discardedLatest.discardLatestCapture(discardedLatest.latestCaptureID)
+        discardedLatest.discardLatestCapture(discardedLatest.latestCaptureToken)
         NSSound.beeps = 0
         discardedLatest.uploadLastCapture()
         suite.expect(discardedLatest.uploads == 0 && NSSound.beeps == 1,
                      "a discarded latest capture is not published")
+        suite.expect(ScreenshotLastCaptureStore.isWithheld,
+                     "a discarded latest capture stays withheld in the store for the next launch")
+        // Turning the shortcut off renews the upload claim, not the capture's
+        // identity, so the preview's later Discard still holds it back.
+        let switchedOff = Uploader()
+        switchedOff.beginLatestCapture(12)
+        let shown = switchedOff.latestCaptureToken
+        switchedOff.invalidateLatestCaptureUploads()
+        switchedOff.discardLatestCapture(shown)
+        NSSound.beeps = 0
+        switchedOff.uploadLastCapture()
+        suite.expect(switchedOff.uploads == 0 && NSSound.beeps == 1,
+                     "a capture discarded after the shortcut was switched off is not published once it is back on")
+        // A relaunch starts with nothing in memory; what the store kept back
+        // is still not published, and a newer capture lifts it.
+        let relaunched = Uploader()
+        ScreenshotLastCaptureStore.stored = 13
+        ScreenshotLastCaptureStore.withhold()
+        NSSound.beeps = 0
+        relaunched.uploadLastCapture()
+        suite.expect(relaunched.uploads == 0 && NSSound.beeps == 1,
+                     "a capture withheld before a relaunch is not published after it")
+        relaunched.beginLatestCapture(14)
+        relaunched.uploadLastCapture()
+        suite.expect(relaunched.uploads == 1 && relaunched.uploadedCaptures == [14],
+                     "a capture taken after the relaunch uploads")
 
         // The capture is kept for whichever shortcut uses it, and only then.
         let retention = Uploader()

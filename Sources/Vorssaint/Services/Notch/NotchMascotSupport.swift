@@ -394,6 +394,22 @@ enum NotchMascotGeometry {
         let visor: CGPath
     }
 
+    /// How far below the middle of its box the figure's own middle sits, as
+    /// a share of the box. The box keeps room above a minimal body for the
+    /// robot's antenna, so a body placed by its box would sit a little low
+    /// wherever it is meant to be centred.
+    static func figureOffset(_ look: NotchMascotLook) -> CGFloat {
+        let bounds: CGRect
+        if look.style == .robot {
+            let parts = robot(size: 1)
+            bounds = [parts.ears, parts.antenna, parts.bulb]
+                .reduce(parts.head.boundingBoxOfPath) { $0.union($1.boundingBoxOfPath) }
+        } else {
+            bounds = body(look.shape, size: 1).boundingBoxOfPath
+        }
+        return bounds.midY - 0.5
+    }
+
     static func robot(size: CGFloat) -> Robot {
         func rect(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) -> CGRect {
             CGRect(x: x * size, y: y * size, width: width * size, height: height * size)

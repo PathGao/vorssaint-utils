@@ -99,6 +99,8 @@ enum SettingsBackupSupport {
     /// out by construction (they are not preference keys), listed here only
     /// when they would otherwise slip in through the registered set.
     static let machineStateKeys: Set<String> = [
+        DefaultsKey.displaysSwitchedOff,
+        DefaultsKey.displaysSwitchedOffFingerprints,
         DefaultsKey.dockPreviewRestoreAutohide,
         // The Space arrangement setting to put back, and a Dock restart still
         // owed, belong to this Mac's Dock.
@@ -158,8 +160,6 @@ enum SettingsBackupSupport {
         DefaultsKey.orphanedCaptureShortcutMigrated,
         DefaultsKey.settingsWindowWidth,
         DefaultsKey.settingsWindowHeight,
-        DefaultsKey.clipboardHistoryWindowWidth,
-        DefaultsKey.clipboardHistoryWindowHeight,
         // The last magnifier level is session history; its remembered/default
         // policy remains portable, but another Mac need not inherit the value.
         DefaultsKey.screenshotLoupeLastZoom,

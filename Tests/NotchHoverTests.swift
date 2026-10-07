@@ -215,21 +215,28 @@ enum NotchHoverTests {
         suite.expect(hiddenPulse.surfaceSize == hiddenResting,
                      "an invisible island does not pulse before its hover reveal")
         let reducedMotion = fixture()
+        UserDefaults.standard.enabled = false
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion = true
         let reducedResting = reducedMotion.surfaceSize
         reducedMotion.hover(true)
         suite.expect(reducedMotion.surfaceSize == reducedResting,
                      "Reduce Motion leaves the resting island still on hover")
-        let compactPulse = fixture(physical: true)
-        compactPulse.compactActivity = .music
-        compactPulse.updateBounds()
-        let compactResting = compactPulse.surfaceSize
-        compactPulse.hover(true)
-        suite.expect(compactPulse.surfaceSize.height == compactResting.height + 5,
-                     "a visible compact activity responds to hover without replacing its content")
-        leave(compactPulse)
-        suite.expect(compactPulse.surfaceSize == compactResting,
-                     "the compact activity returns to its original size on exit")
+        for physical in [false, true] {
+            for opensOnHover in [false, true] {
+                let compactPulse = fixture(physical: physical)
+                UserDefaults.standard.enabled = opensOnHover
+                compactPulse.compactActivity = .music
+                compactPulse.updateBounds()
+                let compactResting = compactPulse.surfaceSize
+                compactPulse.hover(true)
+                suite.expect(compactPulse.surfaceSize.height == compactResting.height + (opensOnHover ? 0 : 5)
+                             && compactPulse.hoverEmphasized == !opensOnHover,
+                             "a compact activity waits at rest for a hover opening and pulses for a click opening")
+                leave(compactPulse)
+                suite.expect(compactPulse.surfaceSize == compactResting,
+                             "the compact activity returns to its original size on exit")
+            }
+        }
         let fullscreen = fixture(physical: true)
         fullscreen.hiddenInFullscreen = true
         fullscreen.compactActivity = .music
@@ -253,10 +260,14 @@ enum NotchHoverTests {
                      "a simulated cutout hidden in full screen does not open on hover")
         for physical in [false, true] {
             let service = fixture(physical: physical)
+            let resting = service.surfaceSize
             service.hover(true)
             let initial = service.hoverWork
+            suite.expect(!service.hoverEmphasized && service.surfaceSize == resting && initial != nil,
+                         "hover opening keeps either display's island at rest instead of previewing before expansion")
             DispatchQueue.main.advance(0.20)
-            suite.expect(service.openings == 0, "passing briefly over either display's island does not open it")
+            suite.expect(service.openings == 0 && service.surfaceSize == resting,
+                         "the island stays at rest throughout the configured hover opening delay")
             service.hover(false) // A tracking exit while the pointer is still inside.
             suite.expect(service.hoverWork === initial, "duplicate tracking events preserve the original opening deadline")
             DispatchQueue.main.advance(0.06)
@@ -467,6 +478,7 @@ enum NotchHoverTests {
         // exit arrives while the pointer still touches the island's top edge.
         do {
             let passed = fixture()
+            UserDefaults.standard.enabled = false
             let top = passed.windowHost!.rect
             NSEvent.mouseLocation = CGPoint(x: top.midX, y: top.maxY - 1)
             passed.hover(true)
@@ -480,6 +492,7 @@ enum NotchHoverTests {
                          "the closed island stops following the pointer once the emphasis is gone")
             // Fast enough, AppKit reports no exit at all after the entry.
             let silent = fixture()
+            UserDefaults.standard.enabled = false
             NSEvent.mouseLocation = CGPoint(x: top.midX, y: top.maxY - 1)
             silent.hover(true)
             suite.expect(silent.hoverEmphasized && NSEvent.global.count == 1 && NSEvent.local.count == 1,
@@ -489,11 +502,99 @@ enum NotchHoverTests {
             follow(to: CGPoint(x: top.midX, y: top.maxY + 300))
             suite.expect(!silent.hoverEmphasized && NSEvent.global.isEmpty && NSEvent.local.isEmpty,
                          "an unreported exit to the display above still clears the emphasis and its observers")
+            // A notice that holds back a preview leaves the island emphasized
+            // under a resting pointer, so following goes on past the deadline.
+            let interrupted = fixture()
+            UserDefaults.standard.expands = false
+            NSEvent.mouseLocation = CGPoint(x: top.midX, y: top.maxY - 1)
+            interrupted.hover(true)
+            interrupted.notice = volume
+            DispatchQueue.main.advance(1)
+            interrupted.notice = nil
+            suite.expect(!interrupted.peeking && interrupted.hoverWork == nil && interrupted.hoverEmphasized
+                         && NSEvent.global.count == 1 && NSEvent.local.count == 1,
+                         "a preview a notice held back keeps following the emphasized island")
+            follow(to: CGPoint(x: top.midX, y: top.maxY + 300))
+            suite.expect(!interrupted.hoverEmphasized && !interrupted.inside
+                         && NSEvent.global.isEmpty && NSEvent.local.isEmpty,
+                         "an unreported exit after the notice still clears the emphasis and its observers")
+            // A second activity that starts during a hover opening shows the
+            // picker instead, which still needs the pointer followed out.
+            let joined = fixture()
+            joined.compactActivity = .agents
+            joined.compactActivities = [.agents]
+            NSEvent.mouseLocation = CGPoint(x: top.midX, y: top.maxY - 1)
+            joined.hover(true)
+            joined.compactActivities = [.agents, .music]
+            DispatchQueue.main.advance(1)
+            suite.expect(joined.openings == 0 && joined.showsCompactActivityPicker
+                         && NSEvent.global.count == 1 && NSEvent.local.count == 1,
+                         "a picker that appears during a hover opening keeps following the pointer")
+            follow(to: CGPoint(x: top.midX, y: top.maxY + 300))
+            suite.expect(!joined.showsCompactActivityPicker && NSEvent.global.isEmpty && NSEvent.local.isEmpty,
+                         "an unreported exit to the display above still hides that picker and releases its observers")
+        }
+        // A full opening has no hover emphasis, but still needs an uninterrupted
+        // stay. Leaving without a tracking exit must discard the old deadline.
+        for physical in [false, true] {
+            for reduced in [false, true] {
+                for local in [false, true] {
+                    let returning = fixture(physical: physical)
+                    UserDefaults.standard.delay = 0.6
+                    NSWorkspace.shared.accessibilityDisplayShouldReduceMotion = reduced
+                    let top = returning.windowHost!.rect
+                    let entry = CGPoint(x: top.midX, y: top.maxY - 1)
+                    let resting = returning.surfaceSize
+                    NSEvent.mouseLocation = entry
+                    returning.hover(true)
+                    let first = returning.hoverWork
+                    suite.expect(!returning.hoverEmphasized && returning.surfaceSize == resting
+                                 && NSEvent.global.count == 1 && NSEvent.local.count == 1,
+                                 "hover opening follows the pointer without emphasizing the island, including Reduce Motion")
+                    DispatchQueue.main.advance(0.4)
+                    follow(to: CGPoint(x: top.midX, y: top.maxY + 300), local: local)
+                    suite.expect(!returning.inside && first?.isCancelled == true && returning.hoverWork == nil,
+                                 "a move to the display above cancels the opening even without an AppKit tracking exit")
+                    suite.expect(NSEvent.global.isEmpty && NSEvent.local.isEmpty,
+                                 "leaving a pending hover opening releases both pointer observers")
+                    DispatchQueue.main.advance(0.05)
+                    NSEvent.mouseLocation = entry
+                    returning.hover(true)
+                    suite.expect(returning.hoverWork != nil && returning.hoverWork !== first,
+                                 "returning after an unreported exit starts a fresh hover deadline")
+                    DispatchQueue.main.advance(0.16)
+                    suite.expect(returning.openings == 0 && returning.surfaceSize == resting,
+                                 "the original opening deadline cannot open an island the pointer left and reentered")
+                    DispatchQueue.main.advance(0.43)
+                    suite.expect(returning.openings == 0,
+                                 "reentry waits for the full configured delay")
+                    DispatchQueue.main.advance(0.02)
+                    suite.expect(returning.openings == 1 && returning.openedByHover
+                                 && NSEvent.global.isEmpty && NSEvent.local.isEmpty,
+                                 "the fresh hover opens once and releases the pending opening's pointer observers")
+                    returning.collapse()
+                    returning.hover(true)
+                    suite.expect(returning.hoverState.suppressed && returning.hoverWork == nil
+                                 && NSEvent.global.count == 1 && NSEvent.local.count == 1,
+                                 "an explicit close under the pointer follows its departure without reopening")
+                    follow(to: CGPoint(x: top.midX, y: top.maxY + 300), local: local)
+                    suite.expect(!returning.hoverState.suppressed && NSEvent.global.isEmpty && NSEvent.local.isEmpty,
+                                 "an unreported departure rearms hover after an explicit close and releases its observers")
+                    NSEvent.mouseLocation = entry
+                    returning.hover(true)
+                    DispatchQueue.main.advance(0.59)
+                    suite.expect(returning.openings == 1, "reopening after an explicit close waits for the full hover delay")
+                    DispatchQueue.main.advance(0.02)
+                    suite.expect(returning.openings == 2 && NSEvent.global.isEmpty && NSEvent.local.isEmpty,
+                                 "the first return after an explicit close opens normally even without a tracking exit")
+                }
+            }
         }
         // A timed capture still attached to the closed island would hear each
         // followed move as the pointer leaving and restart its dismissal.
         do {
             let attached = fixture()
+            UserDefaults.standard.enabled = false
             var previewHovered: Bool?
             attached.captureHover = { previewHovered = $0 }
             let top = attached.windowHost!.rect
@@ -511,8 +612,8 @@ enum NotchHoverTests {
             let top = opening.windowHost!.rect
             NSEvent.mouseLocation = CGPoint(x: top.midX, y: top.maxY - 1)
             opening.hover(true)
-            suite.expect(opening.hoverEmphasized && NSEvent.global.count == 1,
-                         "the emphasized island follows the pointer before it opens")
+            suite.expect(opening.hoverEmphasized == !expands && NSEvent.global.count == 1 && NSEvent.local.count == 1,
+                         "both hover modes follow the pointer before revealing content, while only the preview emphasizes it")
             DispatchQueue.main.advance(0.26)
             suite.expect((expands ? opening.openings == 1 : opening.peeking)
                             && NSEvent.global.isEmpty && NSEvent.local.isEmpty,
@@ -614,6 +715,9 @@ enum NotchHoverTests {
             DispatchQueue.main.advance(1)
             suite.expect(protected.openings == 0 && protected.hoverWork == nil,
                    "a pending hover rechecks eligibility before opening")
+            follow(to: CGPoint(x: protected.geometry.screen.minX, y: protected.geometry.screen.minY))
+            suite.expect(NSEvent.global.isEmpty && NSEvent.local.isEmpty,
+                         "an aborted hover opening releases its pointer observers once the pointer moves away")
         }
         for protect: (Service) -> Void in [
             { $0.pinned = true }, { $0.heldDrag = true }, { $0.keepsWorkingSurface = true },
