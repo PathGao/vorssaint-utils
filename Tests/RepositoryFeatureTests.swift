@@ -94,9 +94,11 @@ enum RepositoryFeatureTests {
         static var rules: URLCleaning.Rules { .none }
         static var written: [String] = []
         static var writtenSources: [String?] = []
-        static func writeToPasteboard(_ urlString: String, source: String? = nil) -> Int {
+        static var writtenRemote: [Bool] = []
+        static func writeToPasteboard(_ urlString: String, source: String? = nil, remote: Bool = false) -> Int {
             written.append(urlString)
             writtenSources.append(source)
+            writtenRemote.append(remote)
             return 0
         }
     }
@@ -615,11 +617,19 @@ enum RepositoryFeatureTests {
             pasteboard.source = "com.example.writer"
             URLCleanerPollHost.written = []
             URLCleanerPollHost.writtenSources = []
+            URLCleanerPollHost.writtenRemote = []
             _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
             pasteboard.source = nil
             suite.expect(URLCleanerPollHost.written == ["https://x.com/a/status/1"]
-                    && URLCleanerPollHost.writtenSources == ["com.example.writer"],
+                    && URLCleanerPollHost.writtenSources == ["com.example.writer"]
+                    && URLCleanerPollHost.writtenRemote == [false],
                    "automatic cleaning keeps the source a copy names: \(URLCleanerPollHost.writtenSources)")
+            pasteboard.types = ["public.utf8-plain-text", "com.apple.is-remote-clipboard"].map(URLCleanerPollHost.Kind.init(rawValue:))
+            URLCleanerPollHost.written = []
+            URLCleanerPollHost.writtenRemote = []
+            _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
+            suite.expect(URLCleanerPollHost.written == ["https://x.com/a/status/1"] && URLCleanerPollHost.writtenRemote == [true],
+                   "automatic cleaning keeps a copy from another device marked as one: \(URLCleanerPollHost.writtenRemote)")
         }
 
         // A title over the same link, an href the browser resolved and a

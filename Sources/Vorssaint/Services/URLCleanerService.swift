@@ -223,9 +223,11 @@ final class URLCleanerService: ObservableObject {
             return PollResult(changeCount: changeCount, cleaned: nil)
         }
 
-        // The app the copy named as its source stays named, so the clipboard
-        // history does not credit the cleaned link to the app in front.
-        let rewrittenChangeCount = writeToPasteboard(cleaned.url, source: pasteboard.string(forType: .source))
+        // The app the copy named as its source stays named, and a copy from
+        // another device stays marked as one, so the clipboard history does
+        // not credit the cleaned link to the app in front.
+        let rewrittenChangeCount = writeToPasteboard(cleaned.url, source: pasteboard.string(forType: .source),
+                                                     remote: types.contains("com.apple.is-remote-clipboard"))
         return PollResult(changeCount: rewrittenChangeCount, cleaned: cleaned)
     }
 
@@ -238,12 +240,13 @@ final class URLCleanerService: ObservableObject {
     }
 
     @discardableResult
-    private static func writeToPasteboard(_ urlString: String, source: String? = nil) -> Int {
+    private static func writeToPasteboard(_ urlString: String, source: String? = nil, remote: Bool = false) -> Int {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(urlString, forType: .string)
         pasteboard.setString(urlString, forType: urlType)
         if let source { pasteboard.setString(source, forType: .source) }
+        if remote { pasteboard.setData(Data(), forType: .remoteClipboard) }
         return pasteboard.changeCount
     }
 

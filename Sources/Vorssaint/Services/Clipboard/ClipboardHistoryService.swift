@@ -614,14 +614,16 @@ final class ClipboardHistoryService: ObservableObject {
     /// window closes now and a stale entry simply leaves the clipboard as the
     /// user left it.
     func copyOnlyQuickEntry(_ entry: ClipboardHistoryEntry) {
-        copy(entry) { if !$0 { NSSound.beep() } }
+        // Closing first lets its last check read what the panel copied
+        // before this write replaces it.
         hideHistoryWindow()
+        copy(entry) { if !$0 { NSSound.beep() } }
         pasteTargetApp = nil
     }
 
     func copyOnlyQuickEntries(_ selectedEntries: [ClipboardHistoryEntry]) {
-        copy(selectedEntries) { if !$0 { NSSound.beep() } }
         hideHistoryWindow()
+        copy(selectedEntries) { if !$0 { NSSound.beep() } }
         pasteTargetApp = nil
     }
 
