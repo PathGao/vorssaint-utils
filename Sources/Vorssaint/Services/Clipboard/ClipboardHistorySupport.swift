@@ -369,6 +369,9 @@ enum ClipboardHistoryEditing {
 /// paste will give.
 enum ClipboardJSONFormat {
     static let maxBytes = 256 * 1_024
+    /// Deep nesting indents every line again, so a small input can lay out
+    /// to many times its size; past this the preview keeps the copied text.
+    static let maxOutputBytes = 4 * maxBytes
 
     static func pretty(_ text: String) -> String? {
         guard text.utf8.count <= maxBytes,
@@ -378,12 +381,16 @@ enum ClipboardJSONFormat {
         let scalars = Array(text.unicodeScalars)
         let blanks: Set<Unicode.Scalar> = [" ", "\t", "\n", "\r"]
         var out = String.UnicodeScalarView()
+        // Never less than the layout's size: the input plus what it adds.
+        var size = text.utf8.count
         var depth = 0, index = 0, inString = false, escaped = false
         func newline() {
             out.append("\n")
             out.append(contentsOf: String(repeating: " ", count: depth * 2).unicodeScalars)
+            size += 1 + depth * 2
         }
         while index < scalars.count {
+            guard size <= maxOutputBytes else { return nil }
             let scalar = scalars[index]
             index += 1
             if inString {
@@ -416,6 +423,10 @@ enum ClipboardJSONFormat {
                     newline()
                 }
             case "}", "]":
+                // JSONSerialization takes a trailing comma, whose line break
+                // would leave an empty line before the bracket.
+                while out.last == " " { out.removeLast() }
+                if out.last == "\n" { out.removeLast() }
                 depth -= 1
                 newline()
                 out.append(scalar)
@@ -424,11 +435,28 @@ enum ClipboardJSONFormat {
                 newline()
             case ":":
                 out.append(contentsOf: ": ".unicodeScalars)
+                size += 1
             default:
                 out.append(scalar)
             }
         }
         return String(out)
+    }
+}
+
+/// How large a picture from the history is decoded for text recognition.
+/// Screen OCR hands Vision its whole capture, so a 5K or 6K screenshot keeps
+/// every pixel and its small text; only a larger picture, like a long
+/// scrolling capture, is scaled down to this area to bound its bitmap.
+enum ClipboardImageRecognition {
+    static let maxPixels = 24_000_000
+
+    /// The longest side to decode a `width` by `height` picture at.
+    static func decodeMaxPixelSize(width: Int, height: Int) -> Int {
+        let longest = max(width, height, 1)
+        let pixels = Double(max(width, 1)) * Double(max(height, 1))
+        guard pixels > Double(maxPixels) else { return longest }
+        return max(1, Int(Double(longest) * (Double(maxPixels) / pixels).squareRoot()))
     }
 }
 
