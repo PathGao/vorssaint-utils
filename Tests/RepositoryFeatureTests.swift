@@ -67,6 +67,7 @@ enum RepositoryFeatureTests {
             let rawValue: String
             static let string = Kind(rawValue: "public.utf8-plain-text")
             static let html = Kind(rawValue: "public.html")
+            static let source = Kind(rawValue: "org.nspasteboard.source")
         }
         final class Pasteboard {
             static let general = Pasteboard()
@@ -76,10 +77,11 @@ enum RepositoryFeatureTests {
             var text = ""
             var html = ""
             var copiedDuringRead = false
+            var source: String?
             var pasteboardItems: [Int]? { Array(repeating: 0, count: items) }
             func string(forType type: Kind) -> String? {
                 if copiedDuringRead { changeCount += 1 }
-                return type == .string ? text : type == .html ? html : nil
+                return type == .string ? text : type == .html ? html : type == .source ? source : nil
             }
         }
         typealias NSPasteboard = Pasteboard
@@ -91,8 +93,10 @@ enum RepositoryFeatureTests {
         static let urlType = Kind(rawValue: "public.url")
         static var rules: URLCleaning.Rules { .none }
         static var written: [String] = []
-        static func writeToPasteboard(_ urlString: String) -> Int {
+        static var writtenSources: [String?] = []
+        static func writeToPasteboard(_ urlString: String, source: String? = nil) -> Int {
             written.append(urlString)
+            writtenSources.append(source)
             return 0
         }
     }
@@ -598,6 +602,24 @@ enum RepositoryFeatureTests {
             _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
             suite.expect(URLCleanerPollHost.written == (expected ? ["https://x.com/a/status/1"] : []),
                    "automatic cleaning \(expected ? "rewrites" : "leaves alone") \(copy): \(URLCleanerPollHost.written)")
+        }
+        // The app a copy names as its source stays named after the rewrite,
+        // so the clipboard history does not credit the link to the app in front.
+        do {
+            let pasteboard = URLCleanerPollHost.Pasteboard.general
+            pasteboard.types = ["public.utf8-plain-text", "org.nspasteboard.source"].map(URLCleanerPollHost.Kind.init(rawValue:))
+            pasteboard.items = 1
+            pasteboard.text = pollLink
+            pasteboard.html = ""
+            pasteboard.copiedDuringRead = false
+            pasteboard.source = "com.example.writer"
+            URLCleanerPollHost.written = []
+            URLCleanerPollHost.writtenSources = []
+            _ = URLCleanerPollHost.pollPasteboard(sinceChangeCount: 0, token: URLCleanerPollHost.PollToken())
+            pasteboard.source = nil
+            suite.expect(URLCleanerPollHost.written == ["https://x.com/a/status/1"]
+                    && URLCleanerPollHost.writtenSources == ["com.example.writer"],
+                   "automatic cleaning keeps the source a copy names: \(URLCleanerPollHost.writtenSources)")
         }
 
         // A title over the same link, an href the browser resolved and a

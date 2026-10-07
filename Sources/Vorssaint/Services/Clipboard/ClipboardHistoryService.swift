@@ -662,7 +662,7 @@ final class ClipboardHistoryService: ObservableObject {
         case text(String)
     }
 
-    private func captureIfChanged() {
+    private func captureIfChanged(historyPanelClosing: Bool = false) {
         guard isRunning, let generation = captureState.begin() else { return }
         // On start (including stop/start during a blocked read), establish a
         // fresh baseline before capturing. Old completions cannot consume it.
@@ -670,8 +670,13 @@ final class ClipboardHistoryService: ObservableObject {
         let sinceChangeCount = lastChangeCount
         let includeImagesFiles = UserDefaults.standard.bool(
             forKey: DefaultsKey.clipboardHistoryIncludeImagesFiles)
+        // Taken before the read, which may answer only after the panel took
+        // the keys: a copy made before it opened came from the app behind.
+        // A closing panel counts as holding them, since the click outside
+        // that closes it may already have taken them away.
+        let historyPanelIsKey = historyPanelClosing || panel?.isKeyWindow == true
         GeneralPasteboardAccess.shared.async(timeout: Self.pasteboardTimeout, { isExpired
-            -> (changeCount: Int, content: CapturedContent?, declaredSource: String?)? in
+            -> (changeCount: Int, content: CapturedContent?, declaredSource: String?, remote: Bool)? in
             let changeCount = NSPasteboard.general.changeCount
             guard !isExpired() else { return nil }
             // Read during a baseline too, not only on a detected change: a
@@ -683,7 +688,9 @@ final class ClipboardHistoryService: ObservableObject {
             let content: CapturedContent? = (baseline || changeCount != sinceChangeCount)
                 ? Self.readPasteboard(includeImagesFiles: includeImagesFiles)
                 : nil
-            return (changeCount, content, content == nil ? nil : NSPasteboard.general.string(forType: .source))
+            return (changeCount, content,
+                    content == nil ? nil : NSPasteboard.general.string(forType: .source),
+                    content != nil && NSPasteboard.general.types?.contains(.remoteClipboard) == true)
         }, then: { [weak self] result in
             guard let self else { return }
             guard let result else {
@@ -705,7 +712,9 @@ final class ClipboardHistoryService: ObservableObject {
             }
             // Preserve exclusion over the whole time since the previous
             // accepted check, including any read that expired in between.
-            let source = ClipboardIgnoredApps.shared.sourceSinceLastCheck(declared: result.declaredSource)
+            let source = ClipboardIgnoredApps.shared.sourceSinceLastCheck(
+                declared: result.declaredSource, remote: result.remote,
+                historyPanelIsKey: historyPanelIsKey, historyPanelClosing: historyPanelClosing)
             guard let accepted = ClipboardHistoryChangeCount.accepted(
                 read: result.changeCount, since: sinceChangeCount, last: self.lastChangeCount
             ) else { return }
@@ -717,10 +726,13 @@ final class ClipboardHistoryService: ObservableObject {
             // A recording path below sets this back.
             self.latestPasteboardEntry = nil
             guard !source.excluded, let content = result.content else { return }
+            // A copy out of the history's own panel, such as text selected in
+            // the preview, is of an entry already there, and its app stays.
+            let keepsSource = source.fromHistoryPanel
             switch content {
-            case .files(let paths): self.promoteFiles(paths, source: source.bundleID)
-            case .image(let image): self.promoteImage(image, source: source.bundleID)
-            case .text(let text): self.promote(text, source: source.bundleID)
+            case .files(let paths): self.promoteFiles(paths, source: source.bundleID, keepsSource: keepsSource)
+            case .image(let image): self.promoteImage(image, source: source.bundleID, keepsSource: keepsSource)
+            case .text(let text): self.promote(text, source: source.bundleID, keepsSource: keepsSource)
             }
         }, didFinish: { [weak self] _ in
             self?.captureState.finish()
@@ -807,7 +819,8 @@ final class ClipboardHistoryService: ObservableObject {
         return (data, rep.pixelsWide, rep.pixelsHigh)
     }
 
-    private func promoteImage(_ image: (data: Data, width: Int, height: Int), source: String?) {
+    private func promoteImage(_ image: (data: Data, width: Int, height: Int), source: String?,
+                              keepsSource: Bool) {
         let hash = Self.sha256Hex(image.data)
         if let existing = entries.first(where: { $0.kind == .image && $0.imageHash == hash }) {
             entries.removeAll { $0.id == existing.id }
@@ -819,7 +832,8 @@ final class ClipboardHistoryService: ObservableObject {
                                                  imageFile: existing.imageFile,
                                                  imageHash: hash,
                                                  imageWidth: existing.imageWidth,
-                                                 imageHeight: existing.imageHeight), source: source)
+                                                 imageHeight: existing.imageHeight),
+                           source: keepsSource ? existing.sourceBundleID : source)
         } else {
             guard let name = ClipboardImageStore.store(image.data) else { return }
             insertPromoted(ClipboardHistoryEntry(text: "",
@@ -834,7 +848,7 @@ final class ClipboardHistoryService: ObservableObject {
         save()
     }
 
-    private func promoteFiles(_ paths: [String], source: String?) {
+    private func promoteFiles(_ paths: [String], source: String?, keepsSource: Bool) {
         let existing = entries.first(where: { $0.kind == .files && $0.filePaths == paths })
         entries.removeAll { $0.kind == .files && $0.filePaths == paths }
         if let existing {
@@ -843,7 +857,8 @@ final class ClipboardHistoryService: ObservableObject {
                                                  copiedAt: Date(),
                                                  pinnedAt: existing.pinnedAt,
                                                  kind: .files,
-                                                 filePaths: paths), source: source)
+                                                 filePaths: paths),
+                           source: keepsSource ? existing.sourceBundleID : source)
         } else {
             insertPromoted(ClipboardHistoryEntry(text: "", kind: .files, filePaths: paths), source: source)
         }
@@ -877,7 +892,7 @@ final class ClipboardHistoryService: ObservableObject {
         return (scheme == "http" || scheme == "https") && url.host != nil
     }
 
-    private func promote(_ raw: String, source: String?) {
+    private func promote(_ raw: String, source: String?, keepsSource: Bool) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= ClipboardHistoryEditing.maxCharacters else { return }
         if UserDefaults.standard.bool(forKey: DefaultsKey.clipboardHistorySkipSensitive),
@@ -891,7 +906,8 @@ final class ClipboardHistoryService: ObservableObject {
             insertPromoted(ClipboardHistoryEntry(id: existing.id,
                                                  text: text,
                                                  copiedAt: Date(),
-                                                 pinnedAt: existing.pinnedAt), source: source)
+                                                 pinnedAt: existing.pinnedAt),
+                           source: keepsSource ? existing.sourceBundleID : source)
         } else {
             insertPromoted(ClipboardHistoryEntry(text: text), source: source)
         }
@@ -1181,12 +1197,18 @@ final class ClipboardHistoryService: ObservableObject {
         position(panel)
         installKeyMonitor(for: panel)
         installDismissMonitors(for: panel)
+        // A copy made just before opening is read while the panel does not
+        // hold the keys yet, so it keeps the app it came from.
+        captureIfChanged()
         panel.alphaValue = 1
         panel.orderFrontRegardless()
         panel.makeKey()
     }
 
     func hideHistoryWindow() {
+        // What was copied in the panel is read now, as the panel's, so a copy
+        // made right after in the app behind is credited to that app.
+        if panel?.isVisible == true { captureIfChanged(historyPanelClosing: true) }
         removeKeyMonitor()
         removeDismissMonitors()
         // Ordering out keeps an open confirmation attached, and it would come

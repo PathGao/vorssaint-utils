@@ -223,7 +223,9 @@ final class URLCleanerService: ObservableObject {
             return PollResult(changeCount: changeCount, cleaned: nil)
         }
 
-        let rewrittenChangeCount = writeToPasteboard(cleaned.url)
+        // The app the copy named as its source stays named, so the clipboard
+        // history does not credit the cleaned link to the app in front.
+        let rewrittenChangeCount = writeToPasteboard(cleaned.url, source: pasteboard.string(forType: .source))
         return PollResult(changeCount: rewrittenChangeCount, cleaned: cleaned)
     }
 
@@ -236,11 +238,12 @@ final class URLCleanerService: ObservableObject {
     }
 
     @discardableResult
-    private static func writeToPasteboard(_ urlString: String) -> Int {
+    private static func writeToPasteboard(_ urlString: String, source: String? = nil) -> Int {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(urlString, forType: .string)
         pasteboard.setString(urlString, forType: urlType)
+        if let source { pasteboard.setString(source, forType: .source) }
         return pasteboard.changeCount
     }
 

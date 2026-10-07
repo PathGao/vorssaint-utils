@@ -136,6 +136,12 @@ struct ClipboardQuickPanelView: View {
                 .onChange(of: history.quickQuery) { _, _ in
                     scrollSelectedEntry(with: proxy)
                 }
+                // The preview takes its width out of the strip, so a card
+                // near the trailing edge would slide out of view under it.
+                // The next pass has the strip at its new width.
+                .onChange(of: history.quickPreviewPresented) { _, _ in
+                    DispatchQueue.main.async { scrollSelectedEntry(with: proxy) }
+                }
                 // The window is only hidden between uses, so without this it
                 // reopens wherever it was scrolled, while the selection and
                 // ⌘1 to ⌘9 already start from the top rows.
@@ -408,8 +414,9 @@ private struct QuickEntryCard: View, Equatable {
     }
 
     /// Looked up once per app. An app removed since the copy has nothing to
-    /// show, and the card keeps the kind's symbol.
-    private static var sourceApps: [String: (name: String, icon: NSImage)?] = [:]
+    /// show, and the card keeps the kind's symbol. A miss is not kept, so an
+    /// app installed later shows up without a restart.
+    private static var sourceApps: [String: (name: String, icon: NSImage)] = [:]
 
     private var sourceApp: (name: String, icon: NSImage)? {
         guard let bundleID = entry.sourceBundleID else { return nil }
@@ -417,8 +424,18 @@ private struct QuickEntryCard: View, Equatable {
         let app = InstalledApps.url(for: bundleID).map {
             (name: InstalledApps.name(for: bundleID), icon: NSWorkspace.shared.icon(forFile: $0.path))
         }
-        Self.sourceApps[bundleID] = app
+        if let app { Self.sourceApps[bundleID] = app }
         return app
+    }
+
+    /// A copied file keeps its own icon over the app's: that app is nearly
+    /// always the file manager, and the card's one line of name tells files
+    /// apart no better. A single picture shows itself in the card instead.
+    private var showsFileIcon: Bool {
+        guard entry.kind == .files else { return false }
+        if entry.filePaths.count == 1, let path = entry.filePaths.first,
+           ClipboardImageStore.isImageFile(atPath: path) { return false }
+        return fileIcon(for: entry) != nil
     }
 
     private var cardFooter: some View {
@@ -445,7 +462,7 @@ private struct QuickEntryCard: View, Equatable {
                 if let color = entry.color {
                     ColorSwatch(color: color, size: 14)
                 }
-                SearchHighlightText.text(entry.preview, tokens: tokens, fontSize: 12)
+                SearchHighlightText.text(entry.cardPreview, tokens: tokens, fontSize: 12)
                     .font(.system(size: 12))
                     .lineLimit(7)
                     .truncationMode(.tail)
@@ -549,8 +566,8 @@ private struct QuickEntryCard: View, Equatable {
                 .menuIndicator(.hidden)
                 .fixedSize()
             }
-        } else if entry.isPinned, sourceApp != nil {
-            // The app's icon took the pin's place on the left.
+        } else if entry.isPinned, sourceApp != nil || showsFileIcon {
+            // The app's or the file's icon took the pin's place on the left.
             Image(systemName: "pin.fill")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
@@ -617,7 +634,7 @@ private struct QuickEntryCard: View, Equatable {
             Image(systemName: "circle")
                 .foregroundStyle(Color.accentColor.opacity(0.7))
                 .frame(width: 25, height: 25)
-        } else if let app = sourceApp {
+        } else if let app = sourceApp, !showsFileIcon {
             Image(nsImage: app.icon)
                 .resizable()
                 .frame(width: 18, height: 18)

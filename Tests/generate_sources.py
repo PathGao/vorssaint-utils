@@ -249,7 +249,8 @@ def main():
               "    func filteredEntries(", "    var filteredQuickEntries:", "    var selectedQuickEntry:",
               "    func moveQuickSelection(", "    func removeSelectedQuickEntries(",
               "    private var quickBatchEntries:", "    private func quickEntriesForPrimaryAction(",
-              "    private func selectedQuickIndex("])
+              "    private func selectedQuickIndex(", "    private func promote(",
+              "    private func insertPromoted("])
           + "func setEntries(_ values: [ClipboardHistoryEntry]) { entries = values }\n"
           + "}\n}\n")
     write("CommandBarInputSource.swift", "import Foundation\n"
@@ -318,6 +319,12 @@ def main():
           + "extension ClipboardFeatureTests.SourceHost {\n"
           + declaration("Sources/Vorssaint/Services/Clipboard/ClipboardIgnoredApps.swift",
                         "    func sourceSinceLastCheck(")
+          + "}\n")
+    cleaner = "Sources/Vorssaint/Services/URLCleanerService.swift"
+    write("URLCleanerRewrite.swift", "import AppKit\n"
+          + "extension ClipboardFeatureTests.URLCleanerHost {\n"
+          + "".join(declaration(cleaner, prefix).replace("private static", "static", 1) for prefix in [
+              "    private static func pollPasteboard(", "    private static func writeToPasteboard("])
           + "}\n")
     write("CommandBarCopyAnswer.swift", "import Foundation\n"
           + "extension CommandBarFeatureTests.CopyAnswerHost {\n"

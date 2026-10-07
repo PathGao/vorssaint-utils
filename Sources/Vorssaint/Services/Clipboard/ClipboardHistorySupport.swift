@@ -147,6 +147,18 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
         }
     }
 
+    /// `preview` with its line breaks kept, for a card tall enough to show
+    /// the shape of a snippet or a list. Tabs still become spaces.
+    var cardPreview: String {
+        guard kind == .text else { return preview }
+        let prefix = text.prefix(ClipboardHistoryEditing.previewCharacters)
+        let spaced = prefix
+            .replacingOccurrences(of: "\t", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let visible = spaced.isEmpty ? String(prefix) : spaced
+        return prefix.endIndex == text.endIndex ? visible : visible + "…"
+    }
+
     /// The color a text entry spells out, if that is all it holds.
     var color: ColorValue? {
         kind == .text ? ColorValue(text: text) : nil
@@ -815,13 +827,17 @@ extension NSPasteboard.PasteboardType {
     /// The nspasteboard.org mark naming the app that wrote the pasteboard,
     /// read beside the concealed mark below.
     static let source = NSPasteboard.PasteboardType("org.nspasteboard.source")
+    /// Added by the system to a copy that arrived from another device over
+    /// Universal Clipboard, which no app on this Mac made.
+    static let remoteClipboard = NSPasteboard.PasteboardType("com.apple.is-remote-clipboard")
 }
 
 extension NSPasteboard {
     /// Signs a write Vorssaint makes for itself (copied OCR text, a Command
     /// Bar answer, a color), so the clipboard history does not credit it to
-    /// whichever app happens to be in front. Called after the content is
-    /// written: it joins the first item instead of adding one.
+    /// whichever app happens to be in front. Called once the pasteboard is
+    /// cleared, before or after the content: either way the mark joins the
+    /// single item instead of adding one.
     func declareVorssaintSource() {
         guard let bundleID = Bundle.main.bundleIdentifier else { return }
         setString(bundleID, forType: .source)

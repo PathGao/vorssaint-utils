@@ -36,6 +36,10 @@ final class ClipboardIgnoredApps: ObservableObject {
     /// lives.
     private var historyIsRunning = false
     private let ownBundleID = Bundle.main.bundleIdentifier
+    /// Whether the history's own panel held the keys at the last check, so a
+    /// copy made in it is still known as one when the check its closing
+    /// makes could not run.
+    private var historyPanelWasKey = false
 
     private init() {
         reload()
@@ -91,6 +95,7 @@ final class ClipboardIgnoredApps: ObservableObject {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
             self.activationObserver = nil
             candidates = []
+            historyPanelWasKey = false
         }
     }
 
@@ -103,14 +108,31 @@ final class ClipboardIgnoredApps: ObservableObject {
     /// past the check it belongs to. With two apps in the window either could
     /// have copied it, and naming none is better than naming the wrong one.
     /// An app that names itself on the pasteboard is believed over the
-    /// guess, and Vorssaint's own writes, which never take the front, name
-    /// no app at all.
-    func sourceSinceLastCheck(declared: String?) -> (excluded: Bool, bundleID: String?) {
-        guard historyIsRunning else { return (false, nil) }
-        let guessed = candidates.count == 1 ? candidates.first : nil
-        let source = (excluded: !candidates.isDisjoint(with: lookup),
-                      bundleID: declared.map { $0 == ownBundleID ? nil : $0 } ?? guessed)
+    /// guess, and is left out just the same when it is on the list.
+    /// Vorssaint's own writes, which never take the front, name no app at
+    /// all, and neither does a copy that came from another device. The
+    /// history's own panel never takes the front either: a copy made while
+    /// it held the keys is Vorssaint's own and comes back as
+    /// `fromHistoryPanel`. Closing the panel makes one last check of its own,
+    /// so the next copy belongs to the app the user went back to; only when
+    /// that check could not run does the first check after it still count
+    /// as the panel's.
+    func sourceSinceLastCheck(declared: String?, remote: Bool,
+                              historyPanelIsKey: Bool, historyPanelClosing: Bool)
+        -> (excluded: Bool, bundleID: String?, fromHistoryPanel: Bool) {
+        guard historyIsRunning else { return (false, nil, false) }
+        // An empty mark is the convention for a writer that does not know,
+        // and nothing longer than 255 bytes is a bundle identifier.
+        let trimmed = declared?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let mark = trimmed.isEmpty || trimmed.utf8.count > 255 ? nil : trimmed
+        let fromHistoryPanel = mark == nil && (historyPanelWasKey || historyPanelIsKey)
+        let guessed = candidates.count == 1 && !fromHistoryPanel ? candidates.first : nil
+        let named: String? = mark.map { $0 == ownBundleID ? nil : $0 } ?? guessed
+        let source = (excluded: !candidates.isDisjoint(with: lookup) || mark.map { lookup.contains($0) } == true,
+                      bundleID: remote ? nil : named,
+                      fromHistoryPanel: fromHistoryPanel)
         candidates = Self.frontmostBundleID().map { [$0] } ?? []
+        historyPanelWasKey = historyPanelIsKey && !historyPanelClosing
         return source
     }
 
