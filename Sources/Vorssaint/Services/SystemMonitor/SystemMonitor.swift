@@ -41,7 +41,7 @@ struct SystemSnapshot {
     /// value is carried over failed reads, and the hot CPU alert has to tell
     /// those repeats apart from fresh readings.
     var cpuUsageReadAt: TimeInterval?
-    var cpuCoreUsage: [Double?] = [] // 0...1 per logical core, only while the menu panel shows System
+    var cpuCoreUsage: [Double?] = [] // 0...1 per logical core, only while the menu panel shows the CPU row
     var gpuUsage: Double?          // 0...1
     var memoryUsed: UInt64?
     var memoryAppUsed: UInt64?
@@ -472,6 +472,7 @@ final class SystemMonitor: ObservableObject {
 
     private struct SamplingPlan: Equatable {
         var needCPU = false
+        var needCPUCores = false
         var needMemory = false
         var needNetwork = false
         var needDisk = false
@@ -537,6 +538,11 @@ final class SystemMonitor: ObservableObject {
         let alertBattery = hasInternalBattery && defaults.bool(forKey: DefaultsKey.monitorAlertBattery)
 
         plan.needCPU = panelCPU || defaults.bool(forKey: DefaultsKey.menuBarCPU) || alertCPU
+        // Per-core bars live under the panel's CPU row only: a CPU shown in the
+        // menu bar or watched by an alert never reads every core.
+        plan.needCPUCores = menuPanelNeeds.system
+            && defaults.bool(forKey: DefaultsKey.monitorSysCPU)
+            && defaults.bool(forKey: DefaultsKey.monitorSysCPUCores)
         plan.needMemory = panelMemory || defaults.bool(forKey: DefaultsKey.menuBarMemory) || alertMemory
         plan.needNetwork = panelNeedsNetwork || defaults.bool(forKey: DefaultsKey.menuBarNetwork)
         plan.needDisk = panelNeedsDisk
@@ -579,6 +585,7 @@ final class SystemMonitor: ObservableObject {
         }
         if !available(.monitorCPU) {
             plan.needCPU = false
+            plan.needCPUCores = false
             plan.needCPUTemperature = false
         }
         if !available(.monitorGPU) {
@@ -690,7 +697,6 @@ final class SystemMonitor: ObservableObject {
         refreshInFlight = true
         let suppressGPUReadsUntil = self.suppressGPUReadsUntil
         let foregroundSampling = fullMonitorVisible || menuPanelNeeds.any || notchDetailNeeds.any || notchVisible
-        let needsCPUCores = menuPanelNeeds.system && defaults.bool(forKey: DefaultsKey.monitorSysCPUCores)
         let intervalSeconds = self.intervalSeconds
         // Ticks advance by the timer's cadence so `tick % stride` keeps
         // measuring base intervals; mutated on main only, read by the queue
@@ -720,9 +726,13 @@ final class SystemMonitor: ObservableObject {
                 return sample
             }
 
+            // Per-core reads that pause restart from a fresh baseline.
+            if !plan.needCPUCores {
+                self.cpuCoreSampler.reset()
+            }
             if plan.needCPU {
                 let readsCPU = take(.cpu)
-                if readsCPU, needsCPUCores {
+                if readsCPU, plan.needCPUCores {
                     next.cpuCoreUsage = self.cpuCoreSampler.sample(now: now)
                 }
                 if readsCPU,

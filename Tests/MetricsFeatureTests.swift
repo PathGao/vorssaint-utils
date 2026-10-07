@@ -880,8 +880,18 @@ enum MetricsFeatureTests {
                 suite.expect(rows.allSatisfy { row in
                     row.reduce(0, { $0 + $1.width }) + Double(max(0, row.count - 1)) * 12 <= width + 0.01
                 }, "core rows stay inside their width (\(counts) at \(width))")
+                suite.expect(rows.joined().allSatisfy { segment in
+                    let count = Double(segment.group.indices.count)
+                    return count * segment.barWidth + (count - 1) * 4 <= segment.width + 0.01
+                }, "core bars stay inside their group (\(counts) at \(width))")
             }
         }
+        let wrapped = CPUCoreLayout.rows(groups: [CPUCoreGroup(name: "Performance", indices: Array(0..<10)),
+                                                  CPUCoreGroup(name: "Efficiency", indices: Array(10..<14))], width: 272)
+        let performanceBar = wrapped.joined().first { $0.group.name == "Performance" }?.barWidth ?? 0
+        let efficiencyBar = wrapped.joined().first { $0.group.name == "Efficiency" }?.barWidth ?? .infinity
+        suite.expect(wrapped.count == 2 && performanceBar > efficiencyBar,
+               "efficiency cores wrapped onto a row of their own never get wider bars than performance cores")
 
         // MARK: Uptime formatting
 

@@ -55,7 +55,7 @@ struct CPUCoreMatrix: View {
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 ForEach(segment.group.indices, id: \.self) { index in
-                    coreBar(index, strings: strings)
+                    coreBar(index, width: segment.barWidth, strings: strings)
                 }
             }
             Text("\(name) ×\(segment.group.indices.count)")
@@ -65,10 +65,10 @@ struct CPUCoreMatrix: View {
                 .minimumScaleFactor(0.8)
                 .frame(height: 22, alignment: .topLeading)
         }
-        .frame(width: segment.width)
+        .frame(width: segment.width, alignment: .leading)
     }
 
-    private func coreBar(_ index: Int, strings: CPUCoreFeatureStrings) -> some View {
+    private func coreBar(_ index: Int, width: Double, strings: CPUCoreFeatureStrings) -> some View {
         let value: Double? = usage[index]
         let increasedContrast = contrast == .increased
         return GeometryReader { proxy in
@@ -92,7 +92,7 @@ struct CPUCoreMatrix: View {
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: value)
         }
-        .frame(height: 60)
+        .frame(width: width, height: 60)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(String(format: strings.coreFormat, index + 1))
         .accessibilityValue(value.map(MetricFormat.percent) ?? "–")

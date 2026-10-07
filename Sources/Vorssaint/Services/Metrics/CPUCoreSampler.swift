@@ -54,6 +54,11 @@ final class CPUCoreSampler {
         }
         return zip(ticks, previous.ticks).map { $0.usage(since: $1) }
     }
+
+    /// Drops the baseline, so the first sample after a pause only sets a new one.
+    func reset() {
+        previous = nil
+    }
 }
 
 /// Runs `host_processor_info` and hands `read` the records, `stride` integers
@@ -92,12 +97,16 @@ struct CPUCoreGroup: Equatable {
 struct CPUCoreSegment {
     let group: CPUCoreGroup
     let width: Double
+    /// Every bar shares one scale, so a class that wraps onto a row of its
+    /// own never gets wider bars than faster cores.
+    var barWidth: Double = 14
 }
 
 enum CPUCoreLayout {
     /// Packs groups side by side into rows of `width` points, splitting a group
     /// that cannot keep 14 pt bars into balanced chunks. Groups sit 12 pt apart
-    /// and bars 4 pt apart; spare width goes to groups by weighted core count.
+    /// and bars 4 pt apart; spare width goes to groups by weighted core count,
+    /// and the tightest group sets the bar scale for all of them.
     static func rows(groups: [CPUCoreGroup], width: Double) -> [[CPUCoreSegment]] {
         guard width.isFinite, width >= 70 else { return [] }
         func minimum(_ group: CPUCoreGroup) -> Double {
@@ -127,7 +136,7 @@ enum CPUCoreLayout {
             }
         }
         if !row.isEmpty { packed.append(row) }
-        return packed.map { row in
+        let sized = packed.map { row in
             let available = width - Double(row.count - 1) * 12
             let minimums = row.map(minimum)
             let extra = max(0, available - minimums.reduce(0, +))
@@ -136,6 +145,13 @@ enum CPUCoreLayout {
             return row.indices.map { index in
                 CPUCoreSegment(group: row[index], width: minimums[index] + extra * weights[index] / total)
             }
+        }
+        let scale = sized.joined().map { segment -> Double in
+            let count = Double(segment.group.indices.count)
+            return (segment.width - (count - 1) * 4) / count / (14 * segment.group.weight)
+        }.min() ?? 1
+        return sized.map { row in
+            row.map { CPUCoreSegment(group: $0.group, width: $0.width, barWidth: 14 * $0.group.weight * scale) }
         }
     }
 }

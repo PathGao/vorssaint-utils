@@ -307,6 +307,8 @@ def main():
           + "extension SystemSectionBreakdownTests {\nfinal class Section: Fixture {\n"
           + declaration("Sources/Vorssaint/UI/MenuPanel/SystemSection.swift",
                         "    private func refreshBreakdown(").replace("private func", "func", 1)
+          + declaration("Sources/Vorssaint/UI/MenuPanel/SystemSection.swift",
+                        "    private func toggleCPUApps(").replace("private func", "func", 1)
           + "}\n}\n")
     uninstall = "Sources/Vorssaint/Services/Uninstall/AppUninstaller.swift"
     bar = "Sources/Vorssaint/Services/CommandBar/CommandBarService.swift"

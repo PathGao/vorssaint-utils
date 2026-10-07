@@ -3033,6 +3033,9 @@ enum SwitcherModelFeatureTests {
         suite.expect(registeredDefaults[DefaultsKey.monitorSysConnectedDevices] as? Bool == true
                      && SettingsBackupSupport.exportKeys().contains(DefaultsKey.monitorSysConnectedDevices),
                "the System card's connected devices row is shown by default and travels in backups")
+        suite.expect(registeredDefaults[DefaultsKey.monitorSysCPUCores] as? Bool == true
+                     && SettingsBackupSupport.exportKeys().contains(DefaultsKey.monitorSysCPUCores),
+               "the CPU row's per-core bars are shown by default and travel in backups")
         suite.expect(registeredDefaults[DefaultsKey.monitorGraphDisk] as? Bool == true,
                "disk monitor graph is shown by default")
         suite.expect(registeredDefaults[DefaultsKey.monitorNetApps] as? Bool == true,
