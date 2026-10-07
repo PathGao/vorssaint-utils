@@ -282,7 +282,8 @@ struct URLCleanerSettings: View {
     }
 
     /// Off switches off every name the row lists, the user's own included,
-    /// so on can clear the row's record and bring it back as it was.
+    /// so on can clear the row's record and turn every name it lists on
+    /// again, one switched off by hand before included.
     private func setSite(_ group: URLCleaning.RuleGroup, enabled: Bool) {
         var disabled = URLCleaning.tokens(from: disabledNames)
         disabled[group.site] = enabled ? nil : Set(group.entries.map(\.name))
@@ -290,6 +291,11 @@ struct URLCleanerSettings: View {
     }
 
     private func remove(_ name: String, from site: String) {
+        // A deleted name takes its switched off record with it, so adding it
+        // again later brings it back on, as typing it back in already does.
+        var disabled = URLCleaning.tokens(from: disabledNames)
+        disabled[site]?.remove(name)
+        disabledNames = URLCleaning.storageValue(forTokens: disabled)
         if site == URLCleaning.allSites {
             var names = URLCleaning.customParameters(from: globalNames)
             names.remove(name)

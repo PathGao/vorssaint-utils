@@ -8,6 +8,11 @@ struct PanelURLCleanerView: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var cleaner = URLCleanerService.shared
     @AppStorage(DefaultsKey.urlCleanerEnabled) private var autoClean = false
+    // The service reads the rules itself. `result` reads them too, so a rule
+    // changed in Settings while the panel sits beside it redraws the result.
+    @AppStorage(DefaultsKey.urlCleanerCustomParameters) private var globalNames = ""
+    @AppStorage(DefaultsKey.urlCleanerSiteParameters) private var siteNames = ""
+    @AppStorage(DefaultsKey.urlCleanerDisabledParameters) private var disabledNames = ""
     @State private var input = ""
     @State private var copied: String?
 
@@ -15,7 +20,8 @@ struct PanelURLCleanerView: View {
     /// Worked out from the field on every render, so Copy always takes the
     /// link that is in the field now under the rules in force now.
     private var result: URLCleaning.Result? {
-        cleaner.clean(input)
+        _ = (globalNames, siteNames, disabledNames)
+        return cleaner.clean(input)
     }
 
     var body: some View {

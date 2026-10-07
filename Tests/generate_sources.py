@@ -302,8 +302,9 @@ def main():
           + "}\n")
     write("URLCleanerSiteSwitch.swift", "import Foundation\n"
           + "extension RepositoryFeatureTests.URLCleanerSiteSwitchHost {\n"
-          + declaration("Sources/Vorssaint/UI/Settings/URLCleanerSettings.swift",
-                        "    private func setSite(").replace("private ", "", 1)
+          + "".join(declaration("Sources/Vorssaint/UI/Settings/URLCleanerSettings.swift",
+                                prefix).replace("private ", "", 1)
+                    for prefix in ["    private func setSite(", "    private func remove("])
           + "}\n")
     write("CommandBarCopyAnswer.swift", "import Foundation\n"
           + "extension CommandBarFeatureTests.CopyAnswerHost {\n"
