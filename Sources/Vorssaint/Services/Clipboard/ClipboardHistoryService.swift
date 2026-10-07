@@ -1189,6 +1189,9 @@ final class ClipboardHistoryService: ObservableObject {
     func hideHistoryWindow() {
         removeKeyMonitor()
         removeDismissMonitors()
+        // Ordering out keeps an open confirmation attached, and it would come
+        // back with its old count the next time the window opens.
+        if let panel, let sheet = panel.attachedSheet { panel.endSheet(sheet) }
         panel?.orderOut(nil)
         clearQuickBatchSelection()
     }
@@ -1288,7 +1291,8 @@ final class ClipboardHistoryService: ObservableObject {
     private func installKeyMonitor(for panel: NSPanel) {
         removeKeyMonitor()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak panel] event in
-            guard let self, let panel, event.window === panel else { return event }
+            // An open confirmation owns Return and Escape.
+            guard let self, let panel, event.window === panel, panel.attachedSheet == nil else { return event }
             // A multiline editor owns its normal editing keys, and any field
             // still composing owns them too. Outside composition the search
             // box keeps the list's shortcuts, as does the read-only preview:

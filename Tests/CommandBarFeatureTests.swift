@@ -78,6 +78,7 @@ enum CommandBarFeatureTests {
         CommandBarTerminationContract.run(suite)
         CommandBarAppSortContract.run(suite)
         CommandBarKillProcessOrderContract.run(suite)
+        CommandBarDropletContract.run(suite)
         let isCodeLine: (String) -> Bool = {
             !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//")
         }
@@ -164,6 +165,50 @@ enum CommandBarFeatureTests {
                "the comma is the decimal point where that is the custom")
         suite.expect(math("1.500+1", decimal: ",", grouping: ".") == "1,501",
                "three digits after the grouping separator read as thousands")
+
+        // Macs that group thousands with a space or an apostrophe.
+        for (name, grouping) in [("pt_PT", "\u{00A0}"), ("fr_FR", "\u{202F}")] {
+            suite.expect(mathValue("1.5+1", decimal: ",", grouping: grouping) == 2.5
+                    && mathValue("0.1+0.2", decimal: ",", grouping: grouping) == 0.3,
+                   "a dot decimal still works where the comma is the decimal point: \(name)")
+            suite.expect(mathValue("1.500+1", decimal: ",", grouping: grouping) == 1501
+                    && mathValue("1.234,5+1", decimal: ",", grouping: grouping) == 1235.5
+                    && mathValue("1,234.5+1", decimal: ",", grouping: grouping) == 1235.5,
+                   "the dot reads as thousands only when it looks the part: \(name)")
+            suite.expect(mathValue("1\(grouping)234,5+1", decimal: ",", grouping: grouping) == 1235.5,
+                   "the Mac's own grouping space still reads as thousands: \(name)")
+            suite.expect(mathValue("1\(grouping)5+1", decimal: ",", grouping: grouping) == nil,
+                   "a grouping space is never a decimal point: \(name)")
+        }
+        suite.expect(mathValue("1,5+1", decimal: ".", grouping: "'") == 2.5
+                && mathValue("1,234.5+1", decimal: ".", grouping: "'") == 1235.5
+                && mathValue("1'234.5+1", decimal: ".", grouping: "'") == 1235.5,
+               "a comma decimal works where thousands are grouped with an apostrophe")
+        suite.expect(mathValue("1.2.3+1", decimal: ",", grouping: "\u{00A0}") == nil,
+               "a repeated alternate separator that is not thousands has no answer")
+
+        // A grouping space or apostrophe groups only when digits follow it.
+        suite.expect(mathValue("1\u{00A0}+ 2", decimal: ",", grouping: "\u{00A0}") == 3,
+               "a no-break space after a number before an operator is just a space")
+        suite.expect(mathValue("200*15\u{202F}%", decimal: ",", grouping: "\u{202F}") == 30,
+               "a narrow no-break space before percent still answers")
+        suite.expect(mathValue("2\u{00A0}(3)", decimal: ",", grouping: "\u{00A0}") == 6,
+               "a no-break space before a bracket keeps the implicit product")
+        suite.expect(mathValue("1,5\u{00A0}+ 2", decimal: ",", grouping: "\u{00A0}") == 3.5,
+               "a decimal followed by a no-break space reads as that decimal")
+        suite.expect(mathValue("1\u{00A0}234\u{00A0}+ 1", decimal: ",", grouping: "\u{00A0}") == 1235,
+               "grouped thousands followed by a no-break space still answer")
+        suite.expect(mathValue("1\u{00A0}5+1", decimal: ",", grouping: "\u{00A0}") == nil,
+               "a grouping space between digits is never a decimal point")
+        // Thousands never start at zero.
+        for (decimal, grouping) in [(",", "\u{00A0}"), (",", "\u{202F}"), (".", "'"), (",", "."), (".", ",")] {
+            let alternate = decimal == "," ? "." : ","
+            suite.expect(mathValue("0\(alternate)125*8", decimal: decimal, grouping: grouping) == 1
+                    && mathValue("0\(alternate)500+1", decimal: decimal, grouping: grouping) == 1.5,
+                   "a number that starts at zero has decimals, never thousands, with \(decimal) and \(grouping)")
+        }
+        suite.expect(mathValue("0\u{00A0}125+1", decimal: ",", grouping: "\u{00A0}") == nil,
+               "a grouping space after a lone zero is not thousands")
 
         suite.expect(CommandBarMath.evaluate("([2+3")?.closingBrackets == "])"
                 && CommandBarMath.evaluate("2+3")?.closingBrackets == "",
@@ -345,6 +390,20 @@ enum CommandBarFeatureTests {
                             query: split.text),
                          "\(query) still finds the display brightness row with its value")
         }
+        let clipboardActionsCode = commandBarCatalogLines.firstIndex {
+            isCodeLine($0) && $0.contains("if AppFeature.clipboardHistory.isAvailable {")
+        }.map {
+            commandBarCatalogLines[$0...]
+                .prefix { !$0.contains("if AppFeature.textSnippets.isAvailable {") }
+                .filter(isCodeLine)
+                .joined(separator: "\n")
+        } ?? ""
+        suite.expect(clipboardActionsCode.contains("id: \"action.clipboardClearRecent\"")
+                && clipboardActionsCode.contains("title: clipboard.clearRecent")
+                && clipboardActionsCode.contains(
+                    "confirmationPrompt: String(format: clipboard.clearRecentConfirmFormat, recentIDs.count)")
+                && clipboardActionsCode.contains("ClipboardHistoryService.shared.clearRecent(recentIDs)"),
+               "the Command Bar clears only the unpinned clipboard items it counted, after confirmation")
         for accepts in [true, false] {
             CopyAnswerHost.Pasteboard.general.accepts = accepts
             CopyAnswerHost.HUD.shown = []
@@ -942,6 +1001,48 @@ enum CommandBarFeatureTests {
                                        locale: Locale(identifier: "pt_BR"))
                 .map { abs($0.value - 150) < 0.001 } == true,
                "a comma decimal converts where that is the custom")
+
+        // A first group of 0 is never thousands, so "0,250" is a quarter where
+        // the dot is decimal, while "1,050" still groups.
+        let dotDecimalInputs: [(String, Double)] = [
+            ("1.5", 150.0), ("1,5", 150.0), ("-1,5", -150.0),
+            ("1,500", 150_000.0), ("-123,456", -12_345_600.0),
+            ("1,234.5", 123_450.0), ("1.234,5", 123_450.0),
+            ("1,234,567", 123_456_700.0),
+            ("0,250", 25.0), ("-0,500", -50.0), ("1,050", 105_000.0),
+        ]
+        let commaDecimalInputs: [(String, Double)] = [
+            ("1,5", 150.0), ("1.5", 150.0), ("-1.5", -150.0),
+            ("1.500", 150_000.0), ("-123.456", -12_345_600.0),
+            ("1.234,5", 123_450.0), ("1,234.5", 123_450.0),
+            ("1.234.567", 123_456_700.0),
+            ("0.250", 25.0), ("-0.500", -50.0), ("1.050", 105_000.0),
+        ]
+        // de_CH groups thousands with an apostrophe, pt_PT with a no-break
+        // space and fr_FR with a narrow one. There the alternate is whichever
+        // of "." and "," is not the decimal, the same as in the calculator.
+        for (region, decimal, grouping, inputs) in [
+            ("en_US", ".", ",", dotDecimalInputs),
+            ("de_CH", ".", "'", dotDecimalInputs),
+            ("de_DE", ",", ".", commaDecimalInputs),
+            ("pt_PT", ",", "\u{00A0}", commaDecimalInputs),
+            ("fr_FR", ",", "\u{202F}", commaDecimalInputs),
+        ] {
+            for (number, expected) in inputs {
+                let converted = CommandBarUnits.convert("\(number) m to cm",
+                                                       decimalSeparator: decimal,
+                                                       groupingSeparator: grouping,
+                                                       locale: Locale(identifier: "en_US"))
+                suite.expect(converted.map { abs($0.value - expected) < 0.001 } == true,
+                             "unit conversion in \(region) reads \(number) as \(expected) cm")
+            }
+            for number in ["1,,5", "1..5", "--1", "1-5"] {
+                suite.expect(CommandBarUnits.convert("\(number) m to cm",
+                                                     decimalSeparator: decimal,
+                                                     groupingSeparator: grouping) == nil,
+                             "unit conversion in \(region) refuses malformed number \(number)")
+            }
+        }
 
         // MeasurementFormatter words the unit from the localization data of the
         // macOS it runs on, not from the locale it is handed, so pinning
@@ -2419,5 +2520,78 @@ enum CommandBarKillProcessOrderContract {
             suite.expect(service.killProcessEntries == expected,
                          "the Command Bar lists processes in the Kill Process page's \(sort) order, found \(service.killProcessEntries)")
         }
+    }
+}
+
+/// The drop that carries the bar out of the island answers the person while
+/// it falls: typing hurries it, and closing it sends it back up the way it
+/// came instead of making it vanish. Each body is cut at the next
+/// declaration, so a moved or renamed site fails here.
+enum CommandBarDropletContract {
+    static func run(_ suite: TestSuite) {
+        func code(_ path: String) -> String {
+            ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "")
+                .components(separatedBy: "\n")
+                .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+                .joined(separator: "\n")
+        }
+        func body(_ source: String, _ signature: String) -> String {
+            let parts = source.components(separatedBy: signature)
+            guard parts.count > 1 else { return "" }
+            return parts[1].components(separatedBy: "\n    func ").first?
+                .components(separatedBy: "\n    private func ").first ?? ""
+        }
+        let droplet = code("Sources/Vorssaint/UI/CommandBar/CommandBarDroplet.swift")
+        let view = code("Sources/Vorssaint/UI/CommandBar/CommandBarView.swift")
+
+        let typing = view.components(separatedBy: ".onChange(of: service.query) { _, query in").dropFirst().first ?? ""
+        suite.expect((typing.components(separatedBy: "}").first ?? "")
+                        .contains("if !query.isEmpty, service.presentation == .droplet { CommandBarDroplet.shared.hurry("),
+                     "typing while the drop falls hurries it")
+
+        let service = code("Sources/Vorssaint/Services/CommandBar/CommandBarService.swift")
+        let monitor = service.components(separatedBy: "keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown)")
+            .dropFirst().first ?? ""
+        let early = monitor.range(of: "if self.presentation == .droplet, event.keyCode != 53 { CommandBarDroplet.shared.hurry() }")
+        let composing = monitor.range(of: "if self.fieldIsComposing(in: panel) { return event }")
+        suite.expect(early != nil && composing != nil && early!.lowerBound < composing!.lowerBound,
+                     "a key while the drop falls shows the bar before the field or its search takes the key")
+        let shows = service.components(separatedBy: "CommandBarDroplet.shared.drop(from: island").dropFirst().first?
+            .components(separatedBy: "\n            return\n").first ?? ""
+        suite.expect(shows.contains("panel.alphaValue = 1") && shows.contains("layer.add(appear, forKey: \"appear\")")
+                     && !shows.contains("animator()"),
+                     "the bar shows at once and fades in through Core Animation, not through main thread alpha steps")
+
+        let hurry = body(droplet, "func hurry() {")
+        suite.expect(hurry.contains("guard falling, let fall, let reveal else { return }")
+                     && hurry.contains("generation += 1") && hurry.contains("stage.removeAnimation(forKey: \"reveal\")")
+                     && hurry.contains("fall.motion.remainder(from:") && hurry.contains("reveal(length)")
+                     && hurry.contains("fadeOut(current, duration: length)") && hurry.contains("CATransaction.flush()")
+                     && hurry.contains("mascot.root.opacity = 0"),
+                     "typing as the drop falls shows the bar at once and plays the rest of the fall under it")
+
+        let retract = body(droplet, "func retract(from bar: CGRect, look: NotchMascotLook, mood: NotchMascotMood) {")
+        let rewindCall = retract.range(of: "if falling, !Self.reducesMotion, rewind(homecoming: mood) { return }")
+        let cancelCall = retract.range(of: "cancel()")
+        suite.expect(rewindCall != nil && cancelCall != nil && rewindCall!.lowerBound < cancelCall!.lowerBound,
+                     "closing a drop that still falls rewinds it before anything cancels it")
+
+        let rewind = body(droplet, "private func rewind(homecoming mood: NotchMascotMood) -> Bool {")
+        suite.expect(rewind.contains("generation += 1") && rewind.contains("stage.removeAnimation(forKey: \"reveal\")")
+                     && rewind.contains("fall.motion.rewound(from:")
+                     && rewind.contains("self.panel?.orderOut(nil)")
+                     && rewind.contains("NotchService.shared.setMascotInBar(false, homecoming: mood)"),
+                     "a rewound drop never shows the bar, rises as motion of its own and brings the companion home")
+        // Played backward through the layer's clock, Core Animation drops the
+        // fill before the first frame and the bar's shape flashes. The way
+        // back is a motion of its own instead.
+        suite.expect(!droplet.contains(".speed") && !droplet.contains("timeOffset"),
+                     "no drop plays by changing the layer's clock")
+
+        let reveal = droplet.components(separatedBy: "self.falling = false").dropFirst().first ?? ""
+        let shown = reveal.range(of: "revealed(0)")
+        let fade = reveal.range(of: "self.fadeOut(current)")
+        suite.expect(shown != nil && fade != nil && shown!.lowerBound < fade!.lowerBound,
+                     "a landed drop hands over to the bar as is, then fades off it")
     }
 }

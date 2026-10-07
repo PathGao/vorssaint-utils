@@ -744,6 +744,30 @@ enum NotchMascotTests {
                      "the neck lets go once and draws back into the island")
         suite.expect(drop.frames[pinched...].allSatisfy { $0.neckEnd - edge < 1 || $0.neckTip > 0.2 },
                      "what is left of the neck ends round, never in a point")
+        // Typed into as it falls, the rest of the fall plays under the bar
+        // within a moment. Closed as it falls, it rises back the way it came,
+        // ending inside the island.
+        let midway = drop.frameIndex(at: drop.landing / 2)
+        let rest = drop.remainder(from: midway, within: CommandBarDropletMotion.hurriedReveal)
+        func steady(_ motion: CommandBarDropletMotion) -> Bool {
+            motion.frames.count == motion.keyTimes.count && motion.keyTimes.first == 0 && motion.keyTimes.last == 1
+                && zip(motion.keyTimes, motion.keyTimes.dropFirst()).allSatisfy { $0 < $1 }
+        }
+        suite.expect(midway > 0 && midway < drop.frames.count - 1 && steady(rest)
+                     && rest.frames.first == drop.frames[midway] && rest.frames.last == drop.frames.last
+                     && rest.duration > 0 && rest.duration <= CommandBarDropletMotion.hurriedReveal
+                     && CommandBarDropletMotion.hurriedReveal >= 0.08 && CommandBarDropletMotion.hurriedReveal <= 0.15,
+                     "typing as the drop falls finishes the fall into the field within a quick motion")
+        let rise = drop.rewound(from: midway, within: CommandBarDropletMotion.rewindLength)
+        suite.expect(steady(rise) && rise.frames.first == drop.frames[midway] && rise.frames.last == drop.frames[0]
+                     && rise.duration > 0 && rise.duration <= CommandBarDropletMotion.rewindLength
+                     && rise.duration <= drop.landing / 2 + 0.001,
+                     "a drop closed as it falls rises back the way it came, never slower than it fell")
+        suite.expect(drop.rewound(from: 0, within: 0.2).duration == 0
+                     && drop.remainder(from: drop.frames.count - 1, within: 0.12).duration == 0
+                     && drop.frameIndex(at: -1) == 0 && drop.frameIndex(at: drop.duration + 1) == drop.frames.count - 1
+                     && CommandBarDropletMotion().rewound(from: 3, within: 0.2).frames.isEmpty,
+                     "a drop closed or typed into at either end has nothing left to play")
 
         let bar = CGRect(x: field.minX, y: field.minY, width: field.width, height: 380)
         let back = CommandBarDropletMotion.retract(edge: edge, centerX: centerX, bar: bar, field: field, icon: icon)

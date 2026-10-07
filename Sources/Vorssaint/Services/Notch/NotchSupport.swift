@@ -430,6 +430,15 @@ enum NotchLayout {
         max(40, height - 24) + 12 + 132 + 24
     }
 
+    /// Level cards keep their title and device row only where every card in
+    /// the row has one and the titles fit: a card alone, or volume beside
+    /// brightness. The keyboard light has no device to choose, so beside it,
+    /// and three across, every card folds to its readout and they line up.
+    static func levelCardsShowDetails(_ levels: [NotchControlItem], height: CGFloat) -> Bool {
+        guard height >= 88 else { return false }
+        return levels.count == 1 || (levels.count == 2 && !levels.contains(.keyboardLight))
+    }
+
     /// The home page: one row of cards (playback and levels) over a rail of
     /// shortcuts. A tight budget shortens the cards before it drops a row.
     static func controls(hasCards: Bool, shortcutCount: Int, width: CGFloat, height: CGFloat) -> NotchControlsLayout {
@@ -971,14 +980,24 @@ enum NotchControlSetupRequirement: Equatable {
 }
 
 enum NotchControlItem: String, CaseIterable, Identifiable {
-    case volume, brightness, music, mixer, keepAwake, timer, calendar, microphone, screenshot, recording, speedTest, panel, commandBar, scratchpad
-    static let defaultHidden = "microphone,screenshot,recording,speedTest,panel,commandBar,scratchpad"
+    case volume, brightness, keyboardLight, music, mixer, keepAwake, timer, calendar, microphone, screenshot, recording, speedTest, panel, commandBar, scratchpad
+    static let defaultHidden = "keyboardLight,microphone,screenshot,recording,speedTest,panel,commandBar,scratchpad"
     var id: String { rawValue }
+
+    /// A level draws as a slider in the card row; everything else is a tile.
+    var isLevel: Bool { self == .volume || self == .brightness || self == .keyboardLight }
+
+    /// Whether this Mac has a keyboard light. Only the brightness service can
+    /// ask the hardware, so launch points this at it before anything reads
+    /// the controls. Without it, a level restored from a Mac that has one
+    /// would sit in the island as a dead card that Settings cannot hide.
+    static var keyboardLightIsSupported: () -> Bool = { true }
 
     var symbol: String {
         switch self {
         case .volume: return "speaker.wave.2.fill"
         case .brightness: return "sun.max.fill"
+        case .keyboardLight: return "light.max"
         case .keepAwake: return "cup.and.saucer"
         case .microphone: return "mic.fill"
         case .screenshot: return "camera.viewfinder"
@@ -998,7 +1017,7 @@ enum NotchControlItem: String, CaseIterable, Identifiable {
     var setupRequirement: NotchControlSetupRequirement {
         switch self {
         case .volume: return .feature(.mixer)
-        case .brightness: return .feature(.brightness)
+        case .brightness, .keyboardLight: return .feature(.brightness)
         case .keepAwake: return .feature(.keepAwake)
         case .microphone: return .feature(.micMute)
         case .screenshot: return .feature(.screenshot)
@@ -1019,6 +1038,7 @@ enum NotchControlItem: String, CaseIterable, Identifiable {
         case .volume: return AppFeature.mixer.isAvailable(in: defaults)
         case .mixer: return AppFeature.mixer.isAvailable(in: defaults) && NotchSupport.modules(in: defaults).contains(.mixer)
         case .brightness: return AppFeature.brightness.isAvailable(in: defaults)
+        case .keyboardLight: return AppFeature.brightness.isAvailable(in: defaults) && Self.keyboardLightIsSupported()
         case .keepAwake: return AppFeature.keepAwake.isAvailable(in: defaults)
         case .microphone: return AppFeature.micMute.isAvailable(in: defaults)
         case .screenshot: return AppFeature.screenshot.isAvailable(in: defaults)
@@ -1066,7 +1086,7 @@ enum NotchQuickAction: Hashable, Identifiable {
 
     static var optionalActions: [Self] {
         [.explore, .settings, .pin] + NotchModule.allCases.map(Self.module)
-            + NotchControlItem.allCases.filter { $0 != .volume && $0 != .brightness }.map(Self.control)
+            + NotchControlItem.allCases.filter { !$0.isLevel }.map(Self.control)
     }
 
     func isAvailable(in defaults: UserDefaults = .standard) -> Bool {
@@ -1594,6 +1614,47 @@ enum NotchSupport {
     static func volumeLevel(current: Double, direction: Int, fine: Bool) -> Double {
         guard current.isFinite else { return 0 }
         return min(1, max(0, current + Double(direction.signum()) / (fine ? 64 : 16)))
+    }
+
+    /// The steps a volume key takes, as `volumeLevel` above gives them: a
+    /// full step on its own, a quarter of one with the fine modifiers.
+    static let fullVolumeKeyStep = 1.0 / 16
+    static let finestVolumeKeyStep = 1.0 / 64
+
+    /// How long an output that has just moved its own level is assumed to
+    /// still be moving it. Measured from AirPods Pro adapting to the room:
+    /// each ramp walks the level a hundredth at a time and closes with a
+    /// coarser correction about 1.7 s after its last fine step, so a window
+    /// slightly wider than that keeps one ramp together.
+    static let volumeRideWindow: TimeInterval = 2
+
+    /// What an observed change of the system output level means.
+    enum VolumeChangeOrigin: Equatable {
+        /// Something a person did: the island confirms it.
+        case announces
+        /// The output riding its own level, which is state to keep rather
+        /// than news to show.
+        case rides
+    }
+
+    /// Reads an observed level change. An output that adapts to its
+    /// surroundings moves the level in steps finer than a key press makes,
+    /// and keeps moving it for as long as the room is noisy, so those steps
+    /// ride quietly. A full key step always announces itself, however busy
+    /// the output is, and so does a level pressed against either end, where a
+    /// press moves it by less than a step or not at all. In between, a step
+    /// belongs to a ramp already under way if it lands inside its window.
+    static func volumeChangeOrigin(from previous: Double, to next: Double,
+                                   sinceRide: TimeInterval) -> VolumeChangeOrigin {
+        guard previous.isFinite, next.isFinite else { return .announces }
+        if next <= 0 || next >= 1 { return .announces }
+        let delta = abs(next - previous)
+        // An output that keeps its level in hundredths lands a key step a
+        // little short of its nominal size, so a full step is recognized
+        // with half of the finest one to spare.
+        if delta + finestVolumeKeyStep / 2 >= fullVolumeKeyStep { return .announces }
+        if delta + 1e-9 < finestVolumeKeyStep { return .rides }
+        return sinceRide < volumeRideWindow ? .rides : .announces
     }
 
     /// A laptop with its lid closed has no built-in screen to show on, so the
