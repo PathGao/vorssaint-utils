@@ -396,10 +396,10 @@ enum FeatureCatalogTests {
             "mouseClickDebounce", "keyboardDebounce", "textSnippets", "superKey", "quitWindowProtection",
             "clipboardHistory", "pastePlain", "finderCutPaste", "finderRename", "shelf", "urlCleaner",
             "diskImageInstaller",
-            "mixer", "soundOutputSwitcher", "audioPriority", "micMute", "musicBlock",
+            "mixer", "soundOutputSwitcher", "audioPriority", "micMute",
             "keepAwake", "brightness", "extraBrightness", "bluetoothSleep",
             "quickLauncher", "quickToggles", "colorPicker", "screenOCR", "cleaningMode", "mediaTools",
-            "cleaner", "uninstaller", "homebrew", "appUpdates", "screenshot", "cameraPreview",
+            "cleaner", "uninstaller", "musicBlock", "homebrew", "appUpdates", "screenshot", "cameraPreview",
             "radialMenu", "scratchpad", "commandBar", "screenRecorder", "wallpaper", "killProcess", "portManager", "notch", "notchCalendar", "notchNotifications", "notchGestures", "notchTimer", "notchAccessories", "notchLyrics", "notchQueue", "notchLiveEqualizer", "notchDownloads", "notchAgents", "notchWatch", "notchMascot",
             "monitorCPU", "monitorGPU", "monitorMemory", "monitorNetwork", "monitorDisk", "monitorPower",
             "connectedDevices", "fanControl",
@@ -2022,11 +2022,13 @@ enum FeatureCatalogTests {
         suite.expect(AppFeature.cleaningMode.settingsDestination
                 == FeatureSettingsDestination(.quickTools, sectionAnchor: .cleaningMode),
                "cleaning mode lands on Quick Tools cleaning mode section")
-        suite.expect(AppFeature.musicBlock.settingsDestination
-                == FeatureSettingsDestination(.general, sectionAnchor: .musicBlocking)
-                && AppFeature.diskImageInstaller.settingsDestination
-                == FeatureSettingsDestination(.features),
+        suite.expect(AppFeature.diskImageInstaller.settingsDestination == FeatureSettingsDestination(.features),
                "features without dedicated pages use explicit nearest Settings destinations")
+        suite.expect(AppFeature.musicBlock.group == .tools
+                && AppFeature.musicBlock.settingsDestination == FeatureSettingsDestination(.appLaunchBlock)
+                && pageVisible(.appLaunchBlock, available: [.musicBlock])
+                && !pageVisible(.appLaunchBlock, available: allFeatures.subtracting([.musicBlock])),
+               "app launch blocking is a tool with its own page, shown only while the feature is installed")
         suite.expect(!AppFeature.diskImageInstaller.hasNavigableSettingsDestination
                 && AppFeature.allCases.filter { $0 != .diskImageInstaller }
                     .allSatisfy(\.hasNavigableSettingsDestination),
@@ -2168,10 +2170,10 @@ enum FeatureCatalogTests {
 
         let generalToolRouter = SettingsRouter()
         let mixerDestination = FeatureSettingsDestination(.general, sectionAnchor: .mixer)
-        let musicBlockingDestination = FeatureSettingsDestination(.general, sectionAnchor: .musicBlocking)
+        let outputSwitcherDestination = FeatureSettingsDestination(.general, sectionAnchor: .soundOutputSwitcher)
         generalToolRouter.request(mixerDestination)
-        generalToolRouter.request(musicBlockingDestination)
-        generalToolRouter.request(musicBlockingDestination)
+        generalToolRouter.request(outputSwitcherDestination)
+        generalToolRouter.request(outputSwitcherDestination)
         generalToolRouter.goBack()
         suite.expect(generalToolRouter.destination == mixerDestination,
                "Settings Back returns to the previous General tool")
@@ -2180,7 +2182,7 @@ enum FeatureCatalogTests {
                "Settings Back returns from a General tool to the General overview")
         generalToolRouter.goForward()
         generalToolRouter.goForward()
-        suite.expect(generalToolRouter.destination == musicBlockingDestination,
+        suite.expect(generalToolRouter.destination == outputSwitcherDestination,
                "Settings Forward retraces General tools")
         generalToolRouter.page = .energy
         generalToolRouter.request(FeatureSettingsDestination(.energy, sectionAnchor: .keepAwake))
