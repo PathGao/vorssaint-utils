@@ -187,8 +187,8 @@ struct DefaultAppsSettings: View {
     /// One type at a time: macOS may ask the user to confirm each change in
     /// its own dialog, and declining one stops the rest of the batch.
     private func apply() {
-        reload()
-        guard let app else { return }
+        // Not a full reload: owners read now could undo the ones just set.
+        guard let app, FileManager.default.fileExists(atPath: app.path) else { return reload() }
         let pending = groups.flatMap(\.1).filter { selection.contains($0.identifier) }
         applying = true
         Task { @MainActor in
